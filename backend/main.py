@@ -22,14 +22,14 @@ def startup_event():
         initialize_infra()
         run_query("INSERT INTO system_settings (key, value) VALUES ('admin_username', 'admin') ON CONFLICT DO NOTHING;", is_select=False)
     except Exception as e:
-        print(f"Database infrastructure offline: {str(e)}")
+        print(f"Database infrastructure mapping failed: {str(e)}")
 
 @app.get("/api/health")
 def health_check():
     return {"status": "online", "engine": "FastAPI Layer"}
 
 # ====================================================
-# IDENTITY AND HANDSHAKE LAYER
+# IDENTITY AND SECURITY AUTHENTICATION HANDSHAKE
 # ====================================================
 
 class LoginPayload(BaseModel):
@@ -41,10 +41,8 @@ def verify_cluster_access(payload: LoginPayload):
     try:
         stored_user = run_query("SELECT value FROM system_settings WHERE key = 'admin_username';")
         stored_hash = run_query("SELECT value FROM system_settings WHERE key = 'admin_password_hash';")
-        
         user_match = stored_user[0]['value'] == payload.username if stored_user else (payload.username == "admin")
         hash_match = stored_hash[0]['value'] == payload.password_hash if stored_hash else False
-        
         if user_match and hash_match:
             return {"status": "authenticated"}
         raise HTTPException(status_code=401, detail="Invalid cryptographic signature.")
@@ -61,17 +59,64 @@ def update_gate_credentials(payload: CredentialsUpdate):
     try:
         if len(payload.new_username.strip()) < 3 or len(payload.new_password_raw.strip()) < 6:
             raise HTTPException(status_code=400, detail="Credentials fail length constraints.")
-            
         new_hash = hashlib.sha256(payload.new_password_raw.encode()).hexdigest()
         run_query("UPDATE system_settings SET value = %s WHERE key = 'admin_username';", (payload.new_username,), is_select=False)
         run_query("UPDATE system_settings SET value = %s WHERE key = 'admin_password_hash';", (new_hash,), is_select=False)
-        return {"status": "success", "message": "Master credentials updated."}
+        return {"status": "success"}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 # ====================================================
-# CONVERSATION STORAGE AND CRUD OPERATIONS
+# API KEY VAULT CRUD STATION
+# ====================================================
+
+class ApiKeyPayload(BaseModel):
+    provider_identifier: str
+    api_key: str
+
+@app.get("/api/admin/keys")
+def get_vault_keys():
+    try:
+        vault_rows = run_query("SELECT provider_identifier, api_key FROM api_keys_vault ORDER BY provider_identifier ASC;")
+        obfuscated_vault = []
+        for row in vault_rows:
+            raw = row['api_key'].strip()
+            masked = f"{raw[:5]}...{raw[-4:]}" if len(raw) > 10 else "***********"
+            obfuscated_vault.append({
+                "provider_identifier": row['provider_identifier'],
+                "api_key": masked
+            })
+        return {"keys": obfuscated_vault}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/keys")
+def save_vault_key(payload: ApiKeyPayload):
+    try:
+        provider = payload.provider_identifier.strip().lower()
+        key_value = payload.api_key.strip()
+        if not provider or not key_value:
+            raise HTTPException(status_code=400, detail="Identifier and Key fields are mandatory.")
+        run_query("""
+            INSERT INTO api_keys_vault (provider_identifier, api_key)
+            VALUES (%s, %s)
+            ON CONFLICT (provider_identifier) DO UPDATE SET api_key = EXCLUDED.api_key;
+        """, (provider, key_value), is_select=False)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/keys/{provider_identifier}")
+def delete_vault_key(provider_identifier: str):
+    try:
+        run_query("DELETE FROM api_keys_vault WHERE provider_identifier = %s;", (provider_identifier.strip().lower(),), is_select=False)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ====================================================
+# CHAT CONVERSATION LOGS AND STEP ROUTING
 # ====================================================
 
 @app.get("/api/threads")
@@ -97,7 +142,6 @@ def create_new_thread(thread: ThreadCreate):
 @app.delete("/api/threads/{thread_id}")
 def delete_chat_thread(thread_id: int):
     try:
-        # Cascading multi-database transactional purge
         with ClusterContextRouter("messages") as db:
             with db.cursor() as cur:
                 cur.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
@@ -106,7 +150,7 @@ def delete_chat_thread(thread_id: int):
             with db.cursor() as cur:
                 cur.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
                 db.commit()
-        return {"status": "success", "detail": f"Thread {thread_id} and dependencies wiped clean."}
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -177,7 +221,6 @@ def save_pipeline_directives(step: PipelineStepUpdate):
         from core.pipeline import verify_code_safety
         if not verify_code_safety(step.python_code_body):
             raise HTTPException(status_code=400, detail="Security Halt: Ast evaluation rejected raw code parameters.")
-            
         run_query("""
             INSERT INTO dynamic_pipeline (step_num, step_name, provider_identifier, model_string, system_prompt, python_code_body)
             VALUES (%s, %s, %s, %s, %s, %s)
