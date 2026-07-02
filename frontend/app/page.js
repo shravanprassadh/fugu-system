@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key, Trash2 } from 'lucide-react'
+import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key, Trash2, LogOut } from 'lucide-react'
 
 export default function Workspace() {
   // Security & Authentication States
@@ -40,6 +40,14 @@ export default function Workspace() {
   const messagesEndRef = useRef(null)
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
+  // Hydrate session memory state safely on initial client load
+  useEffect(() => {
+    const activeSession = localStorage.getItem('fugu_session_secure')
+    if (activeSession === 'true') {
+      setIsAuthenticated(true)
+    }
+  }, [])
+
   useEffect(() => {
     if (isAuthenticated) fetchThreads()
   }, [isAuthenticated])
@@ -72,6 +80,7 @@ export default function Workspace() {
       })
 
       if (res.ok) {
+        localStorage.setItem('fugu_session_secure', 'true')
         setIsAuthenticated(true)
       } else {
         setAuthError('Access Denied. Signature mismatch.')
@@ -81,14 +90,21 @@ export default function Workspace() {
     }
   }
 
+  // Session Disconnection Sequence
+  const handleLogout = () => {
+    localStorage.removeItem('fugu_session_secure')
+    setIsAuthenticated(false)
+    setViewMode('chat')
+    setUsernameInput('')
+    setPasswordInput('')
+  }
+
   const fetchThreads = async (selectTargetId = null) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/threads`)
       const data = await res.json()
       if (data.threads) {
         setThreads(data.threads)
-        
-        // Handle selection state restructuring after modifications
         if (data.threads.length > 0) {
           if (selectTargetId) {
             const match = data.threads.find(t => t.id === selectTargetId)
@@ -98,7 +114,6 @@ export default function Workspace() {
               return
             }
           }
-          // Default fall-through fallback selection anchor
           if (!activeThreadId || !data.threads.some(t => t.id === activeThreadId)) {
             setActiveThreadId(data.threads[0].id)
             setActiveThreadName(data.threads[0].name)
@@ -160,7 +175,6 @@ export default function Workspace() {
       const targetName = newThreadName
       setNewThreadName('')
       
-      // Fetch and map focus dynamically onto the newly created node connection string
       const res = await fetch(`${BACKEND_URL}/api/threads`)
       const data = await res.json()
       if (data.threads) {
@@ -177,16 +191,11 @@ export default function Workspace() {
   }
 
   const deleteThread = async (e, threadId) => {
-    e.stopPropagation() // Stops click bubbling from resetting page tracking states
-    if (!confirm("Are you sure you want to permanently purge this chat register and all associated SQL message blocks?")) return
-    
+    e.stopPropagation() 
+    if (!confirm("Are you sure you want to permanently purge this chat register?")) return
     try {
-      const res = await fetch(`${BACKEND_URL}/api/threads/${threadId}`, {
-        method: 'DELETE'
-      })
+      const res = await fetch(`${BACKEND_URL}/api/threads/${threadId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error("Cluster rejected data deletion request.")
-      
-      // Recalculate focused window locations gracefully
       if (activeThreadId === threadId) {
         const remaining = threads.filter(t => t.id !== threadId)
         if (remaining.length > 0) {
@@ -387,7 +396,6 @@ export default function Workspace() {
                   <span className="truncate tracking-wide">{t.name}</span>
                 </div>
                 
-                {/* Inline Deletion Interactive Element */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span onClick={(e) => deleteThread(e, t.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-800/80 text-zinc-500 hover:text-red-400 transition-all duration-150 relative z-20">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -399,7 +407,8 @@ export default function Workspace() {
           })}
         </div>
 
-        <div className="p-4 border-t border-zinc-900 bg-zinc-950/80">
+        {/* FOOTER CONTROL GRID */}
+        <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 flex flex-col gap-2">
           <button 
             onClick={() => {
               setViewMode('admin')
@@ -412,6 +421,15 @@ export default function Workspace() {
           >
             <Settings className={`w-4 h-4 ${viewMode === 'admin' ? 'text-white' : 'text-zinc-500'}`} />
             <span className="tracking-wide">Cluster Configuration</span>
+          </button>
+
+          {/* ASYNCHRONOUS SYSTEM DISCONNECTION ANCHOR */}
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium text-zinc-500 hover:text-red-400 hover:bg-red-950/20 border border-transparent hover:border-red-900/30 transition-all duration-200"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="tracking-wide">Disconnect Session</span>
           </button>
         </div>
       </div>
