@@ -9,47 +9,40 @@ from psycopg2.extras import RealDictCursor
 import google.generativeai as genai
 from openai import OpenAI
 
-# 1. Premium Consumer-Grade Page Configuration
+# 1. Page Frame Setup
 st.set_page_config(page_title="Sovereign Workspace", page_icon="✨", layout="wide", initial_sidebar_state="expanded")
 
-# High-Fidelity Minimalist Light Theme Stylesheet
+# Clean Minimalist Light Mode Stylesheet
 st.markdown("""
     <style>
-        /* Base Application Layout */
-        .stApp { background-color: #ffffff; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        /* Global Page Background */
+        .stApp { background-color: #ffffff; color: #1e293b; font-family: -apple-system, sans-serif; }
         [data-testid="stSidebar"] { background-color: #f8fafc !important; border-right: 1px solid #e2e8f0 !important; }
         
-        /* Typography Polish */
-        h1, h2, h3 { color: #0f172a !important; font-weight: 600 !important; }
-        .stCaption { color: #64748b !important; }
+        /* Typography */
+        h1, h2, h3 { color: #0f172a !important; font-weight: 600 !important; letter-spacing: -0.5px; }
         
-        /* Modern Inputs and Text Boxes */
+        /* Form elements */
         .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div {
-            background-color: #f1f5f9 !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; border-radius: 10px !important; padding: 10px !important;
+            background-color: #f1f5f9 !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important;
         }
-        .stTextInput>div>div>input:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 1px #3b82f6 !important; }
         
-        /* Clean Environment Toggle Switch */
-        div.row-widget.stRadio > div {
-            flex-direction: row !important; background-color: #e2e8f0; padding: 4px; border-radius: 8px; border: none;
-        }
-        div.row-widget.stRadio label[data-baseweb="radio"] div:first-child { display: none !important; }
-        div.row-widget.stRadio label {
-            background-color: transparent; padding: 6px 14px !important; border-radius: 6px !important; color: #64748b !important; margin: 0px !important; font-weight: 500; transition: all 0.15s ease-in-out;
-        }
-        div.row-widget.stRadio label:hover { color: #0f172a !important; }
+        /* Modern Chat Bubbles */
+        .stChatMessage { background-color: #ffffff !important; padding: 24px 0px !important; border-bottom: 1px solid #f1f5f9 !important; border-radius: 0px !important; }
+        [data-testid="stChatMessageContent"] { color: #1e293b !important; font-size: 16px !important; line-height: 1.6 !important; }
         
-        /* Polished Chat Container Bubble Rules */
-        .stChatMessage { background-color: #ffffff !important; border: none !important; padding: 16px 8px !important; margin-bottom: 0px !important; border-bottom: 1px solid #f1f5f9 !important; }
-        [data-testid="stChatMessageContent"] { color: #334155 !important; font-size: 16px !important; line-height: 1.6 !important; }
+        /* Sticky Chat Input Box to match ChatGPT layout */
+        .stChatInputContainer { background-color: #ffffff !important; border-top: none !important; padding-bottom: 20px !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize Authentication State Trackers
+# Initialize Interface States
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+if "view_mode" not in st.session_state:
+    st.session_state.view_mode = "chat"
 
-# 2. Relational Database Orchestration Links
+# 2. Relational Database Handshake
 @st.cache_resource
 def get_router_db():
     return psycopg2.connect(os.environ.get("MASTER_ROUTER_DB_URL"))
@@ -57,7 +50,7 @@ def get_router_db():
 try:
     router_conn = get_router_db()
 except Exception as e:
-    st.error(f"Infrastructure Offline: Connection to underlying data node failed: {str(e)}")
+    st.error(f"Infrastructure Offline: Database connection failed: {str(e)}")
     st.stop()
 
 def run_query(query, params=None, is_select=True):
@@ -68,7 +61,7 @@ def run_query(query, params=None, is_select=True):
             return None
         return cur.fetchall()
 
-# Initialize Immutable System Framework Tables
+# Ensure base tables exist
 run_query("CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);", is_select=False)
 run_query("CREATE TABLE IF NOT EXISTS db_routing_matrix (operation TEXT PRIMARY KEY, connection_string TEXT NOT NULL);", is_select=False)
 run_query("""
@@ -85,7 +78,7 @@ run_query("""
 # Seed master administrative credentials if table is clean
 run_query(f"INSERT INTO system_settings (key, value) VALUES ('admin_password_hash', '{hashlib.sha256('AdminSecure2026!'.encode()).hexdigest()}') ON CONFLICT DO NOTHING;", is_select=False)
 
-# Seed a default out-of-the-box pipeline step if completely empty
+# Seed a verified, active free model slug to fix the 404 routing fault
 pipeline_check = run_query("SELECT * FROM dynamic_pipeline;")
 if not pipeline_check:
     default_code = """def execute_step(payload, system_prompt, model_string, api_key):
@@ -101,7 +94,7 @@ if not pipeline_check:
 """
     run_query("""
         INSERT INTO dynamic_pipeline (step_num, step_name, provider_identifier, model_string, system_prompt, python_code_body)
-        VALUES (1, 'The Thinker', 'openrouter', 'meta-llama/llama-3-8b-instruct:free', 'You are a helpful assistant.', %s)
+        VALUES (1, 'The Thinker', 'openrouter', 'google/gemini-2.5-flash:free', 'You are a helpful assistant.', %s)
         ON CONFLICT DO NOTHING;
     """, (default_code,), is_select=False)
 
@@ -129,21 +122,26 @@ def verify_code_safety(code_string: str) -> bool:
     except Exception:
         return False
 
-# ----------------------------------------------------
-# SYSTEM NAVIGATION NAVIGATION BAR
-# ----------------------------------------------------
+# ====================================================
+# SIDEBAR NAVIGATION PANEL (THE CHATGPT CLONE)
+# ====================================================
 with st.sidebar:
-    st.markdown("<h2 style='font-size: 20px; margin-bottom: 0;'>✨ Workspace Canvas</h2>", unsafe_allow_html=True)
-    st.caption("Sovereign User Interface")
-    st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size: 18px; margin-top: 10px; margin-bottom: 20px;'>✨ Sovereign Canvas</h2>", unsafe_allow_html=True)
     
-    app_mode = st.radio("ENVIRONMENT", options=["✨ Chat", "🛠️ Engineering Console"], index=0, label_visibility="collapsed")
-    st.divider()
-
-# ====================================================
-# ENVIRONMENT A: USER CONVERSATIONAL WORKSPACE
-# ====================================================
-if app_mode == "✨ Chat":
+    # Clean Action Button for New Chats
+    new_topic = st.text_input("New Thread Name:", placeholder="+ New Chat Name...", label_visibility="collapsed")
+    if st.button("➕ Start New Chat", use_container_width=True) and new_topic:
+        with ClusterContextRouter("threads") as db:
+            with db.cursor() as cur:
+                cur.execute("INSERT INTO threads (name) VALUES (%s) ON CONFLICT DO NOTHING;", (new_topic,))
+                db.commit()
+        st.session_state.view_mode = "chat"
+        st.rerun()
+        
+    st.markdown("<hr style='margin: 15px 0; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+    st.markdown("<p style='font-weight: 600; font-size: 12px; color:#64748b; text-transform: uppercase;'>Recent History</p>", unsafe_allow_html=True)
+    
+    # Pull conversation tracks from Neon
     with ClusterContextRouter("threads") as db:
         with db.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS threads (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL);")
@@ -151,36 +149,53 @@ if app_mode == "✨ Chat":
             cur.execute("SELECT * FROM threads ORDER BY id DESC;")
             all_threads = cur.fetchall()
 
-    with st.sidebar:
-        st.markdown("<p style='font-weight: 500; font-size: 14px; margin-bottom: 5px; color:#475569;'>Conversations</p>", unsafe_allow_html=True)
-        new_topic = st.text_input("New Topic:", placeholder="+ Start new track...", label_visibility="collapsed")
-        if st.button("Create Thread", use_container_width=True) and new_topic:
-            with ClusterContextRouter("threads") as db:
-                with db.cursor() as cur:
-                    cur.execute("INSERT INTO threads (name) VALUES (%s) ON CONFLICT DO NOTHING;", (new_topic,))
-                    db.commit()
-            st.rerun()
-        
-        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-        if all_threads:
-            active_name = st.radio("Active Tracks:", options=[t['name'] for t in all_threads], label_visibility="collapsed")
-            active_id = next(t['id'] for t in all_threads if t['name'] == active_name)
-        else:
-            st.info("Initialize a track to begin.")
-            st.stop()
+    active_id = None
+    if all_threads:
+        # Loop through existing threads as clean selectable options
+        for thread in all_threads:
+            if st.button(f"💬 {thread['name']}", use_container_width=True, key=f"t_{thread['id']}"):
+                st.session_state.active_thread_name = thread['name']
+                st.session_state.active_thread_id = thread['id']
+                st.session_state.view_mode = "chat"
+                st.rerun()
+                
+        if "active_thread_id" not in st.session_state:
+            st.session_state.active_thread_name = all_threads[0]['name']
+            st.session_state.active_thread_id = all_threads[0]['id']
+    else:
+        st.caption("No active threads. Create one above.")
 
-    # Main Chat Frame Layout
-    st.markdown(f"<h1 style='font-size: 26px; font-weight: 600; letter-spacing: -0.5px;'>{active_name}</h1>", unsafe_allow_html=True)
-    st.markdown("<hr style='margin-top: 5px; margin-bottom: 25px; border: 0; border-top: 1px solid #f1f5f9;'>", unsafe_allow_html=True)
+    # Permanent layout push to pin the admin gear to the bottom of the sidebar
+    st.markdown("<div style='height: 30vh;'></div>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin: 10px 0; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
     
+    # Clean, dedicated button at the bottom for system configuration
+    if st.button("⚙️ System Admin Panel", use_container_width=True):
+        st.session_state.view_mode = "admin"
+        st.rerun()
+
+# ====================================================
+# MAIN INTERFACE RENDER BLOCK
+# ====================================================
+if st.session_state.view_mode == "chat":
+    if "active_thread_id" not in st.session_state:
+        st.info("Create a conversation track in the left sidebar to begin.")
+        st.stop()
+        
+    active_name = st.session_state.active_thread_name
+    active_id = st.session_state.active_thread_id
+
+    st.markdown(f"<h1 style='font-size: 24px; font-weight: 600; margin-top: 10px;'>{active_name}</h1>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+    
+    # Fetch historical logging cleanly using dictionary format maps
     with ClusterContextRouter("messages") as db:
-        with db.cursor(cursor_factory=RealDictCursor) as cur: # Added the dictionary parser here
+        with db.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, thread_id INT, role TEXT, content TEXT);")
             db.commit()
             cur.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (active_id,))
             history = cur.fetchall()
 
-    # Render History Using Standard Presentation Models
     for msg in history:
         with st.chat_message(msg['role']): 
             st.markdown(msg['content'])
@@ -201,10 +216,10 @@ if app_mode == "✨ Chat":
             status_indicator = st.empty()
             
             for step in pipeline_steps:
-                status_indicator.markdown(f"<p style='color:#3b82f6; font-size:14px; font-weight:500;'>⚡ Processing operational steps...</p>", unsafe_allow_html=True)
+                status_indicator.markdown("<p style='color:#3b82f6; font-size:14px; font-weight:500; padding-left:5px;'>⚡ Thinking...</p>", unsafe_allow_html=True)
                 
                 if not verify_code_safety(step['python_code_body']):
-                    st.error("Security Halt: Code execution strings failed parameters.")
+                    st.error("Security Halt: Code execution string failed parameters.")
                     st.stop()
                 
                 local_scope = {}
@@ -221,7 +236,7 @@ if app_mode == "✨ Chat":
                         api_key=target_api_key
                     )
                 except Exception as e:
-                    st.error(f"Pipeline Interrupted. Trace: {str(e)}")
+                    st.error(f"Pipeline Execution Fault. Trace: {str(e)}")
                     st.stop()
 
             status_indicator.empty()
@@ -233,19 +248,22 @@ if app_mode == "✨ Chat":
                 db.commit()
 
 # ====================================================
-# ENVIRONMENT B: BACKEND ADMINISTRATIVE CONTROL CENTER
+# ADMINISTRATIVE BACKEND LAYER
 # ====================================================
-elif app_mode == "🛠️ Engineering Console":
+elif st.session_state.view_mode == "admin":
     if not st.session_state.authenticated:
-        st.markdown("<div style='max-width: 420px; margin: 80px auto;'>", unsafe_allow_html=True)
-        st.subheader("🔒 System Verification Needed")
+        st.markdown("<div style='max-width: 400px; margin: 100px auto; padding: 20px; border: 1px solid #e2e8f0; border-radius:12px;'>", unsafe_allow_html=True)
+        st.subheader("🔒 Infrastructure Gate")
         pass_attempt = st.text_input("Enter Control Passphrase:", type="password")
-        if st.button("Unlock Terminal Matrix", type="primary", use_container_width=True):
+        if st.button("Unlock Core Matrix", type="primary", use_container_width=True):
             if hashlib.sha256(pass_attempt.encode()).hexdigest() == current_settings["admin_password_hash"]:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("Verification match failed.")
+                st.error("Passphrase verification failed.")
+        if st.button("← Return to Chat Canvas", use_container_width=True):
+            st.session_state.view_mode = "chat"
+            st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
@@ -253,7 +271,7 @@ elif app_mode == "🛠️ Engineering Console":
     infra_tab, pipeline_tab, migrate_tab = st.tabs(["🌐 Server Relays", "⛓️ Step Router", "🔄 Data Pump"])
     
     with pipeline_tab:
-        st.subheader("Execution Matrix Settings")
+        st.subheader("Active Pipeline Sequences")
         active_topology = run_query("SELECT step_num, step_name, provider_identifier, model_string FROM dynamic_pipeline ORDER BY step_num ASC;")
         st.dataframe(active_topology, use_container_width=True)
         
@@ -264,7 +282,7 @@ elif app_mode == "🛠️ Engineering Console":
             step_name = st.text_input("Display Step Name:", value="The Thinker")
             provider_id = st.text_input("API Envoy Prefix:", value="openrouter")
         with col_b:
-            model_id = st.text_input("Exact Model String Identifier:", value="meta-llama/llama-3-8b-instruct:free")
+            model_id = st.text_input("Exact Model String Identifier:", value="google/gemini-2.5-flash:free")
             sys_prompt = st.text_area("System Prompt Directives:", value="You are a helpful assistant.")
             
         code_body_input = st.text_area("Python Execution Logic:", height=150, value="""def execute_step(payload, system_prompt, model_string, api_key):
@@ -332,6 +350,7 @@ elif app_mode == "🛠️ Engineering Console":
                         st.rerun()
                     except Exception as err: st.error(f"Error executing cloud copy: {str(err)}")
 
-    if st.button("Lock Console Matrix", type="secondary"):
+    if st.button("Close Admin Session", type="secondary"):
         st.session_state.authenticated = False
+        st.session_state.view_mode = "chat"
         st.rerun()
