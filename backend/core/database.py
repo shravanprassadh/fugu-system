@@ -5,7 +5,6 @@ from psycopg2.extras import RealDictCursor
 class ClusterContextRouter:
     def __init__(self, operation_type: str = "master"):
         self.operation_type = operation_type
-        # Pull master environment database router token pointer
         self.connection_string = os.environ.get("MASTER_ROUTER_DB_URL")
         self.connection = None
         self.cursor = None
@@ -15,13 +14,9 @@ class ClusterContextRouter:
             raise ValueError("Critical Exception: MASTER_ROUTER_DB_URL environment variable is unassigned.")
         
         try:
-            # Connect using the dictionary cursor factory to map column keys cleanly to the UI
             self.connection = psycopg2.connect(self.connection_string, cursor_factory=RealDictCursor)
             self.cursor = self.connection.cursor()
-            
-            # Trigger automatic table initialization passes to prevent blank database faults
             self._bootstrap_database_schema()
-            
             return self.cursor
         except Exception as e:
             if self.connection:
@@ -42,8 +37,6 @@ class ClusterContextRouter:
             self.connection.close()
 
     def _bootstrap_database_schema(self):
-        """Executes zero-touch raw SQL schema injections to construct missing multi-tenant tables automatically."""
-        # 1. Pipeline Sequence Configuration Matrix Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_steps (
                 id SERIAL PRIMARY KEY,
@@ -55,7 +48,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 2. Multi-SQL Dynamic Destination Matrix Relay Pointers Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS db_routing_matrix (
                 id SERIAL PRIMARY KEY,
@@ -64,7 +56,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 3. Secure Cryptographic Token Key Vault Storage Enclave Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS api_keys_vault (
                 id SERIAL PRIMARY KEY,
@@ -73,7 +64,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 4. Conversation Sessions Header Track Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS threads (
                 id SERIAL PRIMARY KEY,
@@ -82,7 +72,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 5. Cascading Deep Text Logs Message Segment Repository Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
@@ -93,7 +82,6 @@ class ClusterContextRouter:
             );
         """)
 
-        # Seed initial operational data milestones if tables are detected to be completely empty
         self.cursor.execute("SELECT COUNT(*) FROM pipeline_steps;")
         if self.cursor.fetchone()['count'] == 0:
             self.cursor.execute("""
