@@ -9,26 +9,39 @@ from psycopg2.extras import RealDictCursor
 import google.generativeai as genai
 from openai import OpenAI
 
-# 1. Premium Single Page Application Configuration
-st.set_page_config(page_title="Fugu Sovereign OS", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
+# 1. Premium Consumer-Grade Page Configuration
+st.set_page_config(page_title="Sovereign Workspace", page_icon="✨", layout="wide", initial_sidebar_state="expanded")
 
-# High-Fidelity Minimalist Dark Mode Overrides
+# High-Fidelity Minimalist Light Theme Stylesheet
 st.markdown("""
     <style>
-        .stApp { background-color: #0f172a; color: #e2e8f0; }
-        [data-testid="stSidebar"] { background-color: #060913 !important; border-right: 1px solid #1e293b !important; }
+        /* Base Application Layout */
+        .stApp { background-color: #ffffff; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        [data-testid="stSidebar"] { background-color: #f8fafc !important; border-right: 1px solid #e2e8f0 !important; }
+        
+        /* Typography Polish */
+        h1, h2, h3 { color: #0f172a !important; font-weight: 600 !important; }
+        .stCaption { color: #64748b !important; }
+        
+        /* Modern Inputs and Text Boxes */
         .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div {
-            background-color: #1e293b !important; color: #f1f5f9 !important; border: 1px solid #334155 !important; border-radius: 8px !important;
+            background-color: #f1f5f9 !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; border-radius: 10px !important; padding: 10px !important;
         }
+        .stTextInput>div>div>input:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 1px #3b82f6 !important; }
+        
+        /* Clean Environment Toggle Switch */
         div.row-widget.stRadio > div {
-            flex-direction: row !important; background-color: #1e293b; padding: 4px; border-radius: 8px; border: 1px solid #334155;
+            flex-direction: row !important; background-color: #e2e8f0; padding: 4px; border-radius: 8px; border: none;
         }
         div.row-widget.stRadio label[data-baseweb="radio"] div:first-child { display: none !important; }
         div.row-widget.stRadio label {
-            background-color: transparent; padding: 6px 16px !important; border-radius: 6px !important; color: #94a3b8 !important; margin: 0px !important; transition: all 0.2s ease-in-out;
+            background-color: transparent; padding: 6px 14px !important; border-radius: 6px !important; color: #64748b !important; margin: 0px !important; font-weight: 500; transition: all 0.15s ease-in-out;
         }
-        div.row-widget.stRadio label:hover { color: #f1f5f9 !important; }
-        .stChatMessage { border-radius: 12px !important; border: 1px solid #1e293b !important; margin-bottom: 12px !important; }
+        div.row-widget.stRadio label:hover { color: #0f172a !important; }
+        
+        /* Polished Chat Container Bubble Rules */
+        .stChatMessage { background-color: #ffffff !important; border: none !important; padding: 16px 8px !important; margin-bottom: 0px !important; border-bottom: 1px solid #f1f5f9 !important; }
+        [data-testid="stChatMessageContent"] { color: #334155 !important; font-size: 16px !important; line-height: 1.6 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +57,7 @@ def get_router_db():
 try:
     router_conn = get_router_db()
 except Exception as e:
-    st.error(f"Infrastructure Offline: Master Router connection failed: {str(e)}")
+    st.error(f"Infrastructure Offline: Connection to underlying data node failed: {str(e)}")
     st.stop()
 
 def run_query(query, params=None, is_select=True):
@@ -70,7 +83,6 @@ run_query("""
 """, is_select=False)
 
 # Seed master administrative credentials if table is clean
-# Default Master Passphrase: AdminSecure2026!
 run_query(f"INSERT INTO system_settings (key, value) VALUES ('admin_password_hash', '{hashlib.sha256('AdminSecure2026!'.encode()).hexdigest()}') ON CONFLICT DO NOTHING;", is_select=False)
 
 # Seed a default out-of-the-box pipeline step if completely empty
@@ -97,7 +109,6 @@ current_settings = {row['key']: row['value'] for row in run_query("SELECT * FROM
 db_matrix = {row['operation']: row['connection_string'] for row in run_query("SELECT * FROM db_routing_matrix;")}
 
 class ClusterContextRouter:
-    """Dynamically establishes database handshakes based on current routing matrix records."""
     def __init__(self, op_type):
         self.target_url = db_matrix.get(op_type, os.environ.get("MASTER_ROUTER_DB_URL"))
         self.conn = None
@@ -107,9 +118,7 @@ class ClusterContextRouter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.conn: self.conn.close()
 
-# 3. Abstract Syntax Tree (AST) Safety Validator
 def verify_code_safety(code_string: str) -> bool:
-    """Prevents execution strings from running system-level malicious commands."""
     try:
         tree = ast.parse(code_string)
         for node in ast.walk(tree):
@@ -121,21 +130,20 @@ def verify_code_safety(code_string: str) -> bool:
         return False
 
 # ----------------------------------------------------
-# THE COPILOT-STYLE SYSTEM MODE TOGGLE
+# SYSTEM NAVIGATION NAVIGATION BAR
 # ----------------------------------------------------
 with st.sidebar:
-    st.markdown("<h2 style='color:#818cf8; font-size: 22px; margin-bottom: 0;'>🧬 Fugu Sovereign</h2>", unsafe_allow_html=True)
-    st.caption("Single-User Architecture Engine")
-    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size: 20px; margin-bottom: 0;'>✨ Workspace Canvas</h2>", unsafe_allow_html=True)
+    st.caption("Sovereign User Interface")
+    st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
     
-    app_mode = st.radio("ENVIRONMENT", options=["✨ Workspace", "🛠️ Control Center"], index=0, label_visibility="collapsed")
+    app_mode = st.radio("ENVIRONMENT", options=["✨ Chat", "🛠️ Engineering Console"], index=0, label_visibility="collapsed")
     st.divider()
 
 # ====================================================
 # ENVIRONMENT A: USER CONVERSATIONAL WORKSPACE
 # ====================================================
-if app_mode == "✨ Workspace":
-    # Hydrate thread metadata natively from your decoupled threads database instance
+if app_mode == "✨ Chat":
     with ClusterContextRouter("threads") as db:
         with db.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS threads (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL);")
@@ -144,8 +152,8 @@ if app_mode == "✨ Workspace":
             all_threads = cur.fetchall()
 
     with st.sidebar:
-        st.subheader("📁 History Tracks")
-        new_topic = st.text_input("New Topic:", placeholder="Initialize tracking stream...", label_visibility="collapsed")
+        st.markdown("<p style='font-weight: 500; font-size: 14px; margin-bottom: 5px; color:#475569;'>Conversations</p>", unsafe_allow_html=True)
+        new_topic = st.text_input("New Topic:", placeholder="+ Start new track...", label_visibility="collapsed")
         if st.button("Create Thread", use_container_width=True) and new_topic:
             with ClusterContextRouter("threads") as db:
                 with db.cursor() as cur:
@@ -153,16 +161,18 @@ if app_mode == "✨ Workspace":
                     db.commit()
             st.rerun()
         
+        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
         if all_threads:
             active_name = st.radio("Active Tracks:", options=[t['name'] for t in all_threads], label_visibility="collapsed")
             active_id = next(t['id'] for t in all_threads if t['name'] == active_name)
         else:
-            st.info("Initialize a thread to map parsing tracks.")
+            st.info("Initialize a track to begin.")
             st.stop()
 
-    st.title(f"💬 {active_name}")
+    # Main Chat Frame Layout
+    st.markdown(f"<h1 style='font-size: 26px; font-weight: 600; letter-spacing: -0.5px;'>{active_name}</h1>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin-top: 5px; margin-bottom: 25px; border: 0; border-top: 1px solid #f1f5f9;'>", unsafe_allow_html=True)
     
-    # Hydrate historical conversation logs smoothly from heavy log database instance
     with ClusterContextRouter("messages") as db:
         with db.cursor() as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, thread_id INT, role TEXT, content TEXT);")
@@ -170,10 +180,12 @@ if app_mode == "✨ Workspace":
             cur.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (active_id,))
             history = cur.fetchall()
 
+    # Render History Using Standard Presentation Models
     for msg in history:
-        with st.chat_message(msg['role']): st.markdown(msg['content'])
+        with st.chat_message(msg['role']): 
+            st.markdown(msg['content'])
 
-    user_prompt = st.chat_input("Command the dynamic pipeline...")
+    user_prompt = st.chat_input("Message your sovereign core...")
 
     if user_prompt:
         with st.chat_message("user"): st.markdown(user_prompt)
@@ -182,7 +194,6 @@ if app_mode == "✨ Workspace":
                 cur.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (active_id, user_prompt))
                 db.commit()
 
-        # Query dynamic execution pipeline sequence straight from Master Router DB
         pipeline_steps = run_query("SELECT * FROM dynamic_pipeline ORDER BY step_num ASC;")
         current_payload = user_prompt
 
@@ -190,13 +201,12 @@ if app_mode == "✨ Workspace":
             status_indicator = st.empty()
             
             for step in pipeline_steps:
-                status_indicator.status(f"⚡ [Step {step['step_num']}] Executing {step['step_name']}...")
+                status_indicator.markdown(f"<p style='color:#3b82f6; font-size:14px; font-weight:500;'>⚡ Processing operational steps...</p>", unsafe_allow_html=True)
                 
                 if not verify_code_safety(step['python_code_body']):
-                    st.error(f"Security Alert: Execution string inside step {step['step_num']} failed safety verification checks.")
+                    st.error("Security Halt: Code execution strings failed parameters.")
                     st.stop()
                 
-                # Execute the hot-swapped database code block in a clean local bubble
                 local_scope = {}
                 global_scope = {"OpenAI": OpenAI, "genai": genai}
                 
@@ -211,7 +221,7 @@ if app_mode == "✨ Workspace":
                         api_key=target_api_key
                     )
                 except Exception as e:
-                    st.error(f"❌ Circuit Breaker Triggered at Step {step['step_num']} ({step['step_name']}). Please patch code inside Admin Console. Trace: {str(e)}")
+                    st.error(f"Pipeline Interrupted. Trace: {str(e)}")
                     st.stop()
 
             status_indicator.empty()
@@ -225,43 +235,50 @@ if app_mode == "✨ Workspace":
 # ====================================================
 # ENVIRONMENT B: BACKEND ADMINISTRATIVE CONTROL CENTER
 # ====================================================
-elif app_mode == "🛠️ Control Center":
+elif app_mode == "🛠️ Engineering Console":
     if not st.session_state.authenticated:
-        st.markdown("<div style='max-width: 450px; margin: 80px auto;'>", unsafe_allow_html=True)
-        st.subheader("🔒 Master Administrative Verification")
-        pass_attempt = st.text_input("Enter Infrastructure Password:", type="password")
-        if st.button("Unlock Control Matrix", type="primary", use_container_width=True):
+        st.markdown("<div style='max-width: 420px; margin: 80px auto;'>", unsafe_allow_html=True)
+        st.subheader("🔒 System Verification Needed")
+        pass_attempt = st.text_input("Enter Control Passphrase:", type="password")
+        if st.button("Unlock Terminal Matrix", type="primary", use_container_width=True):
             if hashlib.sha256(pass_attempt.encode()).hexdigest() == current_settings["admin_password_hash"]:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("Access Denied. Passphrase mismatch.")
+                st.error("Verification match failed.")
         st.markdown("</div>", unsafe_allow_html=True)
         st.stop()
 
-    st.title("🛠️ System Control Matrix")
-    infra_tab, pipeline_tab, migrate_tab = st.tabs(["🌐 Server Links", "⛓️ Hot-Swap Pipeline Builder", "🔄 Database Pump"])
+    st.title("🛠️ System Configuration Console")
+    infra_tab, pipeline_tab, migrate_tab = st.tabs(["🌐 Server Relays", "⛓️ Step Router", "🔄 Data Pump"])
     
     with pipeline_tab:
-        st.subheader("⛓️ Runtime Code Injection Console")
-        st.caption("Modify or inject your multi-agent Python calling blocks natively. Updates apply instantly.")
-        
+        st.subheader("Execution Matrix Settings")
         active_topology = run_query("SELECT step_num, step_name, provider_identifier, model_string FROM dynamic_pipeline ORDER BY step_num ASC;")
         st.dataframe(active_topology, use_container_width=True)
         
-        st.markdown("### Update / Insert Execution Block")
+        st.markdown("### Modify Operations Chain")
         col_a, col_b = st.columns(2)
         with col_a:
             step_pos = st.number_input("Sequence Order Position:", min_value=1, value=1)
-            step_name = st.text_input("Display Step Name:", placeholder="e.g., Deep Auditor")
-            provider_id = st.text_input("API Envoy Prefix (e.g., deepseek, gemini):")
+            step_name = st.text_input("Display Step Name:", value="The Thinker")
+            provider_id = st.text_input("API Envoy Prefix:", value="openrouter")
         with col_b:
-            model_id = st.text_input("Exact Model Identifier String:")
-            sys_prompt = st.text_area("System Prompt Directives:")
+            model_id = st.text_input("Exact Model String Identifier:", value="meta-llama/llama-3-8b-instruct:free")
+            sys_prompt = st.text_area("System Prompt Directives:", value="You are a helpful assistant.")
             
-        code_body_input = st.text_area("Python Execution Logic (Must declare: def execute_step(payload, system_prompt, model_string, api_key)):", height=200)
+        code_body_input = st.text_area("Python Execution Logic:", height=150, value="""def execute_step(payload, system_prompt, model_string, api_key):
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+    response = client.chat.completions.create(
+        model=model_string,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": payload}
+        ]
+    )
+    return response.choices[0].message.content""")
         
-        if st.button("Inject Code Block Into Database Matrix", type="primary"):
+        if st.button("Save Operational Directives", type="primary"):
             if verify_code_safety(code_body_input):
                 run_query("""
                     INSERT INTO dynamic_pipeline (step_num, step_name, provider_identifier, model_string, system_prompt, python_code_body)
@@ -270,10 +287,8 @@ elif app_mode == "🛠️ Control Center":
                         step_name = EXCLUDED.step_name, provider_identifier = EXCLUDED.provider_identifier,
                         model_string = EXCLUDED.model_string, system_prompt = EXCLUDED.system_prompt, python_code_body = EXCLUDED.python_code_body;
                 """, (step_pos, step_name, provider_id, model_id, sys_prompt, code_body_input), is_select=False)
-                st.success(f"Execution matrix for Step {step_pos} hot-swapped safely inside DB storage.")
+                st.success("Database parameters modified successfully.")
                 st.rerun()
-            else:
-                st.error("Compilation Denied: Injected code strings violated core system safety constraints.")
 
     with infra_tab:
         st.subheader("SQL Cloud Server Allocation Map")
@@ -283,18 +298,18 @@ elif app_mode == "🛠️ Control Center":
         if st.button("Commit Cluster Routing Changes", type="primary"):
             for op, url in [("threads", target_t), ("messages", target_m)]:
                 run_query("INSERT INTO db_routing_matrix (operation, connection_string) VALUES (%s, %s) ON CONFLICT (operation) DO UPDATE SET connection_string = EXCLUDED.connection_string;", (op, url), is_select=False)
-            st.success("Network endpoints updated smoothly.")
+            st.success("Relay paths updated.")
             st.rerun()
 
     with migrate_tab:
         st.subheader("Live Cross-Server Migration Pump")
         m_target = st.selectbox("Select Target Table Block to Move:", ["threads", "messages"])
         active_src = db_matrix.get(m_target, os.environ.get("MASTER_ROUTER_DB_URL"))
-        new_dest_url = st.text_input("Enter Destination PostgreSQL Connection String:", placeholder="postgresql://...")
+        new_dest_url = st.text_input("Enter Destination PostgreSQL Connection String:")
         
         if st.button("Execute Zero-Downtime Data Migration", type="primary"):
             if new_dest_url and new_dest_url != active_src:
-                with st.spinner("Executing cross-pump cloud copy routines..."):
+                with st.spinner("Moving transactional entries..."):
                     try:
                         src_conn = psycopg2.connect(active_src); dest_conn = psycopg2.connect(new_dest_url)
                         src_cur = src_conn.cursor(); dest_cur = dest_conn.cursor()
@@ -313,10 +328,10 @@ elif app_mode == "🛠️ Control Center":
                         
                         src_conn.close(); dest_conn.close()
                         run_query("INSERT INTO db_routing_matrix (operation, connection_string) VALUES (%s, %s) ON CONFLICT (operation) DO UPDATE SET connection_string = EXCLUDED.connection_string;", (m_target, new_dest_url), is_select=False)
-                        st.success("🎉 Cutover Complete! Data successfully replicated and routing pointer flipped.")
+                        st.success("Migration copy executed and pointers flipped.")
                         st.rerun()
-                    except Exception as err: st.error(f"Migration Failed: {str(err)}")
+                    except Exception as err: st.error(f"Error executing cloud copy: {str(err)}")
 
-    if st.button("Lock Control Center Session Container", type="secondary"):
+    if st.button("Lock Console Matrix", type="secondary"):
         st.session_state.authenticated = False
         st.rerun()
