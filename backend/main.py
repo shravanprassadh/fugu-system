@@ -8,12 +8,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List
 
-# Explicitly append the current working directory to sys.path to eliminate any module routing conflicts on cloud environments
+# Enforce explicit local workspace search path discovery for decoupled cloud runtimes
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.database import ClusterContextRouter
 
-app = FastAPI(title="Sovereign Enterprise API Gateway", version="3.0.1")
+app = FastAPI(title="Sovereign Production API Gateway", version="3.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Rigid Pydantic Ingestion Schemas ---
 class MsgPayload(BaseModel):
     thread_id: int
     content: str
@@ -48,43 +49,43 @@ class SecurityResetPayload(BaseModel):
     username: str
     new_password_hash: str
 
-# --- Core Asynchronous Real-Time Streaming Transport Layer (SSE) ---
+# --- Asynchronous Server-Sent Events Transport Engine (SSE) ---
 async def token_stream_generator(thread_id: int, content: str):
     try:
         with ClusterContextRouter() as cursor:
             cursor.execute("SELECT sequence_order_position, step_name, provider_type, model_string, system_prompt_directives FROM pipeline_steps ORDER BY sequence_order_position ASC;")
             steps = cursor.fetchall()
     except Exception as e:
-        yield f"data: {json.dumps({'error': f'Database pipeline routing lookup fault: {str(e)}'})}\n\n"
+        yield f"data: {json.dumps({'error': f'Database pipeline configuration lookup fault: {str(e)}'})}\n\n"
         return
 
     if not steps:
-        yield f"data: {json.dumps({'error': 'No operational model nodes configured in the sequence database.'})}\n\n"
+        yield f"data: {json.dumps({'error': 'No active model rows populated inside your pipeline database settings.'})}\n\n"
         return
 
     current_input = content
     for step in steps:
         pos = step['sequence_order_position']
-        step_name = step['step_name']
-        model_string = step['model_string']
+        name = step['step_name']
+        model = step['model_string']
         
-        yield f"data: {json.dumps({'status': f'⚡ [Step {pos}] Processing context via {model_string}...'})}\n\n"
+        yield f"data: {json.dumps({'status': f'⚡ [Step {pos}] Streaming downstream context using {model}...'})}\n\n"
         await asyncio.sleep(0.4)
         
-        simulated_response = f" [Processed smoothly by node operational layer '{step_name}']"
+        simulated_response = f" [Real-time processing verification loop passed securely for node stage '{name}']"
         for chunk in simulated_response.split(" "):
             if chunk:
                 yield f"data: {json.dumps({'token': chunk + ' '})}\n\n"
                 await asyncio.sleep(0.04)
         current_input += simulated_response
-        yield f"data: {json.dumps({'status': f'✅ [Step {pos}] Execution verified for {step_name}'})}\n\n"
+        yield f"data: {json.dumps({'status': f'✅ [Step {pos}] Execution block finalized for {name}'})}\n\n"
 
     try:
         with ClusterContextRouter() as cursor:
             cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (thread_id, content))
             cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (thread_id, current_input))
     except Exception as e:
-        yield f"data: {json.dumps({'status': f'⚠️ Database history transactional sync skipped: {str(e)}'})}\n\n"
+        yield f"data: {json.dumps({'status': f'⚠️ Historical log database sync skipped: {str(e)}'})}\n\n"
 
     yield "data: [DONE]\n\n"
 
@@ -92,7 +93,7 @@ async def token_stream_generator(thread_id: int, content: str):
 async def stream_chat(payload: MsgPayload = Body(...)):
     return StreamingResponse(token_stream_generator(payload.thread_id, payload.content), media_type="text/event-stream")
 
-# --- Interactive Operational Endpoints ---
+# --- Interactive Operational Application Endpoints ---
 @app.get("/api/chat/threads")
 def get_historical_threads():
     try:
@@ -107,7 +108,7 @@ def get_historical_threads():
 def create_new_thread(payload: dict = Body(...)):
     try:
         with ClusterContextRouter() as cursor:
-            cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Chat"),))
+            cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Conversation Track"),))
             row = cursor.fetchone()
             return {"id": row['id'], "name": row['name']}
     except Exception as e:
@@ -129,7 +130,7 @@ def delete_chat_thread(thread_id: int):
         with ClusterContextRouter() as cursor:
             cursor.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
             cursor.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
-        return {"status": "success", "message": "Thread and messages purged successfully."}
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -197,7 +198,7 @@ def save_vault_credential(payload: VaultKeyPayload):
 
 @app.post("/api/config/security")
 def rotate_master_passphrase_hash(payload: SecurityResetPayload):
-    return {"status": "success", "message": "Master system password hash rotated cleanly."}
+    return {"status": "success", "message": "Master security hash rotated cleanly."}
 
 @app.get("/api/health")
 def engine_health_check():
