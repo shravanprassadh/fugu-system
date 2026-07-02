@@ -20,7 +20,7 @@ def startup_event():
     try:
         initialize_infra()
     except Exception as e:
-        print(f"Database infrastructure offline: {str(e)}")
+        print(f"Database infrastructure mapping failed: {str(e)}")
 
 @app.get("/api/health")
 def health_check():
@@ -66,28 +66,80 @@ class ChatPayload(BaseModel):
 @app.post("/api/chat")
 def process_workspace_chat(payload: ChatPayload):
     try:
-        # 1. Log user message to cluster archive
         with ClusterContextRouter("messages") as db:
             with db.cursor() as cur:
                 cur.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (payload.thread_id, payload.prompt))
                 db.commit()
 
-        # 2. Extract active execution steps from dynamic pipeline routing table
         pipeline_steps = run_query("SELECT * FROM dynamic_pipeline ORDER BY step_num ASC;")
-        current_response = payload.prompt
+        
+        # Fallback initialization if database pipeline step was cleared
+        if not pipeline_steps:
+            raise HTTPException(status_code=400, detail="Pipeline Execution Fault. Trace: No active steps inside dynamic_pipeline matrix.")
 
-        # 3. Process data sequentially through your AI modules
+        current_response = payload.prompt
         for step in pipeline_steps:
             current_response = execute_pipeline_step(step, current_response)
             if "Security Halt" in current_response or "Pipeline Execution Fault" in current_response:
                 raise HTTPException(status_code=400, detail=current_response)
 
-        # 4. Log finalized execution output back to database archive
         with ClusterContextRouter("messages") as db:
             with db.cursor() as cur:
                 cur.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (payload.thread_id, current_response))
                 db.commit()
 
         return {"role": "assistant", "content": current_response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ====================================================
+# ADMINISTRATIVE METADATA ROUTING CHANNELS
+# ====================================================
+
+@app.get("/api/admin/config")
+def get_cluster_configurations():
+    try:
+        pipeline = run_query("SELECT * FROM dynamic_pipeline ORDER BY step_num ASC;")
+        relays = run_query("SELECT * FROM db_routing_matrix;")
+        return {"pipeline": pipeline, "relays": relays}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class PipelineStepUpdate(BaseModel):
+    step_num: int
+    step_name: str
+    provider_identifier: str
+    model_string: str
+    system_prompt: str
+    python_code_body: str
+
+@app.post("/api/admin/pipeline")
+def save_pipeline_directives(step: PipelineStepUpdate):
+    try:
+        from core.pipeline import verify_code_safety
+        if not verify_code_safety(step.python_code_body):
+            raise HTTPException(status_code=400, detail="Security Halt: Ast evaluation rejected raw code parameters.")
+            
+        run_query("""
+            INSERT INTO dynamic_pipeline (step_num, step_name, provider_identifier, model_string, system_prompt, python_code_body)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (step_num) DO UPDATE SET 
+                step_name = EXCLUDED.step_name, provider_identifier = EXCLUDED.provider_identifier,
+                model_string = EXCLUDED.model_string, system_prompt = EXCLUDED.system_prompt, python_code_body = EXCLUDED.python_code_body;
+        """, (step.step_num, step.step_name, step.provider_identifier, step.model_string, step.system_prompt, step.python_code_body), is_select=False)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class RelayUpdate(BaseModel):
+    threads_url: str
+    messages_url: str
+
+@app.post("/api/admin/relays")
+def save_relay_targets(relays: RelayUpdate):
+    try:
+        run_query("INSERT INTO db_routing_matrix (operation, connection_string) VALUES ('threads', %s) ON CONFLICT (operation) DO UPDATE SET connection_string = EXCLUDED.connection_string;", (relays.threads_url,), is_select=False)
+        run_query("INSERT INTO db_routing_matrix (operation, connection_string) VALUES ('messages', %s) ON CONFLICT (operation) DO UPDATE SET connection_string = EXCLUDED.connection_string;", (relays.messages_url,), is_select=False)
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
