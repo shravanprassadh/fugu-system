@@ -1,49 +1,111 @@
 import os
-import hashlib
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-def get_router_db():
-    return psycopg2.connect(os.environ.get("MASTER_ROUTER_DB_URL"))
-
-def run_query(query, params=None, is_select=True):
-    conn = get_router_db()
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(query, params or ())
-        if not is_select:
-            conn.commit()
-            return None
-        return cur.fetchall()
-
-def initialize_infra():
-    run_query("CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);", is_select=False)
-    run_query("CREATE TABLE IF NOT EXISTS db_routing_matrix (operation TEXT PRIMARY KEY, connection_string TEXT NOT NULL);", is_select=False)
-    run_query("CREATE TABLE IF NOT EXISTS api_keys_vault (provider_identifier TEXT PRIMARY KEY, api_key TEXT NOT NULL);", is_select=False)
-    run_query("""
-        CREATE TABLE IF NOT EXISTS dynamic_pipeline (
-            step_num INTEGER PRIMARY KEY,
-            step_name TEXT NOT NULL,
-            provider_identifier TEXT NOT NULL,
-            model_string TEXT NOT NULL,
-            system_prompt TEXT NOT NULL,
-            python_code_body TEXT NOT NULL
-        );
-    """, is_select=False)
-    run_query(f"INSERT INTO system_settings (key, value) VALUES ('admin_password_hash', '{hashlib.sha256('AdminSecure2026!'.encode()).hexdigest()}') ON CONFLICT DO NOTHING;", is_select=False)
-
 class ClusterContextRouter:
-    def __init__(self, op_type):
-        try:
-            db_matrix = {row['operation']: row['connection_string'] for row in run_query("SELECT * FROM db_routing_matrix;")}
-        except Exception:
-            db_matrix = {}
-        self.target_url = db_matrix.get(op_type, os.environ.get("MASTER_ROUTER_DB_URL"))
-        self.conn = None
-        
+    def __init__(self, operation_type: str = "master"):
+        self.operation_type = operation_type
+        # Pull master environment database router token pointer
+        self.connection_string = os.environ.get("MASTER_ROUTER_DB_URL")
+        self.connection = None
+        self.cursor = None
+
     def __enter__(self):
-        self.conn = psycopg2.connect(self.target_url)
-        return self.conn
+        if not self.connection_string:
+            raise ValueError("Critical Exception: MASTER_ROUTER_DB_URL environment variable is unassigned.")
         
+        try:
+            # Connect using the dictionary cursor factory to map column keys cleanly to the UI
+            self.connection = psycopg2.connect(self.connection_string, cursor_factory=RealDictCursor)
+            self.cursor = self.connection.cursor()
+            
+            # Trigger automatic table initialization passes to prevent blank database faults
+            self._bootstrap_database_schema()
+            
+            return self.cursor
+        except Exception as e:
+            if self.connection:
+                self.connection.close()
+            raise RuntimeError(f"Data tier connection sequence aborted: {str(e)}")
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.conn: 
-            self.conn.close()
+        if exc_type is not None:
+            if self.connection:
+                self.connection.rollback()
+        else:
+            if self.connection:
+                self.connection.commit()
+        
+        if self.cursor:
+            self.cursor.close()
+        if self.connection:
+            self.connection.close()
+
+    def _bootstrap_database_schema(self):
+        """Executes zero-touch raw SQL schema injections to construct missing multi-tenant tables automatically."""
+        # 1. Pipeline Sequence Configuration Matrix Table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_steps (
+                id SERIAL PRIMARY KEY,
+                sequence_order_position INT NOT NULL,
+                step_name VARCHAR(255) NOT NULL,
+                provider_type VARCHAR(100) NOT NULL,
+                model_string VARCHAR(255) NOT NULL,
+                system_prompt_directives TEXT
+            );
+        """)
+        
+        # 2. Multi-SQL Dynamic Destination Matrix Relay Pointers Table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS db_routing_matrix (
+                id SERIAL PRIMARY KEY,
+                operation_type VARCHAR(100) UNIQUE NOT NULL,
+                connection_string TEXT NOT NULL
+            );
+        """)
+        
+        # 3. Secure Cryptographic Token Key Vault Storage Enclave Table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys_vault (
+                id SERIAL PRIMARY KEY,
+                provider_name VARCHAR(100) UNIQUE NOT NULL,
+                secret_key TEXT NOT NULL
+            );
+        """)
+        
+        # 4. Conversation Sessions Header Track Table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS threads (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        
+        # 5. Cascading Deep Text Logs Message Segment Repository Table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                thread_id INT NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Seed initial operational data milestones if tables are detected to be completely empty
+        self.cursor.execute("SELECT COUNT(*) FROM pipeline_steps;")
+        if self.cursor.fetchone()['count'] == 0:
+            self.cursor.execute("""
+                INSERT INTO pipeline_steps (sequence_order_position, step_name, provider_type, model_string, system_prompt_directives)
+                VALUES (1, 'Sovereign Auto-Core', 'openrouter', 'google/gemini-2.5-flash:free', 'You are an elite sovereign processing runtime environment wrapper.');
+            """)
+            
+        self.cursor.execute("SELECT COUNT(*) FROM db_routing_matrix;")
+        if self.cursor.fetchone()['count'] == 0:
+            self.cursor.execute("""
+                INSERT INTO db_routing_matrix (operation_type, connection_string) VALUES 
+                ('master', 'postgresql://neon_serverless_active_tier/master_db'),
+                ('metadata', 'postgresql://supabase_managed_sidebar_tier/metadata_db'),
+                ('transactional', 'postgresql://oracle_autonomous_archive_volume/logs_db');
+            """)
