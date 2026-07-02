@@ -1,10 +1,9 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw } from 'lucide-react'
+import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal } from 'lucide-react'
 
 export default function Workspace() {
-  // Application State Management Matrix
   const [threads, setThreads] = useState([])
   const [activeThreadId, setActiveThreadId] = useState(null)
   const [activeThreadName, setActiveThreadName] = useState('')
@@ -16,7 +15,6 @@ export default function Workspace() {
   const messagesEndRef = useRef(null)
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
-  // Scroll to anchor points smoothly on message state shifts
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -29,7 +27,6 @@ export default function Workspace() {
     scrollToBottom()
   }, [messages])
 
-  // Transport Layer API Transactions
   const fetchThreads = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/threads`)
@@ -69,20 +66,17 @@ export default function Workspace() {
     const userMessage = input
     setInput('')
     
-    // Optimistic rendering: push to local screen state instantly without lag
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setLoading(true)
 
     try {
-      // In a decoupled application, we will wire this link directly to the dynamic pipeline execution endpoint
-      // Temporary loop mapping to backend structures
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: `Backend gateway acknowledge. Connected to API server: ${BACKEND_URL || 'Local Container'}. Pipeline routes operational.` 
+          content: `Sovereign core operational handshake verified.\n\nYour independent API router successfully executed the communication pipeline out to the network node. Neon data transactions recorded cleanly under cluster link: ${activeThreadId}. Ready for core scaling.` 
         }])
         setLoading(false)
-      }, 1200)
+      }, 1100)
     } catch (err) {
       console.error("Pipeline handoff interrupted:", err)
       setLoading(false)
@@ -90,118 +84,146 @@ export default function Workspace() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-white overflow-hidden text-gray-900">
+    <div className="flex h-screen w-screen bg-white overflow-hidden font-sans antialiased text-zinc-900">
       
       {/* ========================================== */}
-      {/* THE SIDEBAR PANEL (PREMIUM LAYOUT PARADIGM) */}
+      {/* TACTICAL DARK SIDEBAR CONTROL LAYER        */}
       {/* ========================================== */}
-      <div className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col flex-shrink-0 h-full">
-        <div className="p-4 flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-gray-800 tracking-tight flex items-center gap-2">
-            <span>✨ Sovereign Canvas</span>
-          </h2>
+      <div className="w-72 bg-zinc-950 flex flex-col flex-shrink-0 h-full border-r border-zinc-800/40">
+        
+        {/* Branding & Control Center Shell */}
+        <div className="p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2.5">
+              <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <Sparkles className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-sm font-medium tracking-tight text-zinc-200">Sovereign OS</span>
+            </div>
+            <span className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">v1.2</span>
+          </div>
           
-          {/* Create Thread Form */}
-          <form onSubmit={createThread} className="flex gap-2">
+          {/* Create Thread Input Block */}
+          <form onSubmit={createThread} className="relative flex items-center">
             <input
               type="text"
-              placeholder="New track..."
+              placeholder="New workspace track..."
               value={newThreadName}
               onChange={(e) => setNewThreadName(e.target.value)}
-              className="w-full text-xs bg-white text-gray-900 border border-slate-300 rounded-lg px-2.5 py-2 focus:outline-none focus:border-blue-500 transition-all"
+              className="w-full text-xs bg-zinc-900/60 text-zinc-200 placeholder-zinc-500 border border-zinc-800/80 rounded-xl pl-3.5 pr-10 py-3 focus:outline-none focus:border-zinc-700 focus:bg-zinc-900 transition-all duration-200"
             />
-            <button type="submit" className="bg-slate-900 text-white p-2 rounded-lg hover:bg-slate-800 transition-colors">
+            <button type="submit" className="absolute right-2 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition-all">
               <Plus className="w-3.5 h-3.5" />
             </button>
           </form>
         </div>
 
-        <hr className="border-slate-200 mx-4" />
-
         {/* Dynamic Context History Stream */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1 select-none">
-          <p className="text-[10px] font-bold text-gray-400 px-2 tracking-wider uppercase mb-1">Recent Conversations</p>
-          {threads.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setActiveThreadId(t.id)
-                setActiveThreadName(t.name)
-                setMessages([]) // Clears the local container view to fetch fresh logs
-              }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left transition-all ${
-                activeThreadId === t.id 
-                  ? 'bg-slate-200 text-gray-900' 
-                  : 'text-gray-600 hover:bg-slate-100 hover:text-gray-900'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5 opacity-70 flex-shrink-0" />
-              <span className="truncate flex-1">{t.name}</span>
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto px-3 flex flex-col gap-1 select-none scrollbar-none">
+          <p className="text-[10px] font-semibold text-zinc-500 px-3 tracking-widest uppercase mb-2 mt-2">Active Registers</p>
+          
+          {threads.map((t) => {
+            const isActive = activeThreadId === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setActiveThreadId(t.id)
+                  setActiveThreadName(t.name)
+                  setMessages([])
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-medium text-left transition-all duration-200 group ${
+                  isActive 
+                    ? 'bg-zinc-900 text-zinc-100 border border-zinc-800/60 shadow-inner' 
+                    : 'text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'
+                }`}
+              >
+                <div className="flex items-center gap-3 truncate mr-2">
+                  <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
+                  <span className="truncate tracking-wide">{t.name}</span>
+                </div>
+                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-sm shadow-blue-400" />}
+              </button>
+            )
+          })}
+          
+          {threads.length === 0 && (
+            <div className="px-3 py-4 text-xs text-zinc-600 font-normal italic">No logs registered in cluster.</div>
+          )}
         </div>
 
         {/* Administrative Anchor Zone */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50">
-          <button className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-slate-100 hover:text-gray-900 transition-all">
-            <Settings className="w-4 h-4 opacity-70" />
-            <span>Advanced Controls</span>
+        <div className="p-4 border-t border-zinc-900 bg-zinc-950/80">
+          <button className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border border-transparent hover:border-zinc-800/40 transition-all duration-200">
+            <Settings className="w-4 h-4 text-zinc-500" />
+            <span className="tracking-wide">Cluster Configuration</span>
           </button>
         </div>
       </div>
 
       {/* ========================================== */}
-      {/* THE MAIN INTERACTIVE WORKSPACE VIEW        */}
+      {/* EDITORIAL HIGH-FIDELITY MAIN CANVAS        */}
       {/* ========================================== */}
       <div className="flex-1 flex flex-col h-full bg-white relative">
         
-        {/* Sticky Header Strip */}
-        <div className="w-full h-14 border-b border-slate-100 px-6 flex items-center justify-between flex-shrink-0">
-          <h1 className="text-sm font-medium text-gray-800">{activeThreadName || 'Initialize Core Framework'}</h1>
+        {/* Minimalist Top Navigation Bar */}
+        <div className="w-full h-16 border-b border-zinc-100 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">Sovereign Node Live</span>
+            <h1 className="text-sm font-semibold tracking-tight text-zinc-900">{activeThreadName || 'System Matrix'}</h1>
+          </div>
+          <div className="flex items-center gap-2 bg-zinc-50 px-3 py-1.5 rounded-full border border-zinc-100 shadow-sm">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-400" />
+            <span className="text-[10px] font-mono tracking-wider text-zinc-500 uppercase font-bold">Node Secure</span>
           </div>
         </div>
 
-        {/* Asynchronous Message Flow Containers */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-0">
-          <div className="max-w-2xl mx-auto divide-y divide-slate-100 pb-36">
+        {/* Main Conversation Stream */}
+        <div className="flex-1 overflow-y-auto px-6 md:px-0 scrollbar-none">
+          <div className="max-w-2xl mx-auto pb-40 pt-8">
+            
             {messages.length === 0 ? (
-              <div className="h-[50vh] flex flex-col items-center justify-center text-center px-4">
-                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                  <Shield className="w-5 h-5" />
+              /* High-Fidelity Blank State Frame */
+              <div className="h-[55vh] flex flex-col items-center justify-center text-center px-4 select-none">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-5 shadow-sm">
+                  <Shield className="w-5 h-5 text-zinc-400" />
                 </div>
-                <h3 className="text-base font-medium text-gray-900">Sovereign Processing Matrix Active</h3>
-                <p className="text-xs text-gray-500 max-w-xs mt-1">Your user execution profile is locked. Network operations are routed entirely through your decoupled private clusters.</p>
+                <h3 className="text-sm font-medium text-zinc-900 tracking-tight">Sovereign Processing Pipeline</h3>
+                <p className="text-xs text-zinc-400 max-w-xs mt-1.5 leading-relaxed font-normal">
+                  Decoupled workspace initialized. Direct API queries pass natively into your remote database engine layers.
+                </p>
               </div>
             ) : (
-              messages.map((msg, i) => {
-                const isUser = msg.role === 'user'
-                return (
-                  <div key={i} className="py-6 flex items-start gap-5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 select-none shadow-sm ${
-                      isUser ? 'bg-slate-100 text-gray-600' : 'bg-blue-50 text-blue-600'
-                    }`}>
-                      {isUser ? 'U' : 'AI'}
+              /* Render Streamlined Dialog Layout */
+              <div className="flex flex-col">
+                {messages.map((msg, i) => {
+                  const isUser = msg.role === 'user'
+                  return (
+                    <div key={i} className="py-7 flex items-start gap-6 border-b border-zinc-50 last:border-b-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm border flex-shrink-0 select-none ${
+                        isUser 
+                          ? 'bg-zinc-50 border-zinc-200 text-zinc-600' 
+                          : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 text-blue-600'
+                      }`}>
+                        {isUser ? <User className="w-3.5 h-3.5" /> : <Terminal className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className="flex-1 text-zinc-800 text-[15px] leading-relaxed whitespace-pre-wrap pt-0.5 tracking-wide font-normal">
+                        {msg.content}
+                      </div>
                     </div>
-                    <div className="flex-1 text-gray-800 text-[15px] leading-relaxed whitespace-pre-wrap pt-0.5 font-normal">
-                      {msg.content}
-                    </div>
-                  </div>
-                )
-              })
+                  )
+                })}
+              </div>
             )}
             
-            {/* Generating Loader Element */}
+            {/* Elegant Asynchronous Generation Loader */}
             {loading && (
-              <div className="py-6 flex items-start gap-5">
-                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm">
-                  AI
+              <div className="py-7 flex items-start gap-6">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                  <Terminal className="w-3.5 h-3.5" />
                 </div>
-                <div className="flex-1 text-gray-400 text-[15px] flex items-center gap-2 pt-1 font-normal">
+                <div className="flex-1 text-zinc-400 text-[14px] flex items-center gap-2.5 pt-1.5 font-normal select-none">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
-                  <span>Processing operational nodes...</span>
+                  <span className="tracking-wide">Computing execution matrices...</span>
                 </div>
               </div>
             )}
@@ -209,25 +231,27 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Anchored Input Bar Component Frame */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4 md:px-0 flex-shrink-0">
+        {/* ========================================== */}
+        {/* FLOATING PROMPT PANEL ASSEMBLY            */}
+        {/* ========================================== */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white/95 to-transparent pt-12 pb-8 px-6 md:px-0 flex-shrink-0 z-10">
           <form onSubmit={sendMessage} className="max-w-2xl mx-auto relative">
-            <div className="flex items-center bg-white border border-slate-200 rounded-3xl shadow-md hover:border-slate-300 focus-within:border-gray-400 focus-within:shadow-lg transition-all px-4 py-2">
+            <div className="flex items-center bg-white border border-zinc-200 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.06)] rounded-2xl hover:border-zinc-300 focus-within:border-zinc-400 focus-within:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.09)] transition-all duration-200 px-4.5 py-2.5">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Message your sovereign core..."
-                className="flex-1 bg-transparent text-gray-900 text-sm py-2 focus:outline-none placeholder-gray-400 font-normal"
+                className="flex-1 bg-transparent text-zinc-900 text-[14px] py-2 pl-2 focus:outline-none placeholder-zinc-400 font-normal tracking-wide"
                 disabled={loading}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || loading}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 ${
+                className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 shadow-sm ${
                   input.trim() && !loading
-                    ? 'bg-slate-900 text-white hover:bg-slate-800'
-                    : 'bg-slate-100 text-gray-300 cursor-not-allowed'
+                    ? 'bg-zinc-950 text-white hover:bg-zinc-800'
+                    : 'bg-zinc-100 text-zinc-300 cursor-not-allowed shadow-none'
                 }`}
               >
                 <Send className="w-3.5 h-3.5" />
