@@ -1,20 +1,20 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key, Trash2, LogOut } from 'lucide-react'
+import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key, Trash2, LogOut, Varticon } from 'lucide-react'
 
 export default function Workspace() {
-  // Security & Authentication States
+  // Authentication & Security Elements
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [usernameInput, setUsernameInput] = useState('')
   const [passwordInput, setPasswordInput] = useState('')
   const [authError, setAuthError] = useState('')
   
-  // Navigation States
+  // Interface View Navigation Map
   const [viewMode, setViewMode] = useState('chat') 
   const [adminTab, setAdminTab] = useState('pipeline') 
   
-  // Data States
+  // Data State Channels
   const [threads, setThreads] = useState([])
   const [activeThreadId, setActiveThreadId] = useState(null)
   const [activeThreadName, setActiveThreadName] = useState('')
@@ -23,7 +23,7 @@ export default function Workspace() {
   const [loading, setLoading] = useState(false)
   const [newThreadName, setNewThreadName] = useState('')
   
-  // Administrative Component Form Fields
+  // Cluster Configurations Fields State
   const [stepNum, setStepNum] = useState(1)
   const [stepName, setStepName] = useState('Sovereign Auto-Core')
   const [providerId, setProviderId] = useState('openrouter')
@@ -35,17 +35,19 @@ export default function Workspace() {
   const [messagesUrl, setMessagesUrl] = useState('')
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  
+  // API Keys Dynamic Vault Form States
+  const [vaultKeys, setVaultKeys] = useState([])
+  const [vaultProviderInput, setVaultProviderInput] = useState('')
+  const [vaultKeyInput, setVaultKeyInput] = useState('')
+  
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' })
-
   const messagesEndRef = useRef(null)
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
-  // Hydrate session memory state safely on initial client load
   useEffect(() => {
     const activeSession = localStorage.getItem('fugu_session_secure')
-    if (activeSession === 'true') {
-      setIsAuthenticated(true)
-    }
+    if (activeSession === 'true') setIsAuthenticated(true)
   }, [])
 
   useEffect(() => {
@@ -62,7 +64,6 @@ export default function Workspace() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Secure API Session Verification Handshake
   const handleAuthentication = async (e) => {
     e.preventDefault()
     setAuthError('')
@@ -90,7 +91,6 @@ export default function Workspace() {
     }
   }
 
-  // Session Disconnection Sequence
   const handleLogout = () => {
     localStorage.removeItem('fugu_session_secure')
     setIsAuthenticated(false)
@@ -158,6 +158,17 @@ export default function Workspace() {
         setThreadsUrl(tRelay ? tRelay.connection_string : '')
         setMessagesUrl(mRelay ? mRelay.connection_string : '')
       }
+      fetchVaultKeys()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const fetchVaultKeys = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/keys`)
+      const data = await res.json()
+      if (data.keys) setVaultKeys(data.keys)
     } catch (err) {
       console.error(err)
     }
@@ -209,7 +220,7 @@ export default function Workspace() {
       }
       await fetchThreads()
     } catch (err) {
-      alert(`Deletion Routine Failure: ${err.message}`)
+      alert(err.message)
     }
   }
 
@@ -304,7 +315,38 @@ export default function Workspace() {
     }
   }
 
-  // HARD ENTRY DOOR
+  const saveVaultKey = async (e) => {
+    e.preventDefault()
+    setAdminMessage({ type: '', text: '' })
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider_identifier: vaultProviderInput, api_key: vaultKeyInput })
+      })
+      if (!res.ok) throw new Error("Vault routing drop error occurred.")
+      setAdminMessage({ type: 'success', text: `API key saved cleanly for platform identifier: "${vaultProviderInput.toLowerCase()}".` })
+      setVaultProviderInput('')
+      setVaultKeyInput('')
+      fetchVaultKeys()
+    } catch (err) {
+      setAdminMessage({ type: 'error', text: err.message })
+    }
+  }
+
+  const deleteVaultKey = async (providerId) => {
+    if (!confirm(`Confirm complete wipe of authorization credentials for provider: "${providerId}"?`)) return
+    setAdminMessage({ type: '', text: '' })
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/keys/${providerId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error("Purge transaction rejected by cluster.")
+      setAdminMessage({ type: 'success', text: `Provider credentials wiped for: "${providerId}".` })
+      fetchVaultKeys()
+    } catch (err) {
+      setAdminMessage({ type: 'error', text: err.message })
+    }
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="w-screen h-screen bg-zinc-950 flex flex-col items-center justify-center font-sans antialiased px-4">
@@ -316,7 +358,6 @@ export default function Workspace() {
             <h2 className="text-zinc-100 font-medium text-base tracking-tight">Sovereign Cluster Node</h2>
             <p className="text-zinc-500 text-xs mt-1 leading-relaxed">Enter secure session coordinates to interface with the core layer.</p>
           </div>
-          
           <form onSubmit={handleAuthentication} className="w-full flex flex-col gap-3.5">
             <input
               type="text"
@@ -332,9 +373,7 @@ export default function Workspace() {
               onChange={(e) => setPasswordInput(e.target.value)}
               className="w-full text-xs bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-4 py-3.5 focus:outline-none focus:border-zinc-700 transition-all font-mono"
             />
-            {authError && (
-              <p className="text-red-400 text-[11px] font-medium leading-normal px-1">{authError}</p>
-            )}
+            {authError && <p className="text-red-400 text-[11px] font-medium leading-normal px-1">{authError}</p>}
             <button type="submit" className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-semibold text-xs py-3.5 rounded-xl transition-all mt-1">
               Authenticate Node Access
             </button>
@@ -347,7 +386,7 @@ export default function Workspace() {
   return (
     <div className="flex h-screen w-screen bg-white overflow-hidden font-sans antialiased text-zinc-900">
       
-      {/* SIDEBAR PANEL */}
+      {/* SIDEBAR */}
       <div className="w-72 bg-zinc-950 flex flex-col flex-shrink-0 h-full border-r border-zinc-800/40">
         <div className="p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between px-1">
@@ -395,7 +434,6 @@ export default function Workspace() {
                   <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
                   <span className="truncate tracking-wide">{t.name}</span>
                 </div>
-                
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span onClick={(e) => deleteThread(e, t.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-800/80 text-zinc-500 hover:text-red-400 transition-all duration-150 relative z-20">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -407,7 +445,6 @@ export default function Workspace() {
           })}
         </div>
 
-        {/* FOOTER CONTROL GRID */}
         <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 flex flex-col gap-2">
           <button 
             onClick={() => {
@@ -422,19 +459,14 @@ export default function Workspace() {
             <Settings className={`w-4 h-4 ${viewMode === 'admin' ? 'text-white' : 'text-zinc-500'}`} />
             <span className="tracking-wide">Cluster Configuration</span>
           </button>
-
-          {/* ASYNCHRONOUS SYSTEM DISCONNECTION ANCHOR */}
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium text-zinc-500 hover:text-red-400 hover:bg-red-950/20 border border-transparent hover:border-red-900/30 transition-all duration-200"
-          >
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium text-zinc-500 hover:text-red-400 hover:bg-red-950/20 border border-transparent hover:border-red-900/30 transition-all duration-200">
             <LogOut className="w-4 h-4" />
             <span className="tracking-wide">Disconnect Session</span>
           </button>
         </div>
       </div>
 
-      {/* MAIN VIEWPORT STAGE */}
+      {/* CORE VIEWPORT */}
       <div className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
         
         {viewMode === 'chat' && (
@@ -478,7 +510,6 @@ export default function Workspace() {
                     })}
                   </div>
                 )}
-                
                 {loading && (
                   <div className="py-7 flex items-start gap-6">
                     <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
@@ -520,6 +551,7 @@ export default function Workspace() {
           </>
         )}
 
+        {/* ADMIN CONFIGURATION VIEW */}
         {viewMode === 'admin' && (
           <div className="flex-1 flex flex-col h-full bg-zinc-50 overflow-y-auto">
             <div className="w-full h-16 border-b border-zinc-200/60 bg-white px-8 flex items-center justify-between flex-shrink-0">
@@ -532,6 +564,8 @@ export default function Workspace() {
             </div>
 
             <div className="max-w-3xl w-full mx-auto px-8 py-8 flex flex-col gap-6">
+              
+              {/* Navigation Tabs Header */}
               <div className="flex gap-2 bg-zinc-200/60 p-1 rounded-xl self-start text-xs font-medium">
                 <button 
                   onClick={() => { setAdminTab('pipeline'); setAdminMessage({type:'',text:''}); }}
@@ -548,11 +582,18 @@ export default function Workspace() {
                   <span>🌐 Server Relays</span>
                 </button>
                 <button 
+                  onClick={() => { setAdminTab('vault'); setAdminMessage({type:'',text:''}); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${adminTab === 'vault' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>🔑 API Vault</span>
+                </button>
+                <button 
                   onClick={() => { setAdminTab('security'); setAdminMessage({type:'',text:''}); }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${adminTab === 'security' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
                 >
-                  <Key className="w-3.5 h-3.5" />
-                  <span>🔒 Security</span>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>🔒 Access Gate</span>
                 </button>
               </div>
 
@@ -562,6 +603,7 @@ export default function Workspace() {
                 </div>
               )}
 
+              {/* PANEL A: PIPELINE ROUTER */}
               {adminTab === 'pipeline' && (
                 <form onSubmit={savePipeline} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -578,7 +620,7 @@ export default function Workspace() {
                       <input type="text" value={stepName} onChange={(e) => setStepName(e.target.value)} className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" />
                     </div>
                     <div className="flex flex-col gap-2">
-                      <label className="font-semibold text-zinc-700">API Envoy Prefix</label>
+                      <label className="font-semibold text-zinc-700">API Envoy Prefix (e.g., 'openrouter' or 'gemini')</label>
                       <input type="text" value={providerId} onChange={(e) => setProviderId(e.target.value)} className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -600,6 +642,7 @@ export default function Workspace() {
                 </form>
               )}
 
+              {/* PANEL B: DATABASE RELAYS */}
               {adminTab === 'relays' && (
                 <form onSubmit={saveRelays} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -620,6 +663,72 @@ export default function Workspace() {
                 </form>
               )}
 
+              {/* NEW PANEL C: HOT-SWAPPABLE API KEY VAULT CONTROL */}
+              {adminTab === 'vault' && (
+                <div className="flex flex-col gap-6">
+                  {/* Key Injection Form */}
+                  <form onSubmit={saveVaultKey} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+                    <div>
+                      <h2 className="text-sm font-semibold text-zinc-900">Inject Platform Authorization Token</h2>
+                      <p className="text-xs text-zinc-400 mt-0.5">Link an active API key directly to a specific dynamic provider string prefix.</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-xs items-end">
+                      <div className="flex flex-col gap-2 col-span-1">
+                        <label className="font-semibold text-zinc-700">Envoy Identifier (Lowercase)</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vaultProviderInput} 
+                          onChange={(e) => setVaultProviderInput(e.target.value)} 
+                          placeholder="e.g., openrouter" 
+                          className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400 font-mono text-[11px]" 
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2 col-span-2">
+                        <label className="font-semibold text-zinc-700">Secret Token Secret String</label>
+                        <input 
+                          type="password" 
+                          required
+                          value={vaultKeyInput} 
+                          onChange={(e) => setVaultKeyInput(e.target.value)} 
+                          placeholder="sk-or-v1-..." 
+                          className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400 font-mono text-[11px]" 
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" className="bg-zinc-950 text-white text-xs font-semibold py-2.5 px-4 rounded-xl hover:bg-zinc-800 transition-colors self-end shadow-sm">
+                      Save Token Mapping
+                    </button>
+                  </form>
+
+                  {/* Registered Keys List View */}
+                  <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">Active Vault Records</h3>
+                    {vaultKeys.length === 0 ? (
+                      <p className="text-xs text-zinc-500 italic">No keys stored inside database. System is entirely dependent on Render background env maps.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {vaultKeys.map((k) => (
+                          <div key={k.provider_identifier} className="flex items-center justify-between p-3 rounded-xl border border-zinc-100 bg-zinc-50/50 text-xs font-mono">
+                            <div className="flex items-center gap-4">
+                              <span className="font-semibold text-zinc-800 bg-zinc-200/60 px-2 py-1 rounded lowercase">{k.provider_identifier}</span>
+                              <span className="text-zinc-400 tracking-wider">{k.api_key}</span>
+                            </div>
+                            <button 
+                              onClick={() => deleteVaultKey(k.provider_identifier)}
+                              className="p-1.5 rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* PANEL D: ACCESS MANAGEMENT SECURITY GATE */}
               {adminTab === 'security' && (
                 <form onSubmit={changeCredentials} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -629,25 +738,11 @@ export default function Workspace() {
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div className="flex flex-col gap-2">
                       <label className="font-semibold text-zinc-700">New Cluster Username</label>
-                      <input 
-                        type="text" 
-                        required
-                        value={newUsername} 
-                        onChange={(e) => setNewUsername(e.target.value)} 
-                        placeholder="Minimum 3 characters..."
-                        className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" 
-                      />
+                      <input type="text" required value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Minimum 3 characters..." className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" />
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="font-semibold text-zinc-700">New Master Password</label>
-                      <input 
-                        type="password" 
-                        required
-                        value={newPassword} 
-                        onChange={(e) => setNewPassword(e.target.value)} 
-                        placeholder="Minimum 6 characters..."
-                        className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" 
-                      />
+                      <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimum 6 characters..." className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" />
                     </div>
                   </div>
                   <button type="submit" className="bg-zinc-950 text-white text-xs font-semibold py-3 px-4 rounded-xl hover:bg-zinc-800 transition-colors self-end shadow-sm">
