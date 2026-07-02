@@ -2,14 +2,14 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from backend.core.database import run_query, initialize_infra
+from core.database import run_query, initialize_infra
 
 app = FastAPI(title="Sovereign API Engine")
 
 # Security rule allowing your future Vercel frontend to securely talk to this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # We can narrow this down to your specific Vercel URL later
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
