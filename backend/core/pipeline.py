@@ -2,6 +2,7 @@ import ast
 import os
 from openai import OpenAI
 import google.generativeai as genai
+from core.database import run_query
 
 def verify_code_safety(code_string: str) -> bool:
     try:
@@ -24,8 +25,15 @@ def execute_pipeline_step(step, current_payload):
     try:
         exec(step['python_code_body'], global_scope, local_scope)
         
-        # Dynamically pulls OPENROUTER_API_KEY or GEMINI_API_KEY from Render config
-        target_api_key = os.environ.get(f"{step['provider_identifier'].upper()}_API_KEY")
+        # 1. Look up credential mappings inside database vault first
+        provider_name = step['provider_identifier'].strip().lower()
+        db_key_lookup = run_query("SELECT api_key FROM api_keys_vault WHERE provider_identifier = %s;", (provider_name,))
+        
+        if db_key_lookup and db_key_lookup[0].get('api_key'):
+            target_api_key = db_key_lookup[0]['api_key']
+        else:
+            # 2. Fall back to system environment variables if database row is empty
+            target_api_key = os.environ.get(f"{step['provider_identifier'].upper()}_API_KEY")
         
         return local_scope['execute_step'](
             payload=current_payload,
