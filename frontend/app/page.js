@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key } from 'lucide-react'
+import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key, Trash2 } from 'lucide-react'
 
 export default function Workspace() {
   // Security & Authentication States
@@ -81,15 +81,32 @@ export default function Workspace() {
     }
   }
 
-  const fetchThreads = async () => {
+  const fetchThreads = async (selectTargetId = null) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/threads`)
       const data = await res.json()
-      if (data.threads && data.threads.length > 0) {
+      if (data.threads) {
         setThreads(data.threads)
-        if (!activeThreadId) {
-          setActiveThreadId(data.threads[0].id)
-          setActiveThreadName(data.threads[0].name)
+        
+        // Handle selection state restructuring after modifications
+        if (data.threads.length > 0) {
+          if (selectTargetId) {
+            const match = data.threads.find(t => t.id === selectTargetId)
+            if (match) {
+              setActiveThreadId(match.id)
+              setActiveThreadName(match.name)
+              return
+            }
+          }
+          // Default fall-through fallback selection anchor
+          if (!activeThreadId || !data.threads.some(t => t.id === activeThreadId)) {
+            setActiveThreadId(data.threads[0].id)
+            setActiveThreadName(data.threads[0].name)
+          }
+        } else {
+          setActiveThreadId(null)
+          setActiveThreadName('')
+          setMessages([])
         }
       }
     } catch (err) {
@@ -140,10 +157,50 @@ export default function Workspace() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newThreadName })
       })
+      const targetName = newThreadName
       setNewThreadName('')
-      await fetchThreads()
+      
+      // Fetch and map focus dynamically onto the newly created node connection string
+      const res = await fetch(`${BACKEND_URL}/api/threads`)
+      const data = await res.json()
+      if (data.threads) {
+        setThreads(data.threads)
+        const newlyCreated = data.threads.find(t => t.name === targetName)
+        if (newlyCreated) {
+          setActiveThreadId(newlyCreated.id)
+          setActiveThreadName(newlyCreated.name)
+        }
+      }
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const deleteThread = async (e, threadId) => {
+    e.stopPropagation() // Stops click bubbling from resetting page tracking states
+    if (!confirm("Are you sure you want to permanently purge this chat register and all associated SQL message blocks?")) return
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/threads/${threadId}`, {
+        method: 'DELETE'
+      })
+      if (!res.ok) throw new Error("Cluster rejected data deletion request.")
+      
+      // Recalculate focused window locations gracefully
+      if (activeThreadId === threadId) {
+        const remaining = threads.filter(t => t.id !== threadId)
+        if (remaining.length > 0) {
+          setActiveThreadId(remaining[0].id)
+          setActiveThreadName(remaining[0].name)
+        } else {
+          setActiveThreadId(null)
+          setActiveThreadName('')
+          setMessages([])
+        }
+      }
+      await fetchThreads()
+    } catch (err) {
+      alert(`Deletion Routine Failure: ${err.message}`)
     }
   }
 
@@ -321,15 +378,22 @@ export default function Workspace() {
                   setActiveThreadId(t.id)
                   setActiveThreadName(t.name)
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-medium text-left transition-all duration-200 group ${
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-medium text-left transition-all duration-200 group relative ${
                   isActive ? 'bg-zinc-900 text-zinc-100 border border-zinc-800/60 shadow-inner' : 'text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'
                 }`}
               >
-                <div className="flex items-center gap-3 truncate mr-2">
+                <div className="flex items-center gap-3 truncate mr-6">
                   <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-400'}`} />
                   <span className="truncate tracking-wide">{t.name}</span>
                 </div>
-                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-sm shadow-blue-400" />}
+                
+                {/* Inline Deletion Interactive Element */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span onClick={(e) => deleteThread(e, t.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-800/80 text-zinc-500 hover:text-red-400 transition-all duration-150 relative z-20">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </span>
+                  {isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-sm shadow-blue-400" />}
+                </div>
               </button>
             )
           })}
@@ -352,10 +416,9 @@ export default function Workspace() {
         </div>
       </div>
 
-      {/* CORE FRAMEWORK STAGE */}
+      {/* MAIN VIEWPORT STAGE */}
       <div className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
         
-        {/* VIEW 1: CHAT CANVAS VIEWPORT */}
         {viewMode === 'chat' && (
           <>
             <div className="w-full h-16 border-b border-zinc-100 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-md z-10">
@@ -420,15 +483,15 @@ export default function Workspace() {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="Message your sovereign core..."
+                    placeholder={activeThreadId ? "Message your sovereign core..." : "Create a track to begin processing..."}
                     className="flex-1 bg-transparent text-zinc-900 text-[14px] py-2 pl-2 focus:outline-none placeholder-zinc-400 font-normal tracking-wide"
-                    disabled={loading}
+                    disabled={loading || !activeThreadId}
                   />
                   <button
                     type="submit"
-                    disabled={!input.trim() || loading}
+                    disabled={!input.trim() || loading || !activeThreadId}
                     className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 shadow-sm ${
-                      input.trim() && !loading ? 'bg-zinc-950 text-white hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-300 cursor-not-allowed shadow-none'
+                      input.trim() && !loading && activeThreadId ? 'bg-zinc-950 text-white hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-300 cursor-not-allowed shadow-none'
                     }`}
                   >
                     <Send className="w-3.5 h-3.5" />
@@ -439,7 +502,6 @@ export default function Workspace() {
           </>
         )}
 
-        {/* VIEW 2: DYNAMIC CONFIGURATION CONTROL CENTER */}
         {viewMode === 'admin' && (
           <div className="flex-1 flex flex-col h-full bg-zinc-50 overflow-y-auto">
             <div className="w-full h-16 border-b border-zinc-200/60 bg-white px-8 flex items-center justify-between flex-shrink-0">
@@ -452,8 +514,6 @@ export default function Workspace() {
             </div>
 
             <div className="max-w-3xl w-full mx-auto px-8 py-8 flex flex-col gap-6">
-              
-              {/* Core Control Nav Toggles */}
               <div className="flex gap-2 bg-zinc-200/60 p-1 rounded-xl self-start text-xs font-medium">
                 <button 
                   onClick={() => { setAdminTab('pipeline'); setAdminMessage({type:'',text:''}); }}
@@ -484,7 +544,6 @@ export default function Workspace() {
                 </div>
               )}
 
-              {/* TAB 1: PIPELINE MODIFICATION ENGINE */}
               {adminTab === 'pipeline' && (
                 <form onSubmit={savePipeline} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -523,7 +582,6 @@ export default function Workspace() {
                 </form>
               )}
 
-              {/* TAB 2: MULTI-DATABASE SERVER ALLOCATION MAP */}
               {adminTab === 'relays' && (
                 <form onSubmit={saveRelays} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -544,7 +602,6 @@ export default function Workspace() {
                 </form>
               )}
 
-              {/* NEW TAB 3: IDENTITY SYSTEM MANAGEMENT PANEL */}
               {adminTab === 'security' && (
                 <form onSubmit={changeCredentials} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
@@ -580,7 +637,6 @@ export default function Workspace() {
                   </button>
                 </form>
               )}
-
             </div>
           </div>
         )}
