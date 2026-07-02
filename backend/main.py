@@ -58,7 +58,8 @@ async def token_stream_generator(thread_id: int, content: str):
     
     # Process each stage sequentially, but stream tokens asynchronously
     for stage in stages:
-        yield f"data: {json.dumps({'status': f'Running {stage[\"name\"]}'})}\n\n"
+        stage_name = stage["name"]
+        yield f"data: {json.dumps({'status': f'Running {stage_name}'})}\n\n"
         await asyncio.sleep(0.6)  # Simulate processing delay between pipeline tasks
         
         words = stage["reply"].split(" ")
