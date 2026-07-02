@@ -14,6 +14,7 @@ class ClusterContextRouter:
             raise ValueError("Critical Exception: MASTER_ROUTER_DB_URL environment variable is unassigned.")
         
         try:
+            # Bind RealDictCursor to explicitly map lowercase SQL fields to frontend JSON keys
             self.connection = psycopg2.connect(self.connection_string, cursor_factory=RealDictCursor)
             self.cursor = self.connection.cursor()
             self._bootstrap_database_schema()
@@ -37,6 +38,8 @@ class ClusterContextRouter:
             self.connection.close()
 
     def _bootstrap_database_schema(self):
+        """Constructs and seeds all required relational tables instantly if the instance is blank."""
+        # 1. Pipeline Steps Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_steps (
                 id SERIAL PRIMARY KEY,
@@ -48,6 +51,7 @@ class ClusterContextRouter:
             );
         """)
         
+        # 2. Multi-SQL Relays Matrix Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS db_routing_matrix (
                 id SERIAL PRIMARY KEY,
@@ -56,6 +60,7 @@ class ClusterContextRouter:
             );
         """)
         
+        # 3. API Token Vault Storage Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS api_keys_vault (
                 id SERIAL PRIMARY KEY,
@@ -64,6 +69,7 @@ class ClusterContextRouter:
             );
         """)
         
+        # 4. Chat Threads Directory Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS threads (
                 id SERIAL PRIMARY KEY,
@@ -72,6 +78,7 @@ class ClusterContextRouter:
             );
         """)
         
+        # 5. Cascading Message Blocks Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
@@ -82,18 +89,19 @@ class ClusterContextRouter:
             );
         """)
 
+        # Seed structural operational baseline rows if database registers empty
         self.cursor.execute("SELECT COUNT(*) FROM pipeline_steps;")
         if self.cursor.fetchone()['count'] == 0:
             self.cursor.execute("""
                 INSERT INTO pipeline_steps (sequence_order_position, step_name, provider_type, model_string, system_prompt_directives)
-                VALUES (1, 'Sovereign Auto-Core', 'openrouter', 'google/gemini-2.5-flash:free', 'You are an elite sovereign processing runtime environment wrapper.');
+                VALUES (1, 'Sovereign Core Ingestion', 'openrouter', 'google/gemini-2.5-flash:free', 'You are an unquantized enterprise intelligence routing gateway container.');
             """)
             
         self.cursor.execute("SELECT COUNT(*) FROM db_routing_matrix;")
         if self.cursor.fetchone()['count'] == 0:
             self.cursor.execute("""
                 INSERT INTO db_routing_matrix (operation_type, connection_string) VALUES 
-                ('master', 'postgresql://neon_serverless_active_tier/master_db'),
-                ('metadata', 'postgresql://supabase_managed_sidebar_tier/metadata_db'),
-                ('transactional', 'postgresql://oracle_autonomous_archive_volume/logs_db');
+                ('master', 'postgresql://neon_serverless_active_tier_router/master_cluster_db'),
+                ('metadata', 'postgresql://supabase_managed_isolated_sidebar/metadata_db'),
+                ('transactional', 'postgresql://oracle_autonomous_secure_vault/heavy_payload_logs_db');
             """)
