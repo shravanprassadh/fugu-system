@@ -4,7 +4,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 def get_router_db():
-    # Reads the database URL from Render's cloud environment variables
     return psycopg2.connect(os.environ.get("MASTER_ROUTER_DB_URL"))
 
 def run_query(query, params=None, is_select=True):
@@ -30,3 +29,20 @@ def initialize_infra():
         );
     """, is_select=False)
     run_query(f"INSERT INTO system_settings (key, value) VALUES ('admin_password_hash', '{hashlib.sha256('AdminSecure2026!'.encode()).hexdigest()}') ON CONFLICT DO NOTHING;", is_select=False)
+
+class ClusterContextRouter:
+    def __init__(self, op_type):
+        try:
+            db_matrix = {row['operation']: row['connection_string'] for row in run_query("SELECT * FROM db_routing_matrix;")}
+        except Exception:
+            db_matrix = {}
+        self.target_url = db_matrix.get(op_type, os.environ.get("MASTER_ROUTER_DB_URL"))
+        self.conn = None
+        
+    def __enter__(self):
+        self.conn = psycopg2.connect(self.target_url)
+        return self.conn
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn: 
+            self.conn.close()
