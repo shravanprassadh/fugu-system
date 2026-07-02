@@ -1,17 +1,18 @@
 import os
 import sys
 import json
-import asyncio
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import List
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-app = FastAPI(title="Fugu Simple Gateway", version="5.0.0")
+from core.database import ClusterContextRouter
+from core.pipeline import SequenceExecutionEngine
+
+app = FastAPI(title="Fugu Secure Gateway", version="5.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,158 +22,108 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_URL = os.environ.get("MASTER_ROUTER_DB_URL")
-
-def get_db_cursor():
-    if not DB_URL:
-        raise ValueError("MASTER_ROUTER_DB_URL environment variable is missing.")
-    conn = psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
-    conn.autocommit = True
-    return conn, conn.cursor()
-
-def bootstrap_database():
-    try:
-        conn, cursor = get_db_cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS threads (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                thread_id INT NOT NULL,
-                role VARCHAR(50) NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS pipeline_settings (
-                step_num INT PRIMARY KEY,
-                step_name VARCHAR(255) NOT NULL,
-                model_string VARCHAR(255) NOT NULL
-            );
-        """)
-        
-        cursor.execute("SELECT COUNT(*) FROM pipeline_settings;")
-        if cursor.fetchone()['count'] == 0:
-            cursor.execute("""
-                INSERT INTO pipeline_settings (step_num, step_name, model_string) VALUES
-                (1, 'Stage 1: Document Extractor', 'google/gemini-2.5-flash:free'),
-                (2, 'Stage 2: Logic Reasoner', 'deepseek/deepseek-r1:free'),
-                (3, 'Stage 3: Integrity Auditor', 'google/gemini-2.5-pro:free'),
-                (4, 'Stage 4: Final Consolidator', 'meta-llama/llama-3.3-70b-instruct:free');
-            """)
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(f"Database bootstrap notice: {str(e)}")
-
-if DB_URL:
-    bootstrap_database()
+# --- Request Data Structures ---
+class LoginPayload(BaseModel):
+    username: str
+    password: str
 
 class MsgPayload(BaseModel):
     thread_id: int
     content: str
 
 class PipelineStepUpdate(BaseModel):
-    step_num: int
+    sequence_order_position: int
+    step_name: str
+    provider_type: str
     model_string: str
+    system_prompt_directives: str
 
-async def token_stream_generator(thread_id: int, content: str):
-    try:
-        conn, cursor = get_db_cursor()
-        cursor.execute("SELECT step_num, step_name, model_string FROM pipeline_settings ORDER BY step_num ASC;")
-        steps = cursor.fetchall()
-    except Exception as e:
-        yield f"data: {json.dumps({'error': f'Database fault: {str(e)}'})}\n\n"
-        return
+class VaultKeyPayload(BaseModel):
+    provider_name: str
+    secret_key: str
 
-    current_input = content
-    for step in steps:
-        s_num = step['step_num']
-        s_name = step['step_name']
-        model = step['model_string']
-        
-        yield f"data: {json.dumps({'status': f'Running {s_name} ({model})...'})}\n\n"
-        await asyncio.sleep(0.5)
-        
-        chunk_response = f"\n\n[{s_name} Output via {model}]:\nProcessed step input context through configured guidelines successfully."
-        for chunk in chunk_response.split(" "):
-            if chunk:
-                yield f"data: {json.dumps({'token': chunk + ' '})}\n\n"
-                await asyncio.sleep(0.04)
-        current_input += chunk_response
-        yield f"data: {json.dumps({'status': f'Completed Stage {s_num}'})}\n\n"
+# --- Security Verification Dependencies ---
+def verify_session_token(authorization: str = Header(...)):
+    if authorization != "Bearer secure_session_signature_token":
+        raise HTTPException(status_code=401, detail="Invalid session signature context.")
+    return True
 
-    try:
-        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (thread_id, content))
-        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (thread_id, current_input))
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
+# --- Authentication Endpoint ---
+@app.post("/api/auth/login")
+def authenticate_user(payload: LoginPayload = Body(...)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("SELECT value_string FROM system_settings WHERE key_string = 'admin_password_plain';")
+        row = cursor.fetchone()
+        if row and row['value_string'] == payload.password:
+            return {"token": "secure_session_signature_token"}
+    raise HTTPException(status_code=401, detail="Authentication failed.")
 
-    yield "data: [DONE]\n\n"
-
+# --- Real-Time Content Stream ---
 @app.post("/api/chat/stream")
-async def stream_chat(payload: MsgPayload = Body(...)):
-    return StreamingResponse(token_stream_generator(payload.thread_id, payload.content), media_type="text/event-stream")
+async def stream_chat(payload: MsgPayload = Body(...), authenticated: bool = Depends(verify_session_token)):
+    return StreamingResponse(
+        SequenceExecutionEngine.process_pipeline_stream(payload.thread_id, payload.content),
+        media_type="text/event-stream"
+    )
 
+# --- Conversation Tracking Endpoints ---
 @app.get("/api/chat/threads")
-def get_historical_threads():
-    conn, cursor = get_db_cursor()
-    cursor.execute("SELECT id, name FROM threads ORDER BY id DESC;")
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return rows
+def get_historical_threads(authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("transactional") as cursor:
+        cursor.execute("SELECT id, name FROM threads ORDER BY id DESC;")
+        return cursor.fetchall()
 
 @app.post("/api/chat/threads")
-def create_new_thread(payload: dict = Body(...)):
-    conn, cursor = get_db_cursor()
-    cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Conversation"),))
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return row
+def create_new_thread(payload: dict = Body(...), authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("transactional") as cursor:
+        cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Thread"),))
+        return cursor.fetchone()
 
 @app.get("/api/chat/messages/{thread_id}")
-def get_thread_messages(thread_id: int):
-    conn, cursor = get_db_cursor()
-    cursor.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (thread_id,))
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return rows
+def get_thread_messages(thread_id: int, authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("transactional") as cursor:
+        cursor.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (thread_id,))
+        return cursor.fetchall()
 
 @app.delete("/api/chat/threads/{thread_id}")
-def delete_chat_thread(thread_id: int):
-    conn, cursor = get_db_cursor()
-    cursor.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
-    cursor.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
-    cursor.close()
-    conn.close()
+def delete_chat_thread(thread_id: int, authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
+        cursor.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
     return {"status": "success"}
 
+# --- System Parameter Matrix Management Endpoints ---
 @app.get("/api/config/pipeline")
-def get_pipeline_models():
-    conn, cursor = get_db_cursor()
-    cursor.execute("SELECT step_num, step_name, model_string FROM pipeline_settings ORDER BY step_num ASC;")
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return rows
+def get_pipeline_models(authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("SELECT sequence_order_position, step_name, provider_type, model_string, system_prompt_directives FROM pipeline_steps ORDER BY sequence_order_position ASC;")
+        return cursor.fetchall()
 
-@app.post("/api/config/pipeline/update")
-def update_pipeline_model(payload: PipelineStepUpdate = Body(...)):
-    conn, cursor = get_db_cursor()
-    cursor.execute("UPDATE pipeline_settings SET model_string = %s WHERE step_num = %s;", (payload.model_string, payload.step_num))
-    cursor.close()
-    conn.close()
+@app.post("/api/config/pipeline")
+def save_pipeline_matrix(steps: List[PipelineStepUpdate], authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("DELETE FROM pipeline_steps;")
+        for step in steps:
+            cursor.execute("""
+                INSERT INTO pipeline_steps (sequence_order_position, step_name, provider_type, model_string, system_prompt_directives)
+                VALUES (%s, %s, %s, %s, %s);
+            """, (step.sequence_order_position, step.step_name, step.provider_type, step.model_string, step.system_prompt_directives))
+    return {"status": "success"}
+
+@app.get("/api/config/vault")
+def get_vault_keys(authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("SELECT provider_name, secret_key FROM api_keys_vault ORDER BY provider_name ASC;")
+        rows = cursor.fetchall()
+        return [{"provider_name": r['provider_name'], "secret_key": f"{r['secret_key'][:8]}..." if len(r['secret_key']) > 8 else "..."} for r in rows]
+
+@app.post("/api/config/vault")
+def save_vault_key(payload: VaultKeyPayload, authenticated: bool = Depends(verify_session_token)):
+    with ClusterContextRouter("master") as cursor:
+        cursor.execute("""
+            INSERT INTO api_keys_vault (provider_name, secret_key) VALUES (%s, %s)
+            ON CONFLICT (provider_name) DO UPDATE SET secret_key = EXCLUDED.secret_key;
+        """, (payload.provider_name, payload.secret_key))
     return {"status": "success"}
 
 @app.get("/api/health")
