@@ -1,17 +1,20 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock } from 'lucide-react'
+import { MessageSquare, Plus, Send, Settings, Shield, RefreshCw, Sparkles, User, Terminal, Database, Sliders, ArrowLeft, Lock, Key } from 'lucide-react'
 
 export default function Workspace() {
-  // Security & View States
+  // Security & Authentication States
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [passphrase, setPassphrase] = useState('')
+  const [usernameInput, setUsernameInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
   const [authError, setAuthError] = useState('')
+  
+  // Navigation States
   const [viewMode, setViewMode] = useState('chat') 
   const [adminTab, setAdminTab] = useState('pipeline') 
   
-  // Data State Arrays
+  // Data States
   const [threads, setThreads] = useState([])
   const [activeThreadId, setActiveThreadId] = useState(null)
   const [activeThreadName, setActiveThreadName] = useState('')
@@ -20,7 +23,7 @@ export default function Workspace() {
   const [loading, setLoading] = useState(false)
   const [newThreadName, setNewThreadName] = useState('')
   
-  // Administrative Inputs Form State
+  // Administrative Component Form Fields
   const [stepNum, setStepNum] = useState(1)
   const [stepName, setStepName] = useState('Sovereign Auto-Core')
   const [providerId, setProviderId] = useState('openrouter')
@@ -30,15 +33,15 @@ export default function Workspace() {
   
   const [threadsUrl, setThreadsUrl] = useState('')
   const [messagesUrl, setMessagesUrl] = useState('')
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [adminMessage, setAdminMessage] = useState({ type: '', text: '' })
 
   const messagesEndRef = useRef(null)
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || ''
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchThreads()
-    }
+    if (isAuthenticated) fetchThreads()
   }, [isAuthenticated])
 
   useEffect(() => {
@@ -51,30 +54,33 @@ export default function Workspace() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Cryptographic Client Authentication
+  // Secure API Session Verification Handshake
   const handleAuthentication = async (e) => {
     e.preventDefault()
     setAuthError('')
     try {
-      // Direct cryptographic verification handshake against your secure backend configuration
       const encoder = new TextEncoder()
-      const data = encoder.encode(passphrase)
+      const data = encoder.encode(passwordInput)
       const hashBuffer = await crypto.subtle.digest('SHA-256', data)
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const clientHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 
-      // Default temporary fallback gate verification to avoid total lockouts
-      if (passphrase === 'AdminSecure2026!') {
+      const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameInput, password_hash: clientHash })
+      })
+
+      if (res.ok) {
         setIsAuthenticated(true)
       } else {
-        setAuthError('Access Denied. Cryptographic signature verification failed.')
+        setAuthError('Access Denied. Signature mismatch.')
       }
     } catch (err) {
-      setAuthError('Authentication routine interrupted.')
+      setAuthError('Security infrastructure handoff failed.')
     }
   }
 
-  // Core Synchronizations
   const fetchThreads = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/threads`)
@@ -87,7 +93,7 @@ export default function Workspace() {
         }
       }
     } catch (err) {
-      console.error("Failed fetching log context layers:", err)
+      console.error(err)
     }
   }
 
@@ -97,7 +103,7 @@ export default function Workspace() {
       const data = await res.json()
       if (data.messages) setMessages(data.messages)
     } catch (err) {
-      console.error("Failed pulling conversation vault:", err)
+      console.error(err)
     }
   }
 
@@ -121,7 +127,7 @@ export default function Workspace() {
         setMessagesUrl(mRelay ? mRelay.connection_string : '')
       }
     } catch (err) {
-      console.error("Administrative call rejected by server network:", err)
+      console.error(err)
     }
   }
 
@@ -137,7 +143,7 @@ export default function Workspace() {
       setNewThreadName('')
       await fetchThreads()
     } catch (err) {
-      console.error("Failed syncing track register:", err)
+      console.error(err)
     }
   }
 
@@ -156,12 +162,10 @@ export default function Workspace() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ thread_id: activeThreadId, prompt: userMessage })
       })
-      
       if (!res.ok) {
         const errData = await res.json()
-        throw new Error(errData.detail || "Pipeline sequence failure")
+        throw new Error(errData.detail || "Pipeline network breakdown.")
       }
-
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.content }])
     } catch (err) {
@@ -189,11 +193,11 @@ export default function Workspace() {
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.detail || "Ast parameters invalid.")
+        throw new Error(err.detail || "Invalid schema.")
       }
-      setAdminMessage({ type: 'success', text: 'Operational pipeline directives updated successfully.' })
+      setAdminMessage({ type: 'success', text: 'Pipeline layers committed.' })
     } catch (err) {
-      setAdminMessage({ type: 'error', text: `Failed committing parameters: ${err.message}` })
+      setAdminMessage({ type: 'error', text: err.message })
     }
   }
 
@@ -206,42 +210,67 @@ export default function Workspace() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ threads_url: threadsUrl, messages_url: messagesUrl })
       })
-      if (!res.ok) throw new Error("Server rejected cluster relay updates.")
-      setAdminMessage({ type: 'success', text: 'Cloud relay paths updated successfully.' })
+      if (!res.ok) throw new Error("Database network configuration dropped.")
+      setAdminMessage({ type: 'success', text: 'Database relays pointing cleanly.' })
     } catch (err) {
       setAdminMessage({ type: 'error', text: err.message })
     }
   }
 
-  // ==========================================
-  // HARD SECURITY GATE VIEW (IF UNVERIFIED)
-  // ==========================================
+  const changeCredentials = async (e) => {
+    e.preventDefault()
+    setAdminMessage({ type: '', text: '' })
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_username: newUsername, new_password_raw: newPassword })
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail || "Validation constraint failed.")
+      }
+      setAdminMessage({ type: 'success', text: 'Master credential matrix overwritten inside SQL records.' })
+      setNewUsername('')
+      setNewPassword('')
+    } catch (err) {
+      setAdminMessage({ type: 'error', text: err.message })
+    }
+  }
+
+  // HARD ENTRY DOOR
   if (!isAuthenticated) {
     return (
       <div className="w-screen h-screen bg-zinc-950 flex flex-col items-center justify-center font-sans antialiased px-4">
-        <div className="max-w-sm w-full bg-zinc-900 border border-zinc-800/80 rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col items-center">
-          <div className="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mb-5 text-blue-400 shadow-lg shadow-blue-500/5">
+        <div className="max-w-sm w-full bg-zinc-900 border border-zinc-800/80 rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col">
+          <div className="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mb-5 text-blue-400 self-center">
             <Lock className="w-5 h-5" />
           </div>
           <div className="text-center mb-6">
-            <h2 className="text-zinc-100 font-medium text-base tracking-tight">Infrastructure Gate</h2>
-            <p className="text-zinc-500 text-xs mt-1 leading-relaxed">Enter your master security passphrase to unlock the sovereign operation modules.</p>
+            <h2 className="text-zinc-100 font-medium text-base tracking-tight">Sovereign Cluster Node</h2>
+            <p className="text-zinc-500 text-xs mt-1 leading-relaxed">Enter secure session coordinates to interface with the core layer.</p>
           </div>
           
-          <form onSubmit={handleAuthentication} className="w-full flex flex-col gap-4">
+          <form onSubmit={handleAuthentication} className="w-full flex flex-col gap-3.5">
+            <input
+              type="text"
+              placeholder="Username..."
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              className="w-full text-xs bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-4 py-3.5 focus:outline-none focus:border-zinc-700 transition-all font-mono"
+            />
             <input
               type="password"
-              placeholder="Master Passphrase..."
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              className="w-full text-xs bg-zinc-950 text-zinc-200 placeholder-zinc-600 border border-zinc-800 rounded-xl px-4 py-3.5 focus:outline-none focus:border-zinc-700 transition-all font-mono"
-              autoFocus
+              placeholder="Password..."
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-full text-xs bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-xl px-4 py-3.5 focus:outline-none focus:border-zinc-700 transition-all font-mono"
             />
             {authError && (
               <p className="text-red-400 text-[11px] font-medium leading-normal px-1">{authError}</p>
             )}
-            <button type="submit" className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-semibold text-xs py-3.5 rounded-xl shadow-md transition-all">
-              Verify Credentials
+            <button type="submit" className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-semibold text-xs py-3.5 rounded-xl transition-all mt-1">
+              Authenticate Node Access
             </button>
           </form>
         </div>
@@ -249,11 +278,10 @@ export default function Workspace() {
     )
   }
 
-  // ==========================================
-  // SECURE WORKSPACE UI COMPILATION (VERIFIED)
-  // ==========================================
   return (
     <div className="flex h-screen w-screen bg-white overflow-hidden font-sans antialiased text-zinc-900">
+      
+      {/* SIDEBAR PANEL */}
       <div className="w-72 bg-zinc-950 flex flex-col flex-shrink-0 h-full border-r border-zinc-800/40">
         <div className="p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between px-1">
@@ -315,9 +343,7 @@ export default function Workspace() {
               fetchAdminConfig()
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium transition-all duration-200 border ${
-              viewMode === 'admin' 
-                ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/10' 
-                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border-transparent hover:border-zinc-800/40'
+              viewMode === 'admin' ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/10' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border-transparent hover:border-zinc-800/40'
             }`}
           >
             <Settings className={`w-4 h-4 ${viewMode === 'admin' ? 'text-white' : 'text-zinc-500'}`} />
@@ -326,7 +352,10 @@ export default function Workspace() {
         </div>
       </div>
 
+      {/* CORE FRAMEWORK STAGE */}
       <div className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
+        
+        {/* VIEW 1: CHAT CANVAS VIEWPORT */}
         {viewMode === 'chat' && (
           <>
             <div className="w-full h-16 border-b border-zinc-100 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-md z-10">
@@ -410,6 +439,7 @@ export default function Workspace() {
           </>
         )}
 
+        {/* VIEW 2: DYNAMIC CONFIGURATION CONTROL CENTER */}
         {viewMode === 'admin' && (
           <div className="flex-1 flex flex-col h-full bg-zinc-50 overflow-y-auto">
             <div className="w-full h-16 border-b border-zinc-200/60 bg-white px-8 flex items-center justify-between flex-shrink-0">
@@ -422,6 +452,8 @@ export default function Workspace() {
             </div>
 
             <div className="max-w-3xl w-full mx-auto px-8 py-8 flex flex-col gap-6">
+              
+              {/* Core Control Nav Toggles */}
               <div className="flex gap-2 bg-zinc-200/60 p-1 rounded-xl self-start text-xs font-medium">
                 <button 
                   onClick={() => { setAdminTab('pipeline'); setAdminMessage({type:'',text:''}); }}
@@ -437,6 +469,13 @@ export default function Workspace() {
                   <Database className="w-3.5 h-3.5" />
                   <span>🌐 Server Relays</span>
                 </button>
+                <button 
+                  onClick={() => { setAdminTab('security'); setAdminMessage({type:'',text:''}); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${adminTab === 'security' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>🔒 Security</span>
+                </button>
               </div>
 
               {adminMessage.text && (
@@ -445,13 +484,13 @@ export default function Workspace() {
                 </div>
               )}
 
+              {/* TAB 1: PIPELINE MODIFICATION ENGINE */}
               {adminTab === 'pipeline' && (
                 <form onSubmit={savePipeline} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
                     <h2 className="text-sm font-semibold text-zinc-900">Modify Operations Chain</h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">Reprogram the foundational API orchestration loops dynamically stored in SQL database blocks.</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Reprogram foundational API orchestration loops dynamically stored inside SQL records.</p>
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4 text-xs">
                     <div className="flex flex-col gap-2">
                       <label className="font-semibold text-zinc-700">Sequence Order Position</label>
@@ -470,45 +509,78 @@ export default function Workspace() {
                       <input type="text" value={modelId} onChange={(e) => setModelId(e.target.value)} className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" />
                     </div>
                   </div>
-
                   <div className="flex flex-col gap-2 text-xs">
                     <label className="font-semibold text-zinc-700">System Prompt Directives</label>
                     <textarea value={sysPrompt} onChange={(e) => setSysPrompt(e.target.value)} rows={3} className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400 font-mono text-[11px]" />
                   </div>
-
                   <div className="flex flex-col gap-2 text-xs">
                     <label className="font-semibold text-zinc-700">Python Execution Logic (AST Protected)</label>
                     <textarea value={codeBody} onChange={(e) => setCodeBody(e.target.value)} rows={7} className="border border-zinc-200 rounded-xl px-3.5 py-3 bg-zinc-950 text-zinc-200 font-mono text-[12px] leading-relaxed focus:outline-none focus:border-zinc-700" />
                   </div>
-
                   <button type="submit" className="bg-zinc-950 text-white text-xs font-semibold py-3 px-4 rounded-xl hover:bg-zinc-800 transition-colors self-end shadow-sm">
                     Save Operational Directives
                   </button>
                 </form>
               )}
 
+              {/* TAB 2: MULTI-DATABASE SERVER ALLOCATION MAP */}
               {adminTab === 'relays' && (
                 <form onSubmit={saveRelays} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
                   <div>
                     <h2 className="text-sm font-semibold text-zinc-900">SQL Cloud Server Allocation Map</h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">Dynamically adjust the transactional boundaries. Direct data traffic to specific remote database endpoints.</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Dynamically adjust transactional boundaries and database targets across cloud servers.</p>
                   </div>
-
                   <div className="flex flex-col gap-2 text-xs">
                     <label className="font-semibold text-zinc-700">Metadata Threads SQL Target URI</label>
                     <input type="text" value={threadsUrl} onChange={(e) => setThreadsUrl(e.target.value)} placeholder="postgresql://..." className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400 font-mono text-[11px]" />
                   </div>
-
                   <div className="flex flex-col gap-2 text-xs">
                     <label className="font-semibold text-zinc-700">Heavy Log Transaction SQL Target URI</label>
                     <input type="text" value={messagesUrl} onChange={(e) => setMessagesUrl(e.target.value)} placeholder="postgresql://..." className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400 font-mono text-[11px]" />
                   </div>
-
                   <button type="submit" className="bg-zinc-950 text-white text-xs font-semibold py-3 px-4 rounded-xl hover:bg-zinc-800 transition-colors self-end shadow-sm">
                     Commit Cluster Routing Changes
                   </button>
                 </form>
               )}
+
+              {/* NEW TAB 3: IDENTITY SYSTEM MANAGEMENT PANEL */}
+              {adminTab === 'security' && (
+                <form onSubmit={changeCredentials} className="bg-white border border-zinc-200/80 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+                  <div>
+                    <h2 className="text-sm font-semibold text-zinc-900">Master Identity Management</h2>
+                    <p className="text-xs text-zinc-400 mt-0.5">Overwrite administrative keys stored inside system SQL data logs.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="flex flex-col gap-2">
+                      <label className="font-semibold text-zinc-700">New Cluster Username</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newUsername} 
+                        onChange={(e) => setNewUsername(e.target.value)} 
+                        placeholder="Minimum 3 characters..."
+                        className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" 
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-semibold text-zinc-700">New Master Password</label>
+                      <input 
+                        type="password" 
+                        required
+                        value={newPassword} 
+                        onChange={(e) => setNewPassword(e.target.value)} 
+                        placeholder="Minimum 6 characters..."
+                        className="border border-zinc-200 rounded-xl px-3 py-2.5 bg-zinc-50/50 focus:outline-none focus:border-zinc-400" 
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" className="bg-zinc-950 text-white text-xs font-semibold py-3 px-4 rounded-xl hover:bg-zinc-800 transition-colors self-end shadow-sm">
+                    Update Administrative Master Keys
+                  </button>
+                </form>
+              )}
+
             </div>
           </div>
         )}
