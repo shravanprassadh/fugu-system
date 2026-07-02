@@ -4,45 +4,31 @@ import hashlib
 import streamlit as st
 from core.database import run_query, initialize_infra, ClusterContextRouter
 from core.pipeline import execute_pipeline_step
+from core.styles import inject_premium_themes
 
-# 1. Page Configuration & UI Styles
-st.set_page_config(page_title="Sovereign Workspace", page_icon="✨", layout="wide", initial_sidebar_state="expanded")
-
-st.markdown("""
-    <style>
-        .stApp { background-color: #ffffff; color: #1e293b; font-family: -apple-system, sans-serif; }
-        [data-testid="stSidebar"] { background-color: #f8fafc !important; border-right: 1px solid #e2e8f0 !important; }
-        h1, h2, h3 { color: #0f172a !important; font-weight: 600 !important; letter-spacing: -0.5px; }
-        .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div {
-            background-color: #f1f5f9 !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important;
-        }
-        .stChatMessage { background-color: #ffffff !important; padding: 24px 0px !important; border-bottom: 1px solid #f1f5f9 !important; }
-        [data-testid="stChatMessageContent"] { color: #1e293b !important; font-size: 16px !important; line-height: 1.6 !important; }
-        .stChatInputContainer { background-color: #ffffff !important; padding-bottom: 20px !important; }
-    </style>
-""", unsafe_allow_html=True)
+# 1. Initialize Frame and Premium Presentation Layers
+inject_premium_themes()
 
 if "authenticated" not in st.session_state: st.session_state.authenticated = False
 if "view_mode" not in st.session_state: st.session_state.view_mode = "chat"
 
-# Initialize database architecture dynamically
 try:
     initialize_infra()
 except Exception as e:
-    st.error(f"Infrastructure Offline: Database initialization failed: {str(e)}")
+    st.error(f"Infrastructure Offline: Database connection dropped: {str(e)}")
     st.stop()
 
 current_settings = {row['key']: row['value'] for row in run_query("SELECT * FROM system_settings;")}
 db_matrix = {row['operation']: row['connection_string'] for row in run_query("SELECT * FROM db_routing_matrix;")}
 
 # ====================================================
-# SIDEBAR NAVIGATION PANEL
+# SIDEBAR CONTROL STRATUM
 # ====================================================
 with st.sidebar:
-    st.markdown("<h2 style='font-size: 18px; margin-top: 10px; margin-bottom: 20px;'>✨ Sovereign Canvas</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='margin-top: 15px; margin-bottom: 25px;'>✨ Sovereign Canvas</h2>", unsafe_allow_html=True)
     
-    new_topic = st.text_input("New Thread Name:", placeholder="+ New Chat Name...", label_visibility="collapsed")
-    if st.button("➕ Start New Chat", use_container_width=True) and new_topic:
+    new_topic = st.text_input("New Thread Name:", placeholder="New Chat...", label_visibility="collapsed")
+    if st.button("➕ New Chat", use_container_width=True) and new_topic:
         with ClusterContextRouter("threads") as db:
             with db.cursor() as cur:
                 cur.execute("INSERT INTO threads (name) VALUES (%s) ON CONFLICT DO NOTHING;", (new_topic,))
@@ -50,7 +36,7 @@ with st.sidebar:
         st.session_state.view_mode = "chat"
         st.rerun()
         
-    st.markdown("<hr style='margin: 15px 0; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     
     with ClusterContextRouter("threads") as db:
         from psycopg2.extras import RealDictCursor
@@ -62,7 +48,7 @@ with st.sidebar:
 
     if all_threads:
         for thread in all_threads:
-            if st.button(f"💬 {thread['name']}", use_container_width=True, key=f"t_{thread['id']}"):
+            if st.button(f"💬 {thread['name']}", use_container_width=True, key=f"t_{thread['id']}", type="secondary"):
                 st.session_state.active_thread_name = thread['name']
                 st.session_state.active_thread_id = thread['id']
                 st.session_state.view_mode = "chat"
@@ -71,26 +57,26 @@ with st.sidebar:
             st.session_state.active_thread_name = all_threads[0]['name']
             st.session_state.active_thread_id = all_threads[0]['id']
     else:
-        st.caption("No active threads.")
+        st.caption("No active tracks.")
 
-    st.markdown("<div style='height: 30vh;'></div>", unsafe_allow_html=True)
-    st.markdown("<hr style='margin: 10px 0; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
-    if st.button("⚙️ System Admin Panel", use_container_width=True):
+    st.markdown("<div style='height: 40vh;'></div>", unsafe_allow_html=True)
+    if st.button("⚙️ Advanced Settings", use_container_width=True):
         st.session_state.view_mode = "admin"
         st.rerun()
 
 # ====================================================
-# MAIN WORKSPACE RENDER
+# HIGH-FIDELITY MAIN CANVAS
 # ====================================================
 if st.session_state.view_mode == "chat":
     if "active_thread_id" not in st.session_state:
-        st.info("Create a conversation track to begin.")
+        st.info("Initialize a track in the sidebar to begin.")
         st.stop()
         
     active_name = st.session_state.active_thread_name
     active_id = st.session_state.active_thread_id
 
-    st.markdown(f"<h1 style='font-size: 24px; font-weight: 600; margin-top: 10px;'>{active_name}</h1>", unsafe_allow_html=True)
+    # Title Layer
+    st.markdown(f"<div class='workspace-container'><h1 style='font-size: 22px; font-weight: 500; color: #111827; margin-bottom:0;'>{active_name}</h1></div>", unsafe_allow_html=True)
     
     with ClusterContextRouter("messages") as db:
         from psycopg2.extras import RealDictCursor
@@ -100,13 +86,31 @@ if st.session_state.view_mode == "chat":
             cur.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (active_id,))
             history = cur.fetchall()
 
+    # Custom Clean Chat Rendering Matrix
     for msg in history:
-        with st.chat_message(msg['role']): st.markdown(msg['content'])
+        is_user = msg['role'] == 'user'
+        avatar_label = "U" if is_user else "AI"
+        avatar_class = "avatar-user" if is_user else "avatar-core"
+        
+        st.markdown(f"""
+            <div class='chat-bubble'>
+                <div class='avatar-zone {avatar_class}'>{avatar_label}</div>
+                <div class='content-zone'>{msg['content']}</div>
+            </div>
+        """, unsafe_allow_html=True)
 
+    # Input Dock Execution
     user_prompt = st.chat_input("Message your sovereign core...")
 
     if user_prompt:
-        with st.chat_message("user"): st.markdown(user_prompt)
+        # Display user input immediately
+        st.markdown(f"""
+            <div class='chat-bubble'>
+                <div class='avatar-zone avatar-user'>U</div>
+                <div class='content-zone'>{user_prompt}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         with ClusterContextRouter("messages") as db:
             with db.cursor() as cur:
                 cur.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (active_id, user_prompt))
@@ -115,26 +119,39 @@ if st.session_state.view_mode == "chat":
         pipeline_steps = run_query("SELECT * FROM dynamic_pipeline ORDER BY step_num ASC;")
         current_payload = user_prompt
 
-        with st.chat_message("assistant"):
-            status_indicator = st.empty()
-            for step in pipeline_steps:
-                status_indicator.markdown("<p style='color:#3b82f6; font-size:14px; font-weight:500;'>⚡ Thinking...</p>", unsafe_allow_html=True)
-                current_payload = execute_pipeline_step(step, current_payload)
-                if "Security Halt" in current_payload or "Pipeline Execution Fault" in current_payload:
-                    st.error(current_payload)
-                    st.stop()
+        # Container for Assistant Response
+        status_indicator = st.empty()
+        status_indicator.markdown("<div class='chat-bubble'><div class='avatar-zone avatar-core'>AI</div><div class='content-zone' style='color:#6b7280;'>⚡ Generating response...</div></div>", unsafe_allow_html=True)
+        
+        for step in pipeline_steps:
+            current_payload = execute_pipeline_step(step, current_payload)
+            if "Security Halt" in current_payload or "Pipeline Execution Fault" in current_payload:
+                status_indicator.empty()
+                st.error(current_payload)
+                st.stop()
 
-            status_indicator.empty()
-            st.markdown(current_payload)
+        status_indicator.empty()
+        
+        # Render clean finalized assistant output bubble
+        st.markdown(f"""
+            <div class='chat-bubble'>
+                <div class='avatar-zone avatar-core'>AI</div>
+                <div class='content-zone'>{current_payload}</div>
+            </div>
+        """, unsafe_allow_html=True)
             
         with ClusterContextRouter("messages") as db:
             with db.cursor() as cur:
                 cur.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (active_id, current_payload))
                 db.commit()
+        st.rerun()
 
+# ====================================================
+# BACKEND TERMINAL
+# ====================================================
 elif st.session_state.view_mode == "admin":
     if not st.session_state.authenticated:
-        st.markdown("<div style='max-width: 400px; margin: 100px auto; padding: 20px; border: 1px solid #e2e8f0; border-radius:12px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='max-width: 400px; margin: 100px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius:12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
         st.subheader("🔒 Infrastructure Gate")
         pass_attempt = st.text_input("Enter Control Passphrase:", type="password")
         if st.button("Unlock Core Matrix", type="primary", use_container_width=True):
@@ -142,7 +159,7 @@ elif st.session_state.view_mode == "admin":
                 st.session_state.authenticated = True
                 st.rerun()
             else: st.error("Passphrase verification failed.")
-        if st.button("← Return to Chat Canvas", use_container_width=True):
+        if st.button("← Return to Canvas", use_container_width=True):
             st.session_state.view_mode = "chat"
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
@@ -171,7 +188,7 @@ elif st.session_state.view_mode == "admin":
         model=model_string,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": payload}
+            {"role": "user", "content=payload"}
         ]
     )
     return response.choices[0].message.content""")
