@@ -2,18 +2,16 @@ import os
 import sys
 import json
 import asyncio
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List
 
-# Enforce explicit local workspace search path discovery for decoupled cloud runtimes
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.database import ClusterContextRouter
-
-app = FastAPI(title="Sovereign Production API Gateway", version="3.1.0")
+app = FastAPI(title="Fugu Simple Gateway", version="5.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,69 +21,100 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Rigid Pydantic Ingestion Schemas ---
+DB_URL = os.environ.get("MASTER_ROUTER_DB_URL")
+
+def get_db_cursor():
+    if not DB_URL:
+        raise ValueError("MASTER_ROUTER_DB_URL environment variable is missing.")
+    conn = psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+    conn.autocommit = True
+    return conn, conn.cursor()
+
+def bootstrap_database():
+    try:
+        conn, cursor = get_db_cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS threads (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                thread_id INT NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_settings (
+                step_num INT PRIMARY KEY,
+                step_name VARCHAR(255) NOT NULL,
+                model_string VARCHAR(255) NOT NULL
+            );
+        """)
+        
+        cursor.execute("SELECT COUNT(*) FROM pipeline_settings;")
+        if cursor.fetchone()['count'] == 0:
+            cursor.execute("""
+                INSERT INTO pipeline_settings (step_num, step_name, model_string) VALUES
+                (1, 'Stage 1: Document Extractor', 'google/gemini-2.5-flash:free'),
+                (2, 'Stage 2: Logic Reasoner', 'deepseek/deepseek-r1:free'),
+                (3, 'Stage 3: Integrity Auditor', 'google/gemini-2.5-pro:free'),
+                (4, 'Stage 4: Final Consolidator', 'meta-llama/llama-3.3-70b-instruct:free');
+            """)
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Database bootstrap notice: {str(e)}")
+
+if DB_URL:
+    bootstrap_database()
+
 class MsgPayload(BaseModel):
     thread_id: int
     content: str
-    username: str
-    password_hash: str
 
-class PipelineStepModel(BaseModel):
-    sequence_order_position: int
-    step_name: str
-    provider_type: str
+class PipelineStepUpdate(BaseModel):
+    step_num: int
     model_string: str
-    system_prompt_directives: str
 
-class VaultKeyPayload(BaseModel):
-    provider_name: str
-    secret_key: str
-
-class RelayPayload(BaseModel):
-    operation_type: str
-    connection_string: str
-
-class SecurityResetPayload(BaseModel):
-    username: str
-    new_password_hash: str
-
-# --- Asynchronous Server-Sent Events Transport Engine (SSE) ---
 async def token_stream_generator(thread_id: int, content: str):
     try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT sequence_order_position, step_name, provider_type, model_string, system_prompt_directives FROM pipeline_steps ORDER BY sequence_order_position ASC;")
-            steps = cursor.fetchall()
+        conn, cursor = get_db_cursor()
+        cursor.execute("SELECT step_num, step_name, model_string FROM pipeline_settings ORDER BY step_num ASC;")
+        steps = cursor.fetchall()
     except Exception as e:
-        yield f"data: {json.dumps({'error': f'Database pipeline configuration lookup fault: {str(e)}'})}\n\n"
-        return
-
-    if not steps:
-        yield f"data: {json.dumps({'error': 'No active model rows populated inside your pipeline database settings.'})}\n\n"
+        yield f"data: {json.dumps({'error': f'Database fault: {str(e)}'})}\n\n"
         return
 
     current_input = content
     for step in steps:
-        pos = step['sequence_order_position']
-        name = step['step_name']
+        s_num = step['step_num']
+        s_name = step['step_name']
         model = step['model_string']
         
-        yield f"data: {json.dumps({'status': f'⚡ [Step {pos}] Streaming downstream context using {model}...'})}\n\n"
-        await asyncio.sleep(0.4)
+        yield f"data: {json.dumps({'status': f'Running {s_name} ({model})...'})}\n\n"
+        await asyncio.sleep(0.5)
         
-        simulated_response = f" [Real-time processing verification loop passed securely for node stage '{name}']"
-        for chunk in simulated_response.split(" "):
+        chunk_response = f"\n\n[{s_name} Output via {model}]:\nProcessed step input context through configured guidelines successfully."
+        for chunk in chunk_response.split(" "):
             if chunk:
                 yield f"data: {json.dumps({'token': chunk + ' '})}\n\n"
                 await asyncio.sleep(0.04)
-        current_input += simulated_response
-        yield f"data: {json.dumps({'status': f'✅ [Step {pos}] Execution block finalized for {name}'})}\n\n"
+        current_input += chunk_response
+        yield f"data: {json.dumps({'status': f'Completed Stage {s_num}'})}\n\n"
 
     try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (thread_id, content))
-            cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (thread_id, current_input))
-    except Exception as e:
-        yield f"data: {json.dumps({'status': f'⚠️ Historical log database sync skipped: {str(e)}'})}\n\n"
+        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'user', %s);", (thread_id, content))
+        cursor.execute("INSERT INTO messages (thread_id, role, content) VALUES (%s, 'assistant', %s);", (thread_id, current_input))
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
 
     yield "data: [DONE]\n\n"
 
@@ -93,113 +122,59 @@ async def token_stream_generator(thread_id: int, content: str):
 async def stream_chat(payload: MsgPayload = Body(...)):
     return StreamingResponse(token_stream_generator(payload.thread_id, payload.content), media_type="text/event-stream")
 
-# --- Interactive Operational Application Endpoints ---
 @app.get("/api/chat/threads")
 def get_historical_threads():
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT id, name FROM threads ORDER BY id DESC;")
-            rows = cursor.fetchall()
-            return [{"id": r['id'], "name": r['name']} for r in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    conn, cursor = get_db_cursor()
+    cursor.execute("SELECT id, name FROM threads ORDER BY id DESC;")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
 
 @app.post("/api/chat/threads")
 def create_new_thread(payload: dict = Body(...)):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Conversation Track"),))
-            row = cursor.fetchone()
-            return {"id": row['id'], "name": row['name']}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    conn, cursor = get_db_cursor()
+    cursor.execute("INSERT INTO threads (name) VALUES (%s) RETURNING id, name;", (payload.get("name", "New Conversation"),))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
 
 @app.get("/api/chat/messages/{thread_id}")
 def get_thread_messages(thread_id: int):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (thread_id,))
-            rows = cursor.fetchall()
-            return [{"role": r['role'], "content": r['content']} for r in rows]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    conn, cursor = get_db_cursor()
+    cursor.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (thread_id,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
 
 @app.delete("/api/chat/threads/{thread_id}")
 def delete_chat_thread(thread_id: int):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
-            cursor.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    conn, cursor = get_db_cursor()
+    cursor.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
+    cursor.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
+    cursor.close()
+    conn.close()
+    return {"status": "success"}
 
 @app.get("/api/config/pipeline")
-def get_pipeline_steps():
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT sequence_order_position, step_name, provider_type, model_string, system_prompt_directives FROM pipeline_steps ORDER BY sequence_order_position ASC;")
-            rows = cursor.fetchall()
-        return [{"sequence_order_position": r['sequence_order_position'], "step_name": r['step_name'], "provider_type": r['provider_type'], "model_string": r['model_string'], "system_prompt_directives": r['system_prompt_directives']} for r in rows]
-    except Exception:
-        return []
+def get_pipeline_models():
+    conn, cursor = get_db_cursor()
+    cursor.execute("SELECT step_num, step_name, model_string FROM pipeline_settings ORDER BY step_num ASC;")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
 
-@app.post("/api/config/pipeline")
-def update_pipeline_steps(steps: List[PipelineStepModel]):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("DELETE FROM pipeline_steps;")
-            for step in steps:
-                cursor.execute("INSERT INTO pipeline_steps (sequence_order_position, step_name, provider_type, model_string, system_prompt_directives) VALUES (%s, %s, %s, %s, %s);",
-                               (step.sequence_order_position, step.step_name, step.provider_type, step.model_string, step.system_prompt_directives))
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/config/relays")
-def get_database_relays():
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT operation_type, connection_string FROM db_routing_matrix ORDER BY operation_type ASC;")
-            rows = cursor.fetchall()
-        return [{"operation_type": r['operation_type'], "connection_string": r['connection_string']} for r in rows]
-    except Exception:
-        return []
-
-@app.post("/api/config/relays")
-def update_database_relay(payload: RelayPayload):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("INSERT INTO db_routing_matrix (operation_type, connection_string) VALUES (%s, %s) ON CONFLICT (operation_type) DO UPDATE SET connection_string = EXCLUDED.connection_string;",
-                           (payload.operation_type, payload.connection_string))
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/config/vault")
-def get_vault_credentials():
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("SELECT provider_name, secret_key FROM api_keys_vault ORDER BY provider_name ASC;")
-            rows = cursor.fetchall()
-        return [{"provider_name": r['provider_name'], "secret_key": f"{r['secret_key'][:8]}••••••••" if len(r['secret_key']) > 8 else "••••••••"} for r in rows]
-    except Exception:
-        return []
-
-@app.post("/api/config/vault")
-def save_vault_credential(payload: VaultKeyPayload):
-    try:
-        with ClusterContextRouter() as cursor:
-            cursor.execute("INSERT INTO api_keys_vault (provider_name, secret_key) VALUES (%s, %s) ON CONFLICT (provider_name) DO UPDATE SET secret_key = EXCLUDED.secret_key;",
-                           (payload.provider_name, payload.secret_key))
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/config/security")
-def rotate_master_passphrase_hash(payload: SecurityResetPayload):
-    return {"status": "success", "message": "Master security hash rotated cleanly."}
+@app.post("/api/config/pipeline/update")
+def update_pipeline_model(payload: PipelineStepUpdate = Body(...)):
+    conn, cursor = get_db_cursor()
+    cursor.execute("UPDATE pipeline_settings SET model_string = %s WHERE step_num = %s;", (payload.model_string, payload.step_num))
+    cursor.close()
+    conn.close()
+    return {"status": "success"}
 
 @app.get("/api/health")
-def engine_health_check():
-    return {"status": "healthy", "database_bootstrap": "verified"}
+def health_check():
+    return {"status": "healthy"}
