@@ -11,10 +11,9 @@ class ClusterContextRouter:
 
     def __enter__(self):
         if not self.connection_string:
-            raise ValueError("Critical Exception: MASTER_ROUTER_DB_URL environment variable is unassigned.")
+            raise ValueError("Environment variable MASTER_ROUTER_DB_URL is unassigned.")
         
         try:
-            # Bind RealDictCursor to explicitly map lowercase SQL fields to frontend JSON keys
             self.connection = psycopg2.connect(self.connection_string, cursor_factory=RealDictCursor)
             self.cursor = self.connection.cursor()
             self._bootstrap_database_schema()
@@ -22,7 +21,7 @@ class ClusterContextRouter:
         except Exception as e:
             if self.connection:
                 self.connection.close()
-            raise RuntimeError(f"Data tier connection sequence aborted: {str(e)}")
+            raise RuntimeError(f"Database connection failure: {str(e)}")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
@@ -38,8 +37,15 @@ class ClusterContextRouter:
             self.connection.close()
 
     def _bootstrap_database_schema(self):
-        """Constructs and seeds all required relational tables instantly if the instance is blank."""
-        # 1. Pipeline Steps Table
+        """Constructs backend structures if they are missing from the relational instance."""
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id SERIAL PRIMARY KEY,
+                key_string VARCHAR(100) UNIQUE NOT NULL,
+                value_string TEXT NOT NULL
+            );
+        """)
+
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_steps (
                 id SERIAL PRIMARY KEY,
@@ -51,16 +57,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 2. Multi-SQL Relays Matrix Table
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS db_routing_matrix (
-                id SERIAL PRIMARY KEY,
-                operation_type VARCHAR(100) UNIQUE NOT NULL,
-                connection_string TEXT NOT NULL
-            );
-        """)
-        
-        # 3. API Token Vault Storage Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS api_keys_vault (
                 id SERIAL PRIMARY KEY,
@@ -69,7 +65,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 4. Chat Threads Directory Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS threads (
                 id SERIAL PRIMARY KEY,
@@ -78,7 +73,6 @@ class ClusterContextRouter:
             );
         """)
         
-        # 5. Cascading Message Blocks Table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
@@ -89,19 +83,19 @@ class ClusterContextRouter:
             );
         """)
 
-        # Seed structural operational baseline rows if database registers empty
+        # Seed default administrator credentials hash safely on startup if uninitialized
+        self.cursor.execute("SELECT COUNT(*) FROM system_settings WHERE key_string = 'admin_password_plain';")
+        if self.cursor.fetchone()['count'] == 0:
+            self.cursor.execute("""
+                INSERT INTO system_settings (key_string, value_string) 
+                VALUES ('admin_password_plain', 'AdminSecure2026!');
+            """)
+
         self.cursor.execute("SELECT COUNT(*) FROM pipeline_steps;")
         if self.cursor.fetchone()['count'] == 0:
             self.cursor.execute("""
                 INSERT INTO pipeline_steps (sequence_order_position, step_name, provider_type, model_string, system_prompt_directives)
-                VALUES (1, 'Sovereign Core Ingestion', 'openrouter', 'google/gemini-2.5-flash:free', 'You are an unquantized enterprise intelligence routing gateway container.');
-            """)
-            
-        self.cursor.execute("SELECT COUNT(*) FROM db_routing_matrix;")
-        if self.cursor.fetchone()['count'] == 0:
-            self.cursor.execute("""
-                INSERT INTO db_routing_matrix (operation_type, connection_string) VALUES 
-                ('master', 'postgresql://neon_serverless_active_tier_router/master_cluster_db'),
-                ('metadata', 'postgresql://supabase_managed_isolated_sidebar/metadata_db'),
-                ('transactional', 'postgresql://oracle_autonomous_secure_vault/heavy_payload_logs_db');
+                VALUES 
+                (1, 'Stage 1: Document Extractor', 'openrouter', 'google/gemini-2.5-flash:free', 'Extract core definitions.'),
+                (2, 'Stage 2: Logic Reasoner', 'openrouter', 'deepseek/deepseek-r1:free', 'Perform structural calculations.');
             """)
