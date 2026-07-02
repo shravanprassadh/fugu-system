@@ -174,7 +174,7 @@ if app_mode == "✨ Chat":
     st.markdown("<hr style='margin-top: 5px; margin-bottom: 25px; border: 0; border-top: 1px solid #f1f5f9;'>", unsafe_allow_html=True)
     
     with ClusterContextRouter("messages") as db:
-        with db.cursor() as cur:
+        with db.cursor(cursor_factory=RealDictCursor) as cur: # Added the dictionary parser here
             cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, thread_id INT, role TEXT, content TEXT);")
             db.commit()
             cur.execute("SELECT role, content FROM messages WHERE thread_id = %s ORDER BY id ASC;", (active_id,))
