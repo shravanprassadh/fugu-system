@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List
 from core.database import ClusterContextRouter
 
 app = FastAPI()
@@ -39,7 +39,7 @@ class RelayPayload(BaseModel):
     operation_type: str
     connection_string: str
 
-# --- Core Streaming Pipeline ---
+# --- Core Asynchronous Streaming Pipeline ---
 async def token_stream_generator(thread_id, content):
     with ClusterContextRouter("transactional") as cursor:
         cursor.execute("SELECT id, step_name, provider_type, model_string, system_prompt_directives FROM pipeline_steps ORDER BY sequence_order_position ASC;")
@@ -67,7 +67,7 @@ async def token_stream_generator(thread_id, content):
 async def stream_chat(payload: MsgPayload = Body(...)):
     return StreamingResponse(token_stream_generator(payload.thread_id, payload.content), media_type="text/event-stream")
 
-# --- 1. Pipeline Endpoints ---
+# --- 1. Pipeline Sequence Core Endpoints ---
 @app.get("/api/config/pipeline")
 def get_pipeline():
     with ClusterContextRouter("master") as cursor:
@@ -104,7 +104,7 @@ def save_vault_key(payload: VaultKeyPayload):
         cursor.execute("INSERT INTO api_keys_vault (provider_name, secret_key) VALUES (%s, %s);", (payload.provider_name, payload.secret_key))
     return {"status": "success"}
 
-# --- 3. Server Relays (Multi-DB) Endpoints ---
+# --- 3. Multi-SQL Relays Connection Endpoints ---
 @app.get("/api/config/relays")
 def get_db_relays():
     try:
@@ -120,9 +120,8 @@ def get_db_relays():
 
 @app.post("/api/config/relays")
 def update_db_relay(payload: RelayPayload):
-    # Dynamically hot-swap data routing links with zero server downtime
-    return {"status": "success", "message": f"Data route for {payload.operation_type} adjusted."}
+    return {"status": "success", "message": f"Data route for {payload.operation_type} adjusted dynamically."}
 
 @app.get("/api/health")
-def health():
+def health_check():
     return {"status": "healthy"}
