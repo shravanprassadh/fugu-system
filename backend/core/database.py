@@ -18,6 +18,7 @@ def run_query(query, params=None, is_select=True):
 def initialize_infra():
     run_query("CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);", is_select=False)
     run_query("CREATE TABLE IF NOT EXISTS db_routing_matrix (operation TEXT PRIMARY KEY, connection_string TEXT NOT NULL);", is_select=False)
+    run_query("CREATE TABLE IF NOT EXISTS api_keys_vault (provider_identifier TEXT PRIMARY KEY, api_key TEXT NOT NULL);", is_select=False)
     run_query("""
         CREATE TABLE IF NOT EXISTS dynamic_pipeline (
             step_num INTEGER PRIMARY KEY,
