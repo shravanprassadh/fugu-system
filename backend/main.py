@@ -1,4 +1,5 @@
 import os
+import hashlib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -19,12 +20,60 @@ app.add_middleware(
 def startup_event():
     try:
         initialize_infra()
+        # Seed default administrative credentials if they don't exist yet
+        run_query("INSERT INTO system_settings (key, value) VALUES ('admin_username', 'admin') ON CONFLICT DO NOTHING;", is_select=False)
     except Exception as e:
         print(f"Database infrastructure mapping failed: {str(e)}")
 
 @app.get("/api/health")
 def health_check():
     return {"status": "online", "engine": "FastAPI Layer"}
+
+# ====================================================
+# IDENTITY AND HANDSHAKE LAYER
+# ====================================================
+
+class LoginPayload(BaseModel):
+    username: str
+    password_hash: str
+
+@app.post("/api/auth/login")
+def verify_cluster_access(payload: LoginPayload):
+    try:
+        stored_user = run_query("SELECT value FROM system_settings WHERE key = 'admin_username';")
+        stored_hash = run_query("SELECT value FROM system_settings WHERE key = 'admin_password_hash';")
+        
+        user_match = stored_user[0]['value'] == payload.username if stored_user else (payload.username == "admin")
+        hash_match = stored_hash[0]['value'] == payload.password_hash if stored_hash else False
+        
+        if user_match and hash_match:
+            return {"status": "authenticated"}
+        raise HTTPException(status_code=401, detail="Invalid cryptographic signature.")
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CredentialsUpdate(BaseModel):
+    new_username: str
+    new_password_raw: str
+
+@app.post("/api/admin/credentials")
+def update_gate_credentials(payload: CredentialsUpdate):
+    try:
+        if len(payload.new_username.strip()) < 3 or len(payload.new_password_raw.strip()) < 6:
+            raise HTTPException(status_code=400, detail="Credentials fail length constraints.")
+            
+        new_hash = hashlib.sha256(payload.new_password_raw.encode()).hexdigest()
+        run_query("UPDATE system_settings SET value = %s WHERE key = 'admin_username';", (payload.new_username,), is_select=False)
+        run_query("UPDATE system_settings SET value = %s WHERE key = 'admin_password_hash';", (new_hash,), is_select=False)
+        return {"status": "success", "message": "Master credentials updated."}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ====================================================
+# CONVERSATION STORAGE AND CHAT OPERATIONS
+# ====================================================
 
 @app.get("/api/threads")
 def get_all_threads():
@@ -72,10 +121,8 @@ def process_workspace_chat(payload: ChatPayload):
                 db.commit()
 
         pipeline_steps = run_query("SELECT * FROM dynamic_pipeline ORDER BY step_num ASC;")
-        
-        # Fallback initialization if database pipeline step was cleared
         if not pipeline_steps:
-            raise HTTPException(status_code=400, detail="Pipeline Execution Fault. Trace: No active steps inside dynamic_pipeline matrix.")
+            raise HTTPException(status_code=400, detail="Pipeline Execution Fault: No active steps inside dynamic_pipeline matrix.")
 
         current_response = payload.prompt
         for step in pipeline_steps:
@@ -91,10 +138,6 @@ def process_workspace_chat(payload: ChatPayload):
         return {"role": "assistant", "content": current_response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# ====================================================
-# ADMINISTRATIVE METADATA ROUTING CHANNELS
-# ====================================================
 
 @app.get("/api/admin/config")
 def get_cluster_configurations():
