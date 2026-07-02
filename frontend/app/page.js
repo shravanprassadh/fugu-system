@@ -24,6 +24,12 @@ export default function Workspace() {
   }, [])
 
   useEffect(() => {
+    if (activeThreadId) {
+      fetchMessages(activeThreadId)
+    }
+  }, [activeThreadId])
+
+  useEffect(() => {
     scrollToBottom()
   }, [messages])
 
@@ -39,7 +45,19 @@ export default function Workspace() {
         }
       }
     } catch (err) {
-      console.error("Failed fetching context logs from API layer:", err)
+      console.error("Failed fetching context logs:", err)
+    }
+  }
+
+  const fetchMessages = async (threadId) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/threads/${threadId}/messages`)
+      const data = await res.json()
+      if (data.messages) {
+        setMessages(data.messages)
+      }
+    } catch (err) {
+      console.error("Failed fetching message archives:", err)
     }
   }
 
@@ -55,7 +73,7 @@ export default function Workspace() {
       setNewThreadName('')
       await fetchThreads()
     } catch (err) {
-      console.error("Failed committing new tracking path:", err)
+      console.error("Failed committing new track:", err)
     }
   }
 
@@ -70,28 +88,29 @@ export default function Workspace() {
     setLoading(true)
 
     try {
-      setTimeout(() => {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: `Sovereign core operational handshake verified.\n\nYour independent API router successfully executed the communication pipeline out to the network node. Neon data transactions recorded cleanly under cluster link: ${activeThreadId}. Ready for core scaling.` 
-        }])
-        setLoading(false)
-      }, 1100)
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_id: activeThreadId, prompt: userMessage })
+      })
+      
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.detail || "Pipeline network fault")
+      }
+
+      const data = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: data.content }])
     } catch (err) {
-      console.error("Pipeline handoff interrupted:", err)
+      setMessages(prev => [...prev, { role: 'assistant', content: `🚨 Core Execution Error: ${err.message}` }])
+    } finally {
       setLoading(false)
     }
   }
 
   return (
     <div className="flex h-screen w-screen bg-white overflow-hidden font-sans antialiased text-zinc-900">
-      
-      {/* ========================================== */}
-      {/* TACTICAL DARK SIDEBAR CONTROL LAYER        */}
-      {/* ========================================== */}
       <div className="w-72 bg-zinc-950 flex flex-col flex-shrink-0 h-full border-r border-zinc-800/40">
-        
-        {/* Branding & Control Center Shell */}
         <div className="p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2.5">
@@ -103,7 +122,6 @@ export default function Workspace() {
             <span className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">v1.2</span>
           </div>
           
-          {/* Create Thread Input Block */}
           <form onSubmit={createThread} className="relative flex items-center">
             <input
               type="text"
@@ -118,10 +136,8 @@ export default function Workspace() {
           </form>
         </div>
 
-        {/* Dynamic Context History Stream */}
         <div className="flex-1 overflow-y-auto px-3 flex flex-col gap-1 select-none scrollbar-none">
           <p className="text-[10px] font-semibold text-zinc-500 px-3 tracking-widest uppercase mb-2 mt-2">Active Registers</p>
-          
           {threads.map((t) => {
             const isActive = activeThreadId === t.id
             return (
@@ -130,12 +146,9 @@ export default function Workspace() {
                 onClick={() => {
                   setActiveThreadId(t.id)
                   setActiveThreadName(t.name)
-                  setMessages([])
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-medium text-left transition-all duration-200 group ${
-                  isActive 
-                    ? 'bg-zinc-900 text-zinc-100 border border-zinc-800/60 shadow-inner' 
-                    : 'text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'
+                  isActive ? 'bg-zinc-900 text-zinc-100 border border-zinc-800/60 shadow-inner' : 'text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200'
                 }`}
               >
                 <div className="flex items-center gap-3 truncate mr-2">
@@ -146,13 +159,8 @@ export default function Workspace() {
               </button>
             )
           })}
-          
-          {threads.length === 0 && (
-            <div className="px-3 py-4 text-xs text-zinc-600 font-normal italic">No logs registered in cluster.</div>
-          )}
         </div>
 
-        {/* Administrative Anchor Zone */}
         <div className="p-4 border-t border-zinc-900 bg-zinc-950/80">
           <button className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border border-transparent hover:border-zinc-800/40 transition-all duration-200">
             <Settings className="w-4 h-4 text-zinc-500" />
@@ -161,28 +169,18 @@ export default function Workspace() {
         </div>
       </div>
 
-      {/* ========================================== */}
-      {/* EDITORIAL HIGH-FIDELITY MAIN CANVAS        */}
-      {/* ========================================== */}
       <div className="flex-1 flex flex-col h-full bg-white relative">
-        
-        {/* Minimalist Top Navigation Bar */}
         <div className="w-full h-16 border-b border-zinc-100 px-8 flex items-center justify-between flex-shrink-0 bg-white/80 backdrop-blur-md z-10">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold tracking-tight text-zinc-900">{activeThreadName || 'System Matrix'}</h1>
-          </div>
+          <h1 className="text-sm font-semibold tracking-tight text-zinc-900">{activeThreadName || 'System Matrix'}</h1>
           <div className="flex items-center gap-2 bg-zinc-50 px-3 py-1.5 rounded-full border border-zinc-100 shadow-sm">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-400" />
             <span className="text-[10px] font-mono tracking-wider text-zinc-500 uppercase font-bold">Node Secure</span>
           </div>
         </div>
 
-        {/* Main Conversation Stream */}
         <div className="flex-1 overflow-y-auto px-6 md:px-0 scrollbar-none">
           <div className="max-w-2xl mx-auto pb-40 pt-8">
-            
             {messages.length === 0 ? (
-              /* High-Fidelity Blank State Frame */
               <div className="h-[55vh] flex flex-col items-center justify-center text-center px-4 select-none">
                 <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-5 shadow-sm">
                   <Shield className="w-5 h-5 text-zinc-400" />
@@ -193,16 +191,13 @@ export default function Workspace() {
                 </p>
               </div>
             ) : (
-              /* Render Streamlined Dialog Layout */
               <div className="flex flex-col">
                 {messages.map((msg, i) => {
                   const isUser = msg.role === 'user'
                   return (
                     <div key={i} className="py-7 flex items-start gap-6 border-b border-zinc-50 last:border-b-0">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-sm border flex-shrink-0 select-none ${
-                        isUser 
-                          ? 'bg-zinc-50 border-zinc-200 text-zinc-600' 
-                          : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 text-blue-600'
+                        isUser ? 'bg-zinc-50 border-zinc-200 text-zinc-600' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 text-blue-600'
                       }`}>
                         {isUser ? <User className="w-3.5 h-3.5" /> : <Terminal className="w-3.5 h-3.5" />}
                       </div>
@@ -215,7 +210,6 @@ export default function Workspace() {
               </div>
             )}
             
-            {/* Elegant Asynchronous Generation Loader */}
             {loading && (
               <div className="py-7 flex items-start gap-6">
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
@@ -231,9 +225,6 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* ========================================== */}
-        {/* FLOATING PROMPT PANEL ASSEMBLY            */}
-        {/* ========================================== */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white/95 to-transparent pt-12 pb-8 px-6 md:px-0 flex-shrink-0 z-10">
           <form onSubmit={sendMessage} className="max-w-2xl mx-auto relative">
             <div className="flex items-center bg-white border border-zinc-200 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.06)] rounded-2xl hover:border-zinc-300 focus-within:border-zinc-400 focus-within:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.09)] transition-all duration-200 px-4.5 py-2.5">
@@ -249,9 +240,7 @@ export default function Workspace() {
                 type="submit"
                 disabled={!input.trim() || loading}
                 className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 shadow-sm ${
-                  input.trim() && !loading
-                    ? 'bg-zinc-950 text-white hover:bg-zinc-800'
-                    : 'bg-zinc-100 text-zinc-300 cursor-not-allowed shadow-none'
+                  input.trim() && !loading ? 'bg-zinc-950 text-white hover:bg-zinc-800' : 'bg-zinc-100 text-zinc-300 cursor-not-allowed shadow-none'
                 }`}
               >
                 <Send className="w-3.5 h-3.5" />
@@ -259,7 +248,6 @@ export default function Workspace() {
             </div>
           </form>
         </div>
-
       </div>
     </div>
   )
