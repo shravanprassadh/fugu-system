@@ -8,14 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "14.2.35",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "lucide-react": "0.379.0"
-  },
-  "devDependencies": {
-    "tailwindcss": "3.4.3",
-    "postcss": "8.4.38",
-    "autoprefixer": "10.4.19"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "next": "14.2.4"
   }
 }
