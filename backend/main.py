@@ -20,10 +20,9 @@ app.add_middleware(
 def startup_event():
     try:
         initialize_infra()
-        # Seed default administrative credentials if they don't exist yet
         run_query("INSERT INTO system_settings (key, value) VALUES ('admin_username', 'admin') ON CONFLICT DO NOTHING;", is_select=False)
     except Exception as e:
-        print(f"Database infrastructure mapping failed: {str(e)}")
+        print(f"Database infrastructure offline: {str(e)}")
 
 @app.get("/api/health")
 def health_check():
@@ -72,7 +71,7 @@ def update_gate_credentials(payload: CredentialsUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ====================================================
-# CONVERSATION STORAGE AND CHAT OPERATIONS
+# CONVERSATION STORAGE AND CRUD OPERATIONS
 # ====================================================
 
 @app.get("/api/threads")
@@ -92,6 +91,22 @@ def create_new_thread(thread: ThreadCreate):
     try:
         run_query("INSERT INTO threads (name) VALUES (%s) ON CONFLICT DO NOTHING;", (thread.name,), is_select=False)
         return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/threads/{thread_id}")
+def delete_chat_thread(thread_id: int):
+    try:
+        # Cascading multi-database transactional purge
+        with ClusterContextRouter("messages") as db:
+            with db.cursor() as cur:
+                cur.execute("DELETE FROM messages WHERE thread_id = %s;", (thread_id,))
+                db.commit()
+        with ClusterContextRouter("threads") as db:
+            with db.cursor() as cur:
+                cur.execute("DELETE FROM threads WHERE id = %s;", (thread_id,))
+                db.commit()
+        return {"status": "success", "detail": f"Thread {thread_id} and dependencies wiped clean."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
