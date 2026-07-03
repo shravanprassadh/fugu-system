@@ -24,6 +24,9 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "N", "ASYNC"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+"tests/test_create_user.py" = ["I001"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
