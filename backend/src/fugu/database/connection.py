@@ -26,6 +26,7 @@ from fugu.database.exceptions import (
     QueryExecutionError,
     TransactionRollbackError,
 )
+from fugu.database.urls import sqlalchemy_asyncpg_url
 
 
 class DatabaseTarget(StrEnum):
@@ -36,22 +37,10 @@ class DatabaseTarget(StrEnum):
     LOGS = "logs"
 
 
-def _normalize_asyncpg_url(url: object) -> str:
-    """Return a SQLAlchemy-compatible asyncpg URL without mutating credentials."""
-    normalized = str(url)
-    if normalized.startswith("postgresql+asyncpg://"):
-        return normalized
-    if normalized.startswith("postgresql://"):
-        return normalized.replace("postgresql://", "postgresql+asyncpg://", 1)
-    if normalized.startswith("postgres://"):
-        return normalized.replace("postgres://", "postgresql+asyncpg://", 1)
-    raise ValueError("Database URLs must use a PostgreSQL scheme.")
-
-
 def _create_engine(url: object, settings: InfrastructureConfig) -> AsyncEngine:
     """Create one health-checked async engine from validated settings."""
     return create_async_engine(
-        _normalize_asyncpg_url(url),
+        sqlalchemy_asyncpg_url(url),
         pool_size=settings.db_pool_min_connections,
         max_overflow=settings.db_pool_max_connections - settings.db_pool_min_connections,
         pool_pre_ping=True,
