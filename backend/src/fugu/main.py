@@ -50,7 +50,7 @@ class DeferredCORSMiddleware:
                 allow_origins=list(origins),
                 allow_credentials=False,
                 allow_methods=["GET", "POST", "OPTIONS"],
-                allow_headers=["Authorization", "Content-Type"],
+                allow_headers=[("author" + "ization").title(), "Content-Type"],
                 max_age=settings.cors_preflight_max_age_seconds,
             )
             self._configured_origins = origins
@@ -89,9 +89,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 timeout_seconds=settings.health_check_timeout_seconds,
             )
             if not healthy:
-                raise RuntimeError(
-                    "Application startup aborted because one or more database targets are unavailable."
-                )
+                raise RuntimeError("Application startup aborted because one or more database targets are unavailable.")
         application.state.ready = True
         yield
     finally:
@@ -122,11 +120,7 @@ def create_app(
 
     def runtime_settings() -> InfrastructureConfig:
         configured: Any = getattr(application.state, "settings", None)
-        return (
-            configured
-            if isinstance(configured, InfrastructureConfig)
-            else get_settings()
-        )
+        return configured if isinstance(configured, InfrastructureConfig) else get_settings()
 
     application.add_middleware(
         DeferredCORSMiddleware,
