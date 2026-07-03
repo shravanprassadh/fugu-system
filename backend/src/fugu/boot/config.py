@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Self
+from typing import Any, Literal, Self
+from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
 from pydantic import (
@@ -25,6 +26,11 @@ class ConfigurationError(RuntimeError):
 class InfrastructureConfig(BaseSettings):
     """Parse and validate all infrastructure settings required by Fugu."""
 
+    runtime_environment: Literal["development", "test", "staging", "production"] = Field(
+        "development",
+        validation_alias="RUNTIME_ENVIRONMENT",
+    )
+
     master_router_db_url: PostgresDsn = Field(validation_alias="MASTER_ROUTER_DB_URL")
     metadata_sidebar_db_url: PostgresDsn = Field(validation_alias="METADATA_SIDEBAR_DB_URL")
     transactional_logs_db_url: PostgresDsn = Field(validation_alias="TRANSACTIONAL_LOGS_DB_URL")
@@ -40,15 +46,58 @@ class InfrastructureConfig(BaseSettings):
         validation_alias="ACCESS_TOKEN_TTL_MINUTES",
     )
 
-    db_pool_min_connections: int = Field(2, ge=1, validation_alias="DB_POOL_MIN_CONNECTIONS")
-    db_pool_max_connections: int = Field(20, ge=1, validation_alias="DB_POOL_MAX_CONNECTIONS")
-    network_request_timeout: float = Field(45.0, gt=0, validation_alias="NETWORK_REQUEST_TIMEOUT")
+    db_pool_min_connections: int = Field(
+        2,
+        ge=1,
+        validation_alias="DB_POOL_MIN_CONNECTIONS",
+    )
+    db_pool_max_connections: int = Field(
+        20,
+        ge=1,
+        validation_alias="DB_POOL_MAX_CONNECTIONS",
+    )
+    network_request_timeout: float = Field(
+        45.0,
+        gt=0,
+        validation_alias="NETWORK_REQUEST_TIMEOUT",
+    )
+    health_check_timeout_seconds: float = Field(
+        3.0,
+        gt=0,
+        le=30.0,
+        validation_alias="HEALTH_CHECK_TIMEOUT_SECONDS",
+    )
+    verify_databases_on_startup: bool = Field(
+        True,
+        validation_alias="VERIFY_DATABASES_ON_STARTUP",
+    )
 
-    allowed_origins: list[AnyHttpUrl] = Field(min_length=1, validation_alias="ALLOWED_ORIGINS")
+    migration_lock_id: int = Field(
+        726_846_354_297,
+        ge=1,
+        le=9_223_372_036_854_775_807,
+        validation_alias="MIGRATION_LOCK_ID",
+    )
+    migration_lock_timeout_seconds: float = Field(
+        120.0,
+        gt=0,
+        le=1_800.0,
+        validation_alias="MIGRATION_LOCK_TIMEOUT_SECONDS",
+    )
+
+    cors_preflight_max_age_seconds: int = Field(
+        600,
+        ge=0,
+        le=86_400,
+        validation_alias="CORS_PREFLIGHT_MAX_AGE_SECONDS",
+    )
+    allowed_origins: list[AnyHttpUrl] = Field(
+        min_length=1,
+        validation_alias="ALLOWED_ORIGINS",
+    )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
+        env_file=None,
         extra="ignore",
         populate_by_name=True,
         case_sensitive=False,
@@ -93,11 +142,40 @@ class InfrastructureConfig(BaseSettings):
         return normalized
 
     @model_validator(mode="after")
-    def validate_pool_bounds(self) -> Self:
-        """Ensure the maximum connection count is not below the minimum."""
+    def validate_runtime_boundaries(self) -> Self:
+        """Validate pool limits and exact origin-only CORS boundaries."""
         if self.db_pool_max_connections < self.db_pool_min_connections:
-            raise ValueError("DB_POOL_MAX_CONNECTIONS must be greater than or equal to DB_POOL_MIN_CONNECTIONS.")
+            raise ValueError(
+                "DB_POOL_MAX_CONNECTIONS must be greater than or equal to "
+                "DB_POOL_MIN_CONNECTIONS."
+            )
+
+        normalized_origins: set[str] = set()
+        for origin in self.allowed_origins:
+            origin_text = str(origin).rstrip("/")
+            parsed = urlsplit(origin_text)
+            if "*" in origin_text:
+                raise ValueError("Wildcard CORS origins are prohibited.")
+            if parsed.username or parsed.password:
+                raise ValueError("CORS origins cannot contain user information.")
+            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+                raise ValueError("CORS entries must be origins without paths, queries, or fragments.")
+            if origin_text in normalized_origins:
+                raise ValueError("ALLOWED_ORIGINS cannot contain duplicate origins.")
+            normalized_origins.add(origin_text)
+
+            if self.runtime_environment == "production":
+                if parsed.scheme != "https":
+                    raise ValueError("Production CORS origins must use HTTPS.")
+                if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+                    raise ValueError("Production CORS origins cannot reference loopback hosts.")
+
         return self
+
+    @property
+    def cors_origins(self) -> tuple[str, ...]:
+        """Return normalized exact origins suitable for Starlette CORSMiddleware."""
+        return tuple(str(origin).rstrip("/") for origin in self.allowed_origins)
 
 
 @lru_cache(maxsize=1)
