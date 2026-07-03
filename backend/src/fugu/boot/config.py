@@ -29,9 +29,16 @@ class InfrastructureConfig(BaseSettings):
     metadata_sidebar_db_url: PostgresDsn = Field(validation_alias="METADATA_SIDEBAR_DB_URL")
     transactional_logs_db_url: PostgresDsn = Field(validation_alias="TRANSACTIONAL_LOGS_DB_URL")
 
-    admin_access_passphrase: SecretStr = Field(validation_alias="ADMIN_ACCESS_PASSPHRASE")
     system_session_secret: SecretStr = Field(validation_alias="SYSTEM_SESSION_SECRET")
     vault_encryption_key: SecretStr = Field(validation_alias="VAULT_ENCRYPTION_KEY")
+    jwt_issuer: str = Field("fugu-kernel-core", validation_alias="JWT_ISSUER")
+    jwt_audience: str = Field("fugu-studio-client", validation_alias="JWT_AUDIENCE")
+    access_token_ttl_minutes: int = Field(
+        30,
+        ge=5,
+        le=1_440,
+        validation_alias="ACCESS_TOKEN_TTL_MINUTES",
+    )
 
     db_pool_min_connections: int = Field(2, ge=1, validation_alias="DB_POOL_MIN_CONNECTIONS")
     db_pool_max_connections: int = Field(20, ge=1, validation_alias="DB_POOL_MAX_CONNECTIONS")
@@ -58,14 +65,6 @@ class InfrastructureConfig(BaseSettings):
             return origins
         return value
 
-    @field_validator("admin_access_passphrase")
-    @classmethod
-    def validate_admin_passphrase(cls, value: SecretStr) -> SecretStr:
-        """Reject blank or trivially short administrative passphrases."""
-        if len(value.get_secret_value().strip()) < 20:
-            raise ValueError("ADMIN_ACCESS_PASSPHRASE must contain at least 20 characters.")
-        return value
-
     @field_validator("system_session_secret")
     @classmethod
     def validate_session_secret(cls, value: SecretStr) -> SecretStr:
@@ -83,6 +82,15 @@ class InfrastructureConfig(BaseSettings):
         except (TypeError, ValueError) as exc:
             raise ValueError("VAULT_ENCRYPTION_KEY must be a valid Fernet key.") from exc
         return value
+
+    @field_validator("jwt_issuer", "jwt_audience")
+    @classmethod
+    def validate_jwt_scope(cls, value: str) -> str:
+        """Reject blank JWT issuer and audience values."""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("JWT issuer and audience values cannot be blank.")
+        return normalized
 
     @model_validator(mode="after")
     def validate_pool_bounds(self) -> Self:
