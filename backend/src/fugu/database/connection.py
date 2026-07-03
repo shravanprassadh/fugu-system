@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from enum import StrEnum
 from functools import lru_cache
+from typing import Never
 
 from sqlalchemy import text
 from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
@@ -47,6 +48,17 @@ def _normalize_asyncpg_url(url: object) -> str:
     raise ValueError("Database URLs must use a PostgreSQL scheme.")
 
 
+def _create_engine(url: object, settings: InfrastructureConfig) -> AsyncEngine:
+    """Create one health-checked async engine from validated settings."""
+    return create_async_engine(
+        _normalize_asyncpg_url(url),
+        pool_size=settings.db_pool_min_connections,
+        max_overflow=settings.db_pool_max_connections - settings.db_pool_min_connections,
+        pool_pre_ping=True,
+        pool_timeout=settings.network_request_timeout,
+    )
+
+
 class DatabaseSessionRegistry:
     """Route workloads to independent engines and provide atomic session scopes."""
 
@@ -56,7 +68,7 @@ class DatabaseSessionRegistry:
             missing = ", ".join(sorted(target.value for target in missing_targets))
             raise DatabaseRoutingError(f"Database engine mappings are missing required targets: {missing}.")
 
-        self._engines = dict(engines)
+        self._engines: dict[DatabaseTarget, AsyncEngine] = dict(engines)
         self._sessionmakers: dict[DatabaseTarget, async_sessionmaker[AsyncSession]] = {
             target: async_sessionmaker(
                 bind=engine,
@@ -70,26 +82,10 @@ class DatabaseSessionRegistry:
     @classmethod
     def from_settings(cls, settings: InfrastructureConfig) -> DatabaseSessionRegistry:
         """Construct one engine pool for each configured workload target."""
-        max_overflow = settings.db_pool_max_connections - settings.db_pool_min_connections
-        common_options = {
-            "pool_size": settings.db_pool_min_connections,
-            "max_overflow": max_overflow,
-            "pool_pre_ping": True,
-            "pool_timeout": settings.network_request_timeout,
-        }
-        engines = {
-            DatabaseTarget.MASTER: create_async_engine(
-                _normalize_asyncpg_url(settings.master_router_db_url),
-                **common_options,
-            ),
-            DatabaseTarget.METADATA: create_async_engine(
-                _normalize_asyncpg_url(settings.metadata_sidebar_db_url),
-                **common_options,
-            ),
-            DatabaseTarget.LOGS: create_async_engine(
-                _normalize_asyncpg_url(settings.transactional_logs_db_url),
-                **common_options,
-            ),
+        engines: dict[DatabaseTarget, AsyncEngine] = {
+            DatabaseTarget.MASTER: _create_engine(settings.master_router_db_url, settings),
+            DatabaseTarget.METADATA: _create_engine(settings.metadata_sidebar_db_url, settings),
+            DatabaseTarget.LOGS: _create_engine(settings.transactional_logs_db_url, settings),
         }
         return cls(engines)
 
@@ -105,7 +101,11 @@ class DatabaseSessionRegistry:
         normalized_target = self._normalize_target(target)
         return self._engines[normalized_target]
 
-    async def _rollback_or_raise(self, session: AsyncSession, original_error: BaseException) -> None:
+    async def _rollback_or_raise(
+        self,
+        session: AsyncSession,
+        original_error: BaseException,
+    ) -> Never:
         """Rollback a failed transaction and preserve rollback failures explicitly."""
         try:
             await session.rollback()
@@ -124,21 +124,21 @@ class DatabaseSessionRegistry:
         try:
             yield session
             await session.commit()
-        except SQLAlchemyTimeoutError as exc:
+        except SQLAlchemyTimeoutError:
             await self._rollback_or_raise(
                 session,
                 ConnectionPoolExhaustedError(
                     f"Connection pool acquisition timed out for target {normalized_target.value!r}."
                 ),
             )
-        except (OperationalError, InterfaceError) as exc:
+        except (OperationalError, InterfaceError):
             await self._rollback_or_raise(
                 session,
                 DatabaseUnavailableError(
                     f"Database target {normalized_target.value!r} is unavailable."
                 ),
             )
-        except SQLAlchemyError as exc:
+        except SQLAlchemyError:
             await self._rollback_or_raise(
                 session,
                 QueryExecutionError(
