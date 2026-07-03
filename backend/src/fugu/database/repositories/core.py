@@ -40,7 +40,8 @@ class UserRepository:
     @staticmethod
     async def get_by_username(session: AsyncSession, username: str) -> User | None:
         statement = select(User).where(User.username == username)
-        return await session.scalar(statement)
+        result = await session.scalars(statement)
+        return result.one_or_none()
 
 
 class ThreadRepository:
@@ -56,7 +57,8 @@ class ThreadRepository:
     @staticmethod
     async def get_owned(session: AsyncSession, *, thread_id: int, user_id: int) -> Thread | None:
         statement = select(Thread).where(Thread.id == thread_id, Thread.user_id == user_id)
-        return await session.scalar(statement)
+        result = await session.scalars(statement)
+        return result.one_or_none()
 
     @staticmethod
     async def require_owned(session: AsyncSession, *, thread_id: int, user_id: int) -> Thread:
@@ -126,7 +128,8 @@ class ProviderCredentialRepository:
     @staticmethod
     async def get_by_provider(session: AsyncSession, provider_name: str) -> ProviderCredential | None:
         statement = select(ProviderCredential).where(ProviderCredential.provider_name == provider_name)
-        return await session.scalar(statement)
+        result = await session.scalars(statement)
+        return result.one_or_none()
 
 
 class PipelineRepository:
