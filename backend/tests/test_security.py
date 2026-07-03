@@ -9,10 +9,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from fugu.api.dependencies import (
     AdminUser,
     OwnedThread,
@@ -33,6 +29,8 @@ from fugu.security.exceptions import (
     InvalidTokenError,
     TokenExpiredError,
 )
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 TEST_PASSWORD = "UltraSecureStudioAccessKeySignature2026"
 TEST_SIGNING_SECRET = "test-signing-secret-with-more-than-thirty-two-characters"
