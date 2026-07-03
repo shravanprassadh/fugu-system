@@ -54,21 +54,8 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -q -r requirements.txt
       - name: Run Ruff
-        run: |
-          set +e
-          ruff check src tests --output-format=concise > ruff.log 2>&1
-          status=$?
-          cat ruff.log
-          exit $status
-      - name: Upload Ruff diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruff-diagnostics
-          path: backend/ruff.log
-          if-no-files-found: error
+        run: ruff check src tests
       - name: Run pytest
-        if: always()
         run: pytest
 
   backend-types:
@@ -90,16 +77,4 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -q -r requirements.txt
       - name: Run mypy
-        run: |
-          set +e
-          mypy src --no-pretty --no-error-summary > mypy.log 2>&1
-          status=$?
-          cat mypy.log
-          exit $status
-      - name: Upload mypy diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mypy-diagnostics
-          path: backend/mypy.log
-          if-no-files-found: error
+        run: mypy src
