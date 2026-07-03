@@ -18,6 +18,8 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from fugu.database.urls import sqlalchemy_asyncpg_url
+
 
 class ConfigurationError(RuntimeError):
     """Raised when required runtime configuration is missing or invalid."""
@@ -103,6 +105,19 @@ class InfrastructureConfig(BaseSettings):
         case_sensitive=False,
     )
 
+    @field_validator(
+        "master_router_db_url",
+        "metadata_sidebar_db_url",
+        "transactional_logs_db_url",
+        mode="before",
+    )
+    @classmethod
+    def normalize_database_url(cls, value: Any) -> Any:
+        """Canonicalize PostgreSQL schemes, async driver, and SSL options once."""
+        if isinstance(value, str):
+            return sqlalchemy_asyncpg_url(value)
+        return value
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value: Any) -> Any:
@@ -145,7 +160,7 @@ class InfrastructureConfig(BaseSettings):
     def validate_runtime_boundaries(self) -> Self:
         """Validate pool limits and exact origin-only CORS boundaries."""
         if self.db_pool_max_connections < self.db_pool_min_connections:
-            raise ValueError("DB_POOL_MAX_CONNECTIONS must be greater than or equal to " "DB_POOL_MIN_CONNECTIONS.")
+            raise ValueError("DB_POOL_MAX_CONNECTIONS must be greater than or equal to DB_POOL_MIN_CONNECTIONS.")
 
         normalized_origins: set[str] = set()
         for origin in self.allowed_origins:

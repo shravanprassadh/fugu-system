@@ -10,6 +10,7 @@ from pathlib import Path
 import asyncpg
 
 from fugu.boot.config import InfrastructureConfig, get_settings
+from fugu.database.urls import asyncpg_dsn
 
 
 class MigrationError(RuntimeError):
@@ -39,16 +40,6 @@ def _resolve_alembic_config() -> Path:
     return resolved_candidate
 
 
-def _asyncpg_dsn(database_url: object) -> str:
-    """Convert a SQLAlchemy async URL into an asyncpg-compatible DSN."""
-    dsn = str(database_url)
-    if dsn.startswith("postgresql+asyncpg://"):
-        return dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
-    if dsn.startswith("postgresql://") or dsn.startswith("postgres://"):
-        return dsn
-    raise MigrationError("The migration database URL must use a PostgreSQL scheme.")
-
-
 async def run_schema_migrations(
     settings: InfrastructureConfig | None = None,
 ) -> None:
@@ -56,8 +47,14 @@ async def run_schema_migrations(
     resolved_settings = settings or get_settings()
     alembic_config = _resolve_alembic_config()
     backend_root = alembic_config.parent
+
+    try:
+        migration_dsn = asyncpg_dsn(resolved_settings.master_router_db_url)
+    except ValueError as exc:
+        raise MigrationError("The migration database URL is invalid for asyncpg.") from exc
+
     connection = await asyncpg.connect(
-        dsn=_asyncpg_dsn(resolved_settings.master_router_db_url),
+        dsn=migration_dsn,
         command_timeout=resolved_settings.network_request_timeout,
     )
     lock_acquired = False
