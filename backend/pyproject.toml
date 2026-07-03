@@ -7,6 +7,9 @@ name = "fugu-backend"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
 
+[project.scripts]
+fugu-create-user = "fugu.boot.create_user:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
@@ -20,6 +23,9 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "ASYNC"]
 ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_create_user.py" = ["I001"]
 
 [tool.mypy]
 python_version = "3.11"
