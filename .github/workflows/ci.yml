@@ -131,7 +131,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-runtime.txt
 
       - name: Initialize backend diagnostic directory
         run: mkdir -p ci-artifacts
@@ -261,6 +263,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  production-validation:
+    name: Production Container & Runtime Validation
+    runs-on: ubuntu-latest
+    needs:
+      - secret-scan
+      - backend-validation
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Validate entrypoint shell syntax
+        run: bash -n backend/entrypoint.sh
+
+      - name: Build non-root production backend image
+        run: docker build --file backend/Dockerfile --tag fugu-backend:ci backend
+
+      - name: Verify container user and runtime-only dependency surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect fugu-backend:ci --format '{{.Config.User}}')" = "10001:10001"
+          docker run --rm --entrypoint /bin/bash fugu-backend:ci -n /app/entrypoint.sh
+          docker run --rm --entrypoint python fugu-backend:ci -c \
+            "import importlib.util; import fugu.main; assert importlib.util.find_spec('pytest') is None"
+
   required-gate:
     name: Required CI Gate
     runs-on: ubuntu-latest
@@ -269,16 +299,22 @@ jobs:
       - secret-scan
       - backend-validation
       - frontend-validation
+      - production-validation
     steps:
       - name: Enforce all validation outcomes
         env:
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           BACKEND_RESULT: ${{ needs.backend-validation.result }}
           FRONTEND_RESULT: ${{ needs.frontend-validation.result }}
+          PRODUCTION_RESULT: ${{ needs.production-validation.result }}
         run: |
           set -euo pipefail
-          printf 'secret-scan=%s\nbackend-validation=%s\nfrontend-validation=%s\n' \
-            "$SECRET_SCAN_RESULT" "$BACKEND_RESULT" "$FRONTEND_RESULT"
+          printf 'secret-scan=%s\nbackend-validation=%s\nfrontend-validation=%s\nproduction-validation=%s\n' \
+            "$SECRET_SCAN_RESULT" \
+            "$BACKEND_RESULT" \
+            "$FRONTEND_RESULT" \
+            "$PRODUCTION_RESULT"
           test "$SECRET_SCAN_RESULT" = "success"
           test "$BACKEND_RESULT" = "success"
           test "$FRONTEND_RESULT" = "success"
+          test "$PRODUCTION_RESULT" = "success"
