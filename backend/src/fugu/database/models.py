@@ -45,6 +45,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="user", server_default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -55,6 +56,7 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint("role IN ('user', 'admin')", name="user_role"),
+        CheckConstraint("token_version >= 0", name="user_token_version"),
     )
 
 
@@ -109,11 +111,7 @@ class Message(Base):
 
 
 class ProviderCredential(Base):
-    """Encrypted provider credential metadata.
-
-    The encryption implementation is delivered in Milestone 4. This model never
-    exposes a plaintext secret column.
-    """
+    """Encrypted provider credential metadata."""
 
     __tablename__ = "provider_credentials"
 
