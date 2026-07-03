@@ -100,7 +100,9 @@ async def run_schema_migrations(
         )
         return_code = await process.wait()
         if return_code != 0:
-            raise MigrationProcessError(f"Alembic exited with non-zero status {return_code}.")
+            raise MigrationProcessError(
+                f"Alembic exited with non-zero status {return_code}."
+            )
     finally:
         if lock_acquired and not connection.is_closed():
             try:
