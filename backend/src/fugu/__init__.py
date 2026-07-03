@@ -1,0 +1,1 @@
+"""Fugu backend application package."""
