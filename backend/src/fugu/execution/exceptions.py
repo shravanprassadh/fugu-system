@@ -5,15 +5,18 @@ from __future__ import annotations
 from fugu.providers.exceptions import ProviderError
 
 
-class PipelineEngineException(RuntimeError):
-    """Base exception for all graph orchestration failures."""
+class PipelineEngineError(RuntimeError):
+    """Base error for all graph orchestration failures."""
 
 
-class ThreadAccessDeniedError(PipelineEngineException):
+PipelineEngineException = PipelineEngineError
+
+
+class ThreadAccessDeniedError(PipelineEngineError):
     """Raised when a user attempts to execute against an unowned thread."""
 
 
-class PipelineValidationError(PipelineEngineException):
+class PipelineValidationError(PipelineEngineError):
     """Base exception for invalid pipeline definitions."""
 
 
@@ -41,11 +44,11 @@ class TerminalStepConfigurationError(PipelineValidationError):
     """Raised when the terminal output step is missing, duplicated, or not a sink."""
 
 
-class ProviderCredentialMissingError(PipelineEngineException):
+class ProviderCredentialMissingError(PipelineEngineError):
     """Raised when an execution step has no configured encrypted credential."""
 
 
-class PipelineRunFailureError(PipelineEngineException):
+class PipelineRunFailureError(PipelineEngineError):
     """Raised after a failed run and step trace have been persisted."""
 
     def __init__(
