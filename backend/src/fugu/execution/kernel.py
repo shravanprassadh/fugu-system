@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from functools import lru_cache
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from fugu.database.connection import (
     DatabaseSessionRegistry,
     DatabaseTarget,
@@ -31,7 +33,6 @@ from fugu.execution.models import (
     PreparedPipeline,
 )
 from fugu.providers.base import ProviderRequest
-from fugu.providers.exceptions import ProviderError
 from fugu.providers.registry import ProviderRegistry, get_provider_registry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
@@ -117,7 +118,6 @@ class PipelineExecutionKernel:
 
         for step in prepared.ordered_steps:
             output_fragments: list[str] = []
-            provider = None
             try:
                 await self._mark_step_running(prepared, step)
                 yield PipelineEvent(
@@ -139,15 +139,18 @@ class PipelineExecutionKernel:
                     model_identifier=step.model_identifier,
                 )
 
-                async for token in provider.generate_token_stream(request):
-                    output_fragments.append(token)
-                    if step.is_terminal:
-                        yield PipelineEvent(
-                            event_type=PipelineEventType.TOKEN,
-                            run_id=prepared.run_id,
-                            step_name=step.name,
-                            token=token,
-                        )
+                try:
+                    async for token in provider.generate_token_stream(request):
+                        output_fragments.append(token)
+                        if step.is_terminal:
+                            yield PipelineEvent(
+                                event_type=PipelineEventType.TOKEN,
+                                run_id=prepared.run_id,
+                                step_name=step.name,
+                                token=token,
+                            )
+                finally:
+                    await provider.aclose()
 
                 output = "".join(output_fragments)
                 outputs[step.name] = output
@@ -171,9 +174,6 @@ class PipelineExecutionKernel:
                     step_name=step.name,
                     origin=exc,
                 ) from exc
-            finally:
-                if provider is not None:
-                    await provider.aclose()
 
         terminal_output = outputs[prepared.terminal_step_name]
         await self._complete_run(prepared, terminal_output)
@@ -185,15 +185,11 @@ class PipelineExecutionKernel:
 
     async def _require_owned_thread(
         self,
-        session: object,
+        session: AsyncSession,
         *,
         thread_id: int,
         user_id: int,
     ) -> None:
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        if not isinstance(session, AsyncSession):
-            raise TypeError("Pipeline ownership checks require an AsyncSession.")
         try:
             await ThreadRepository.require_owned(
                 session,
@@ -326,9 +322,7 @@ class PipelineExecutionKernel:
                 raise PipelineEngineException(
                     f"Prerequisite output {prerequisite!r} is unavailable for step {step.name!r}."
                 )
-            sections.append(
-                f"[{prerequisite} output]\n{outputs[prerequisite]}"
-            )
+            sections.append(f"[{prerequisite} output]\n{outputs[prerequisite]}")
         return "\n\n".join(sections)
 
 
