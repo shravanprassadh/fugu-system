@@ -57,7 +57,9 @@ async def run_schema_migrations(
             )
             lock_acquired = True
         except TimeoutError as exc:
-            raise MigrationLockTimeoutError("Timed out waiting for the production schema migration lock.") from exc
+            raise MigrationLockTimeoutError(
+                "Timed out waiting for the production schema migration lock."
+            ) from exc
 
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -71,7 +73,9 @@ async def run_schema_migrations(
         )
         return_code = await process.wait()
         if return_code != 0:
-            raise MigrationProcessError(f"Alembic exited with non-zero status {return_code}.")
+            raise MigrationProcessError(
+                f"Alembic exited with non-zero status {return_code}."
+            )
     finally:
         if lock_acquired and not connection.is_closed():
             try:
