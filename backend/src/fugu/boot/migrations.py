@@ -15,6 +15,10 @@ class MigrationError(RuntimeError):
     """Base error for production migration orchestration failures."""
 
 
+class MigrationConnectionError(MigrationError):
+    """Raised when the migration database cannot be reached within the configured timeout."""
+
+
 class MigrationLockTimeoutError(MigrationError):
     """Raised when another deployment holds the migration lock too long."""
 
@@ -40,9 +44,27 @@ async def run_schema_migrations(
     resolved_settings = settings or get_settings()
     backend_root = Path(__file__).resolve().parents[3]
     alembic_config = backend_root / "alembic.ini"
-    connection = await asyncpg.connect(
-        dsn=_asyncpg_dsn(resolved_settings.master_router_db_url),
-        command_timeout=resolved_settings.network_request_timeout,
+
+    print(
+        "INFO: Connecting to the migration database.",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        connection = await asyncpg.connect(
+            dsn=_asyncpg_dsn(resolved_settings.master_router_db_url),
+            command_timeout=resolved_settings.network_request_timeout,
+            timeout=resolved_settings.network_request_timeout,
+        )
+    except (TimeoutError, OSError, asyncpg.PostgresError) as exc:
+        raise MigrationConnectionError(
+            "Could not connect to the migration database within the configured network timeout."
+        ) from exc
+
+    print(
+        "INFO: Migration database connection established; acquiring advisory lock.",
+        file=sys.stderr,
+        flush=True,
     )
     lock_acquired = False
 
@@ -57,8 +79,15 @@ async def run_schema_migrations(
             )
             lock_acquired = True
         except TimeoutError as exc:
-            raise MigrationLockTimeoutError("Timed out waiting for the production schema migration lock.") from exc
+            raise MigrationLockTimeoutError(
+                "Timed out waiting for the production schema migration lock."
+            ) from exc
 
+        print(
+            "INFO: Migration advisory lock acquired; running Alembic.",
+            file=sys.stderr,
+            flush=True,
+        )
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
