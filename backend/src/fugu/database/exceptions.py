@@ -23,3 +23,7 @@ class QueryExecutionError(DatabaseException):
 
 class TransactionRollbackError(DatabaseException):
     """Raised when rollback itself fails after a transaction error."""
+
+
+class EntityNotFoundError(DatabaseException):
+    """Raised when a requested record does not exist within the permitted scope."""
