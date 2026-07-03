@@ -212,5 +212,6 @@ class PipelineStepRun(Base):
             "status IN ('pending', 'running', 'completed', 'failed')",
             name="pipeline_step_run_status",
         ),
+        UniqueConstraint("run_id", "step_name", name="pipeline_step_run_identity"),
         Index("ix_pipeline_step_runs_run_created", "run_id", "created_at"),
     )
