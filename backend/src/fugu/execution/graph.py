@@ -49,6 +49,7 @@ class PipelineDependencyGraphResolver:
         }
         self.in_degree: dict[str, int] = {step.name: 0 for step in definitions}
         self._build_graph()
+        self._resolved_sequence = self._resolve_topological_sequence()
         self.terminal_step_name = self._validate_terminal_step()
 
     def _build_graph(self) -> None:
@@ -70,21 +71,7 @@ class PipelineDependencyGraphResolver:
                 self.adjacency_list[prerequisite].add(step.name)
                 self.in_degree[step.name] += 1
 
-    def _validate_terminal_step(self) -> str:
-        terminal_steps = [step for step in self.steps.values() if step.is_terminal]
-        if len(terminal_steps) != 1:
-            raise TerminalStepConfigurationError(
-                "Exactly one pipeline step must be marked as terminal."
-            )
-        terminal_step = terminal_steps[0]
-        if self.adjacency_list[terminal_step.name]:
-            raise TerminalStepConfigurationError(
-                f"Terminal step {terminal_step.name!r} must not have dependent steps."
-            )
-        return terminal_step.name
-
-    def resolve_safe_execution_sequence(self) -> list[str]:
-        """Run Kahn's algorithm with a stable position/name heap tie-breaker."""
+    def _resolve_topological_sequence(self) -> tuple[str, ...]:
         remaining_in_degree = dict(self.in_degree)
         ready: list[tuple[int, str]] = [
             (self.steps[name].sequence_order_position, name)
@@ -119,10 +106,25 @@ class PipelineDependencyGraphResolver:
             raise DependencyLoopError(
                 "The pipeline contains a directed dependency cycle."
             )
-        return ordered_names
+        return tuple(ordered_names)
+
+    def _validate_terminal_step(self) -> str:
+        terminal_steps = [step for step in self.steps.values() if step.is_terminal]
+        if len(terminal_steps) != 1:
+            raise TerminalStepConfigurationError(
+                "Exactly one pipeline step must be marked as terminal."
+            )
+        terminal_step = terminal_steps[0]
+        if self.adjacency_list[terminal_step.name]:
+            raise TerminalStepConfigurationError(
+                f"Terminal step {terminal_step.name!r} must not have dependent steps."
+            )
+        return terminal_step.name
+
+    def resolve_safe_execution_sequence(self) -> list[str]:
+        """Return the validated Kahn ordering with deterministic tie-breakers."""
+        return list(self._resolved_sequence)
 
     def resolve_ordered_steps(self) -> tuple[PipelineStepDefinition, ...]:
         """Return detached step definitions in deterministic execution order."""
-        return tuple(
-            self.steps[name] for name in self.resolve_safe_execution_sequence()
-        )
+        return tuple(self.steps[name] for name in self._resolved_sequence)
