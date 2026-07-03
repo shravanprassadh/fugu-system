@@ -28,11 +28,16 @@ jobs:
           test -f backend/src/fugu/security/encryption.py
           test -f backend/src/fugu/api/dependencies.py
           test -f backend/src/fugu/api/routes/auth.py
+          test -f backend/src/fugu/providers/base.py
+          test -f backend/src/fugu/providers/exceptions.py
+          test -f backend/src/fugu/providers/registry.py
+          test -f backend/src/fugu/providers/openrouter.py
           test -f backend/alembic/versions/0001_initial_schema.py
           test -f backend/alembic/versions/0002_user_token_version.py
           test -f backend/tests/test_config.py
           test -f backend/tests/test_database.py
           test -f backend/tests/test_security.py
+          test -f backend/tests/test_providers.py
           test -f .env.example
 
   backend-lint-test:
