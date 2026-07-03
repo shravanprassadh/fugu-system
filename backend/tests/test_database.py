@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from alembic import command
-from alembic.config import Config
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.exceptions import DatabaseRoutingError, QueryExecutionError
 from fugu.database.models import Base
 from fugu.database.repositories import ThreadRepository, UserRepository
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from alembic import command
+from alembic.config import Config
 
 
 @pytest_asyncio.fixture
