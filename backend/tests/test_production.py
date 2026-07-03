@@ -7,13 +7,12 @@ from typing import Any
 
 import pytest
 from cryptography.fernet import Fernet
-from httpx import ASGITransport, AsyncClient
-
 from fugu.api.routes.health import inspect_database_readiness
 from fugu.boot.config import ConfigurationError, InfrastructureConfig, get_settings
 from fugu.boot.migrations import MigrationProcessError, run_schema_migrations
 from fugu.database.connection import DatabaseTarget
 from fugu.main import application_lifespan, create_app
+from httpx import ASGITransport, AsyncClient
 
 
 class FakeRuntimeRegistry:

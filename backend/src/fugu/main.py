@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import Headers
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from fugu.api.routes import auth_router, execution_router, health_router
 from fugu.api.routes.health import inspect_database_readiness
