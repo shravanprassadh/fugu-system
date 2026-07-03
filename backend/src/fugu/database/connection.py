@@ -63,7 +63,9 @@ class DatabaseSessionRegistry:
     """Route workloads to independent engines and provide atomic session scopes."""
 
     def __init__(self, engines: Mapping[DatabaseTarget, AsyncEngine]) -> None:
-        missing_targets = set(DatabaseTarget) - set(engines)
+        required_targets: set[DatabaseTarget] = set(DatabaseTarget)
+        configured_targets: set[DatabaseTarget] = set(engines.keys())
+        missing_targets = required_targets.difference(configured_targets)
         if missing_targets:
             missing = ", ".join(sorted(target.value for target in missing_targets))
             raise DatabaseRoutingError(f"Database engine mappings are missing required targets: {missing}.")
