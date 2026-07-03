@@ -89,7 +89,9 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 timeout_seconds=settings.health_check_timeout_seconds,
             )
             if not healthy:
-                raise RuntimeError("Application startup aborted because one or more database targets are unavailable.")
+                raise RuntimeError(
+                    "Application startup aborted because one or more database targets are unavailable."
+                )
         application.state.ready = True
         yield
     finally:
@@ -120,7 +122,11 @@ def create_app(
 
     def runtime_settings() -> InfrastructureConfig:
         configured: Any = getattr(application.state, "settings", None)
-        return configured if isinstance(configured, InfrastructureConfig) else get_settings()
+        return (
+            configured
+            if isinstance(configured, InfrastructureConfig)
+            else get_settings()
+        )
 
     application.add_middleware(
         DeferredCORSMiddleware,
