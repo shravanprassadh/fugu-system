@@ -1,14 +1,10 @@
 """Render deployment contract tests."""
 
-from pathlib import Path
-
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-
 
 def test_render_blueprint_installs_package_and_uses_supported_entrypoint() -> None:
     """Render must install the package and start through the migration-aware launcher."""
-    blueprint = (REPOSITORY_ROOT / "render.yaml").read_text(encoding="utf-8")
+    with open("../render.yaml", encoding="utf-8") as blueprint_file:
+        blueprint = blueprint_file.read()
 
     assert "rootDir: backend" in blueprint
     assert "requirements-runtime.txt" in blueprint
@@ -19,7 +15,8 @@ def test_render_blueprint_installs_package_and_uses_supported_entrypoint() -> No
 
 def test_entrypoint_honors_render_port_and_worker_variables() -> None:
     """Render-provided runtime variables must override local defaults."""
-    entrypoint = (REPOSITORY_ROOT / "backend" / "entrypoint.sh").read_text(encoding="utf-8")
+    with open("entrypoint.sh", encoding="utf-8") as entrypoint_file:
+        entrypoint = entrypoint_file.read()
 
     assert 'WEB_WORKERS_COUNT="${WEB_WORKERS_COUNT:-${WEB_CONCURRENCY:-2}}"' in entrypoint
     assert 'SERVER_BIND_PORT="${SERVER_BIND_PORT:-${PORT:-8000}}"' in entrypoint
