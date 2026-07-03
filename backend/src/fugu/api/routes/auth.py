@@ -6,11 +6,12 @@ from functools import lru_cache
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response, status
+from pydantic import BaseModel, Field
+
 from fugu.api.dependencies import CurrentUser, IdentityManager, MasterSession
 from fugu.database.models import User
 from fugu.database.repositories import UserRepository
 from fugu.security.auth import IdentitySecurityManager
-from pydantic import BaseModel, Field
 
 
 auth_router = APIRouter(prefix="/api/auth", tags=["authentication"])
