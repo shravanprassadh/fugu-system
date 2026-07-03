@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -23,6 +24,21 @@ class MigrationProcessError(MigrationError):
     """Raised when the Alembic subprocess exits unsuccessfully."""
 
 
+def _resolve_alembic_config() -> Path:
+    """Resolve Alembic configuration from the runtime working directory."""
+    configured_path = os.getenv("ALEMBIC_CONFIG")
+    candidate = Path(configured_path).expanduser() if configured_path else Path.cwd() / "alembic.ini"
+    resolved_candidate = candidate.resolve()
+
+    if not resolved_candidate.is_file():
+        source = "ALEMBIC_CONFIG" if configured_path else "the current working directory"
+        raise MigrationError(
+            f"Could not find Alembic configuration at '{resolved_candidate}' resolved from {source}."
+        )
+
+    return resolved_candidate
+
+
 def _asyncpg_dsn(database_url: object) -> str:
     """Convert a SQLAlchemy async URL into an asyncpg-compatible DSN."""
     dsn = str(database_url)
@@ -38,8 +54,8 @@ async def run_schema_migrations(
 ) -> None:
     """Acquire a cross-replica advisory lock and apply Alembic migrations."""
     resolved_settings = settings or get_settings()
-    backend_root = Path(__file__).resolve().parents[3]
-    alembic_config = backend_root / "alembic.ini"
+    alembic_config = _resolve_alembic_config()
+    backend_root = alembic_config.parent
     connection = await asyncpg.connect(
         dsn=_asyncpg_dsn(resolved_settings.master_router_db_url),
         command_timeout=resolved_settings.network_request_timeout,
