@@ -47,3 +47,5 @@ jobs:
             backend/tests/test_production.py
           git commit -m "style: format production runtime files [format-production]"
           git push origin HEAD:feature/modular-kernel-core
+
+# Temporary trigger revision; this workflow is removed after formatting succeeds.
