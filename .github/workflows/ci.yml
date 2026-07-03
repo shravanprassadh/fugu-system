@@ -6,10 +6,43 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
+  commit-frontend-lock:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/modular-kernel-core
+          fetch-depth: 0
+          show-progress: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+      - name: Generate dependency lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lock
+        run: |
+          if [ -z "$(git status --porcelain -- package-lock.json)" ]; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "build: commit frontend dependency lock [skip ci]"
+          git push origin HEAD:feature/modular-kernel-core
+
   scaffold-verification:
     runs-on: ubuntu-latest
     steps:
@@ -135,16 +168,4 @@ jobs:
       - name: Run frontend lint
         run: npm run lint
       - name: Build production frontend
-        run: |
-          set +e
-          npm run build > build.log 2>&1
-          status=$?
-          cat build.log
-          exit $status
-      - name: Upload frontend build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build-diagnostics
-          path: frontend/build.log
-          if-no-files-found: error
+        run: npm run build
