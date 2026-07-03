@@ -45,6 +45,20 @@ jobs:
           test -f backend/tests/test_security.py
           test -f backend/tests/test_providers.py
           test -f backend/tests/test_execution.py
+          test -f frontend/package.json
+          test -f frontend/next.config.mjs
+          test -f frontend/eslint.config.mjs
+          test -f frontend/vitest.config.js
+          test -f frontend/src/app/layout.js
+          test -f frontend/src/app/page.js
+          test -f frontend/src/app/chat/page.js
+          test -f frontend/src/app/settings/page.js
+          test -f frontend/src/components/store.js
+          test -f frontend/src/lib/sse.js
+          test -f frontend/src/lib/stream-client.js
+          test -f frontend/tests/sse.test.js
+          test -f frontend/tests/transport.test.js
+          test -f frontend/tests/rendering.test.js
           test -f .env.example
 
   backend-lint-test:
@@ -90,3 +104,35 @@ jobs:
         run: python -m pip install -q -r requirements.txt
       - name: Run mypy
         run: mypy src
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code base
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Upload generated dependency lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-package-lock
+          path: frontend/package-lock.json
+          if-no-files-found: error
+      - name: Run frontend tests
+        run: npm test
+      - name: Run frontend lint
+        run: npm run lint
+      - name: Build production frontend
+        run: npm run build
