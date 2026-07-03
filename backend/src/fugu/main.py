@@ -7,14 +7,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from fugu.api.routes import auth_router
+from fugu.api.routes import auth_router, execution_router
 from fugu.database.connection import get_session_registry
+from fugu.execution.kernel import get_execution_kernel
 
 
 @asynccontextmanager
 async def application_lifespan(_: FastAPI) -> AsyncIterator[None]:
     """Dispose lazily created database pools during application shutdown."""
     yield
+    get_execution_kernel.cache_clear()
     if get_session_registry.cache_info().currsize:
         registry = get_session_registry()
         await registry.dispose_pools()
@@ -29,6 +31,7 @@ def create_app() -> FastAPI:
         lifespan=application_lifespan,
     )
     application.include_router(auth_router)
+    application.include_router(execution_router)
     return application
 
 
