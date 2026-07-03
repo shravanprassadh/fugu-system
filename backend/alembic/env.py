@@ -7,11 +7,11 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import Connection, pool
-from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from fugu.boot.config import get_settings
 from fugu.database.models import Base
+from fugu.database.urls import sqlalchemy_asyncpg_url
 
 config = context.config
 if config.config_file_name is not None:
@@ -20,28 +20,18 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def _async_database_url(value: object) -> str:
-    """Return a SQLAlchemy URL that explicitly selects the asyncpg driver."""
-    database_url = make_url(str(value))
-    if database_url.drivername in {"postgresql", "postgres"}:
-        database_url = database_url.set(drivername="postgresql+asyncpg")
-    elif database_url.drivername != "postgresql+asyncpg":
-        raise ValueError("Alembic requires a PostgreSQL database URL.")
-    return database_url.render_as_string(hide_password=False)
-
-
 def _database_url() -> str:
-    """Resolve a CLI override first, then fall back to validated settings."""
+    """Resolve one canonical SQLAlchemy asyncpg URL for every migration mode."""
     x_arguments = context.get_x_argument(as_dictionary=True)
     override = x_arguments.get("database_url")
     if override:
-        return _async_database_url(override)
+        return sqlalchemy_asyncpg_url(override)
 
     configured_url = config.get_main_option("sqlalchemy.url")
     if configured_url and "unused" not in configured_url:
-        return _async_database_url(configured_url)
+        return sqlalchemy_asyncpg_url(configured_url)
 
-    return _async_database_url(get_settings().master_router_db_url)
+    return sqlalchemy_asyncpg_url(get_settings().master_router_db_url)
 
 
 def run_migrations_offline() -> None:
