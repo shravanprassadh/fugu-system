@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -149,10 +151,26 @@ class PipelineRepository:
         return list(result.all())
 
     @staticmethod
-    async def create_run(session: AsyncSession, *, thread_id: int) -> PipelineRun:
-        pipeline_run = PipelineRun(thread_id=thread_id, status="pending")
+    async def create_run(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        status: str = "running",
+    ) -> PipelineRun:
+        pipeline_run = PipelineRun(thread_id=thread_id, status=status)
         session.add(pipeline_run)
         await session.flush()
+        return pipeline_run
+
+    @staticmethod
+    async def get_run(session: AsyncSession, run_id: int) -> PipelineRun | None:
+        return await session.get(PipelineRun, run_id)
+
+    @staticmethod
+    async def require_run(session: AsyncSession, run_id: int) -> PipelineRun:
+        pipeline_run = await PipelineRepository.get_run(session, run_id)
+        if pipeline_run is None:
+            raise EntityNotFoundError(f"Pipeline run {run_id} does not exist.")
         return pipeline_run
 
     @staticmethod
@@ -167,3 +185,123 @@ class PipelineRepository:
         session.add(step_run)
         await session.flush()
         return step_run
+
+    @staticmethod
+    async def get_step_run(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        step_name: str,
+    ) -> PipelineStepRun | None:
+        statement = select(PipelineStepRun).where(
+            PipelineStepRun.run_id == run_id,
+            PipelineStepRun.step_name == step_name,
+        )
+        result = await session.scalars(statement)
+        return result.one_or_none()
+
+    @staticmethod
+    async def require_step_run(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        step_name: str,
+    ) -> PipelineStepRun:
+        step_run = await PipelineRepository.get_step_run(
+            session,
+            run_id=run_id,
+            step_name=step_name,
+        )
+        if step_run is None:
+            raise EntityNotFoundError(
+                f"Pipeline step trace {step_name!r} for run {run_id} does not exist."
+            )
+        return step_run
+
+    @staticmethod
+    async def mark_step_running(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        step_name: str,
+    ) -> PipelineStepRun:
+        step_run = await PipelineRepository.require_step_run(
+            session,
+            run_id=run_id,
+            step_name=step_name,
+        )
+        step_run.status = "running"
+        step_run.error_message = None
+        await session.flush()
+        return step_run
+
+    @staticmethod
+    async def mark_step_completed(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        step_name: str,
+        output_trace: str,
+    ) -> PipelineStepRun:
+        step_run = await PipelineRepository.require_step_run(
+            session,
+            run_id=run_id,
+            step_name=step_name,
+        )
+        step_run.status = "completed"
+        step_run.output_trace = output_trace
+        step_run.error_message = None
+        step_run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return step_run
+
+    @staticmethod
+    async def mark_step_failed(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        step_name: str,
+        output_trace: str,
+        error_message: str,
+    ) -> PipelineStepRun:
+        step_run = await PipelineRepository.require_step_run(
+            session,
+            run_id=run_id,
+            step_name=step_name,
+        )
+        step_run.status = "failed"
+        step_run.output_trace = output_trace
+        step_run.error_message = error_message
+        step_run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return step_run
+
+    @staticmethod
+    async def mark_run_completed(
+        session: AsyncSession,
+        *,
+        run_id: int,
+    ) -> PipelineRun:
+        pipeline_run = await PipelineRepository.require_run(session, run_id)
+        pipeline_run.status = "completed"
+        pipeline_run.error_code = None
+        pipeline_run.error_message = None
+        pipeline_run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return pipeline_run
+
+    @staticmethod
+    async def mark_run_failed(
+        session: AsyncSession,
+        *,
+        run_id: int,
+        error_code: str,
+        error_message: str,
+    ) -> PipelineRun:
+        pipeline_run = await PipelineRepository.require_run(session, run_id)
+        pipeline_run.status = "failed"
+        pipeline_run.error_code = error_code
+        pipeline_run.error_message = error_message
+        pipeline_run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return pipeline_run
