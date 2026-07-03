@@ -145,10 +145,7 @@ class InfrastructureConfig(BaseSettings):
     def validate_runtime_boundaries(self) -> Self:
         """Validate pool limits and exact origin-only CORS boundaries."""
         if self.db_pool_max_connections < self.db_pool_min_connections:
-            raise ValueError(
-                "DB_POOL_MAX_CONNECTIONS must be greater than or equal to "
-                "DB_POOL_MIN_CONNECTIONS."
-            )
+            raise ValueError("DB_POOL_MAX_CONNECTIONS must be greater than or equal to " "DB_POOL_MIN_CONNECTIONS.")
 
         normalized_origins: set[str] = set()
         for origin in self.allowed_origins:

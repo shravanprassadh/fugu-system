@@ -285,6 +285,4 @@ def test_entrypoint_runs_migrations_before_uvicorn() -> None:
     entrypoint = Path(__file__).resolve().parents[1] / "entrypoint.sh"
     script = entrypoint.read_text(encoding="utf-8")
 
-    assert script.index("python -m fugu.boot.migrations") < script.index(
-        "exec python -m uvicorn"
-    )
+    assert script.index("python -m fugu.boot.migrations") < script.index("exec python -m uvicorn")

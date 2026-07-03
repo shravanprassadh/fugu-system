@@ -61,16 +61,22 @@ class DeferredCORSMiddleware:
 @asynccontextmanager
 async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Validate runtime dependencies and guarantee graceful resource cleanup."""
-    settings: InfrastructureConfig = getattr(
-        application.state,
-        "settings",
-        None,
-    ) or get_settings()
-    registry: DatabaseSessionRegistry = getattr(
-        application.state,
-        "session_registry",
-        None,
-    ) or get_session_registry()
+    settings: InfrastructureConfig = (
+        getattr(
+            application.state,
+            "settings",
+            None,
+        )
+        or get_settings()
+    )
+    registry: DatabaseSessionRegistry = (
+        getattr(
+            application.state,
+            "session_registry",
+            None,
+        )
+        or get_session_registry()
+    )
 
     application.state.settings = settings
     application.state.session_registry = registry
@@ -83,9 +89,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
                 timeout_seconds=settings.health_check_timeout_seconds,
             )
             if not healthy:
-                raise RuntimeError(
-                    "Application startup aborted because one or more database targets are unavailable."
-                )
+                raise RuntimeError("Application startup aborted because one or more database targets are unavailable.")
         application.state.ready = True
         yield
     finally:
