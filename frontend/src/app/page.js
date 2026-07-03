@@ -1,0 +1,82 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { useStudioStore } from "../components/store";
+import { loadProfile, login } from "../lib/api-client";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const isAuthenticated = useStudioStore((state) => state.isAuthenticated);
+  const setSession = useStudioStore((state) => state.setSession);
+  const setActiveThread = useStudioStore((state) => state.setActiveThread);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/chat");
+    }
+  }, [isAuthenticated, router]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const sessionCredential = await login(username.trim(), password);
+      const profile = await loadProfile(sessionCredential);
+      setSession({ sessionCredential, username: profile.username });
+      setActiveThread(1);
+      router.push("/chat");
+    } catch (requestError) {
+      setError(requestError.message || "Authentication failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel" aria-labelledby="auth-title">
+        <div>
+          <p className="eyebrow">Fugu modular kernel</p>
+          <h1 id="auth-title">Enter the studio</h1>
+          <p className="auth-copy">
+            Session credentials remain in memory and are discarded when this tab is closed or refreshed.
+          </p>
+        </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
+
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Authenticating…" : "Authenticate"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
