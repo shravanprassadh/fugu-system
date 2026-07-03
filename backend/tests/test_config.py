@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
+from fugu.boot.config import ConfigurationError, InfrastructureConfig, get_settings
 from pydantic import ValidationError
-
-from fugu.boot.config import InfrastructureConfig
 
 REQUIRED_ENVIRONMENT_VARIABLES = (
     "MASTER_ROUTER_DB_URL",
@@ -38,7 +37,9 @@ def clear_configuration_environment(monkeypatch: pytest.MonkeyPatch) -> Generato
     """Prevent developer or CI environment variables from masking missing-value tests."""
     for variable_name in REQUIRED_ENVIRONMENT_VARIABLES:
         monkeypatch.delenv(variable_name, raising=False)
+    get_settings.cache_clear()
     yield
+    get_settings.cache_clear()
 
 
 def test_config_ingestion_success() -> None:
@@ -92,3 +93,9 @@ def test_config_ingestion_rejects_inverted_pool_bounds() -> None:
 
     with pytest.raises(ValidationError):
         InfrastructureConfig(_env_file=None, **malformed_context)
+
+
+def test_get_settings_raises_typed_configuration_error() -> None:
+    """Translate Pydantic validation failures into the backend startup exception."""
+    with pytest.raises(ConfigurationError):
+        get_settings()
