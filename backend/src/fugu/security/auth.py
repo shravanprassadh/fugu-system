@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
 from uuid import uuid4
 
 import jwt
-from jwt.exceptions import ExpiredSignatureError
-from jwt.exceptions import InvalidTokenError as PyJWTInvalidTokenError
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from pwdlib import PasswordHash
-from pwdlib.exceptions import UnknownHashError
-
 from fugu.boot.config import InfrastructureConfig, get_settings
 from fugu.security.exceptions import InvalidTokenError, TokenExpiredError
+from jwt.exceptions import ExpiredSignatureError
+from jwt.exceptions import InvalidTokenError as PyJWTInvalidTokenError
+from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 JWT_ALGORITHM = "HS256"
 REQUIRED_TOKEN_CLAIMS = (
@@ -151,19 +149,16 @@ class IdentitySecurityManager:
         if not encoded_token or not encoded_token.strip():
             raise InvalidTokenError("An access token is required.")
         try:
-            raw_payload = cast(
-                dict[str, Any],
-                jwt.decode(
-                    encoded_token,
-                    self._signing_secret,
-                    algorithms=[JWT_ALGORITHM],
-                    audience=self._audience,
-                    issuer=self._issuer,
-                    options={
-                        "require": list(REQUIRED_TOKEN_CLAIMS),
-                        "strict_aud": True,
-                    },
-                ),
+            raw_payload = jwt.decode(
+                encoded_token,
+                self._signing_secret,
+                algorithms=[JWT_ALGORITHM],
+                audience=self._audience,
+                issuer=self._issuer,
+                options={
+                    "require": list(REQUIRED_TOKEN_CLAIMS),
+                    "strict_aud": True,
+                },
             )
         except ExpiredSignatureError as exc:
             raise TokenExpiredError("The access token has expired.") from exc
