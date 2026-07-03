@@ -4,7 +4,7 @@ on:
   push:
     branches: [feature/modular-kernel-core]
   pull_request:
-    branches: [feature/modular-kernel-core]
+    branches: [main]
 
 jobs:
   scaffold-verification:
