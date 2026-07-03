@@ -6,7 +6,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 import httpx
 import pytest
-
 from fugu.providers.base import ExecutionProvider, ProviderRequest
 from fugu.providers.exceptions import (
     ProviderAlreadyRegisteredError,
