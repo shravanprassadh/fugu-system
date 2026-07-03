@@ -26,14 +26,20 @@ class ConfigurationError(RuntimeError):
 class InfrastructureConfig(BaseSettings):
     """Parse and validate all infrastructure settings required by Fugu."""
 
-    runtime_environment: Literal["development", "test", "staging", "production"] = Field(
-        "development",
-        validation_alias="RUNTIME_ENVIRONMENT",
+    runtime_environment: Literal["development", "test", "staging", "production"] = (
+        Field(
+            "development",
+            validation_alias="RUNTIME_ENVIRONMENT",
+        )
     )
 
     master_router_db_url: PostgresDsn = Field(validation_alias="MASTER_ROUTER_DB_URL")
-    metadata_sidebar_db_url: PostgresDsn = Field(validation_alias="METADATA_SIDEBAR_DB_URL")
-    transactional_logs_db_url: PostgresDsn = Field(validation_alias="TRANSACTIONAL_LOGS_DB_URL")
+    metadata_sidebar_db_url: PostgresDsn = Field(
+        validation_alias="METADATA_SIDEBAR_DB_URL"
+    )
+    transactional_logs_db_url: PostgresDsn = Field(
+        validation_alias="TRANSACTIONAL_LOGS_DB_URL"
+    )
 
     system_session_secret: SecretStr = Field(validation_alias="SYSTEM_SESSION_SECRET")
     vault_encryption_key: SecretStr = Field(validation_alias="VAULT_ENCRYPTION_KEY")
@@ -110,7 +116,9 @@ class InfrastructureConfig(BaseSettings):
         if isinstance(value, str):
             origins = [origin.strip() for origin in value.split(",") if origin.strip()]
             if not origins:
-                raise ValueError("ALLOWED_ORIGINS must contain at least one HTTP origin.")
+                raise ValueError(
+                    "ALLOWED_ORIGINS must contain at least one HTTP origin."
+                )
             return origins
         return value
 
@@ -119,7 +127,9 @@ class InfrastructureConfig(BaseSettings):
     def validate_session_secret(cls, value: SecretStr) -> SecretStr:
         """Require sufficient entropy capacity for signing session credentials."""
         if len(value.get_secret_value().strip()) < 32:
-            raise ValueError("SYSTEM_SESSION_SECRET must contain at least 32 characters.")
+            raise ValueError(
+                "SYSTEM_SESSION_SECRET must contain at least 32 characters."
+            )
         return value
 
     @field_validator("vault_encryption_key")
@@ -129,7 +139,9 @@ class InfrastructureConfig(BaseSettings):
         try:
             Fernet(value.get_secret_value().encode("utf-8"))
         except (TypeError, ValueError) as exc:
-            raise ValueError("VAULT_ENCRYPTION_KEY must be a valid Fernet key.") from exc
+            raise ValueError(
+                "VAULT_ENCRYPTION_KEY must be a valid Fernet key."
+            ) from exc
         return value
 
     @field_validator("jwt_issuer", "jwt_audience")
@@ -145,7 +157,10 @@ class InfrastructureConfig(BaseSettings):
     def validate_runtime_boundaries(self) -> Self:
         """Validate pool limits and exact origin-only CORS boundaries."""
         if self.db_pool_max_connections < self.db_pool_min_connections:
-            raise ValueError("DB_POOL_MAX_CONNECTIONS must be greater than or equal to " "DB_POOL_MIN_CONNECTIONS.")
+            raise ValueError(
+                "DB_POOL_MAX_CONNECTIONS must be greater than or equal to "
+                "DB_POOL_MIN_CONNECTIONS."
+            )
 
         normalized_origins: set[str] = set()
         for origin in self.allowed_origins:
@@ -156,7 +171,9 @@ class InfrastructureConfig(BaseSettings):
             if parsed.username or parsed.password:
                 raise ValueError("CORS origins cannot contain user information.")
             if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-                raise ValueError("CORS entries must be origins without paths, queries, or fragments.")
+                raise ValueError(
+                    "CORS entries must be origins without paths, queries, or fragments."
+                )
             if origin_text in normalized_origins:
                 raise ValueError("ALLOWED_ORIGINS cannot contain duplicate origins.")
             normalized_origins.add(origin_text)
@@ -165,7 +182,9 @@ class InfrastructureConfig(BaseSettings):
                 if parsed.scheme != "https":
                     raise ValueError("Production CORS origins must use HTTPS.")
                 if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
-                    raise ValueError("Production CORS origins cannot reference loopback hosts.")
+                    raise ValueError(
+                        "Production CORS origins cannot reference loopback hosts."
+                    )
 
         return self
 
