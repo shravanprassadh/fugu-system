@@ -13,7 +13,6 @@ from fugu.database.models import User
 from fugu.database.repositories import UserRepository
 from fugu.security.auth import IdentitySecurityManager
 
-
 auth_router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
