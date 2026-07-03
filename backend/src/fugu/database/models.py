@@ -46,9 +46,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="user", server_default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     threads: Mapped[list[Thread]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
@@ -66,13 +64,9 @@ class Thread(Base):
     __tablename__ = "threads"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="threads")
     messages: Mapped[list[Message]] = relationship(
@@ -82,9 +76,7 @@ class Thread(Base):
         back_populates="thread", cascade="all, delete-orphan", passive_deletes=True
     )
 
-    __table_args__ = (
-        Index("ix_threads_user_created", "user_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_threads_user_created", "user_id", "created_at"),)
 
 
 class Message(Base):
@@ -93,14 +85,10 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    thread_id: Mapped[int] = mapped_column(
-        ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     thread: Mapped[Thread] = relationship(back_populates="messages")
 
@@ -119,16 +107,12 @@ class ProviderCredential(Base):
     provider_name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (
-        CheckConstraint("key_version > 0", name="provider_key_version"),
-    )
+    __table_args__ = (CheckConstraint("key_version > 0", name="provider_key_version"),)
 
 
 class PipelineStep(Base):
@@ -142,12 +126,8 @@ class PipelineStep(Base):
     provider_type: Mapped[str] = mapped_column(String(100), nullable=False)
     model_string: Mapped[str] = mapped_column(String(255), nullable=False)
     system_prompt_directives: Mapped[str | None] = mapped_column(Text, nullable=True)
-    prerequisite_dependencies: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
-    is_terminal: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="false"
-    )
+    prerequisite_dependencies: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_terminal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("sequence_order_position", name="pipeline_sequence_position"),
@@ -162,15 +142,11 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    thread_id: Mapped[int] = mapped_column(
-        ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     thread: Mapped[Thread] = relationship(back_populates="pipeline_runs")
@@ -193,16 +169,12 @@ class PipelineStepRun(Base):
     __tablename__ = "pipeline_step_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[int] = mapped_column(
-        ForeignKey("pipeline_runs.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    run_id: Mapped[int] = mapped_column(ForeignKey("pipeline_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     step_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
     output_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     pipeline_run: Mapped[PipelineRun] = relationship(back_populates="step_runs")

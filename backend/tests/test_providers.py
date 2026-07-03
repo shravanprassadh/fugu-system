@@ -100,7 +100,7 @@ def test_sse_parser_ignores_metadata_and_supports_multiline_data() -> None:
 
     events = parser.feed(
         ": keepalive\r\nevent: message\r\nid: 42\r\n"
-        "data: {\"choices\":\r\ndata: [{\"delta\": {\"content\": \"ok\"}}]}\r\n\r\n"
+        'data: {"choices":\r\ndata: [{"delta": {"content": "ok"}}]}\r\n\r\n'
     )
 
     assert events == ['{"choices":\n[{"delta": {"content": "ok"}}]}']
@@ -112,8 +112,8 @@ async def test_openrouter_reconstructs_fragmented_sse_chunks() -> None:
     chunks = [
         b'data: {"choices":[{"delta":{"content":"Sov',
         b'ereign"}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":" Kernel"}}]}\n',
-        b'\ndata: [DO',
-        b'NE]\n\n',
+        b"\ndata: [DO",
+        b"NE]\n\n",
     ]
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -139,9 +139,7 @@ async def test_openrouter_reuses_injected_client() -> None:
         calls += 1
         return httpx.Response(
             200,
-            stream=ChunkedByteStream(
-                [b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n']
-            ),
+            stream=ChunkedByteStream([b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n']),
         )
 
     client = _client(handler)
@@ -244,9 +242,7 @@ async def test_openrouter_ignores_non_data_sse_frames() -> None:
     async def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            stream=ChunkedByteStream(
-                [b": keepalive\n\nevent: message\nid: 7\n\ndata: [DONE]\n\n"]
-            ),
+            stream=ChunkedByteStream([b": keepalive\n\nevent: message\nid: 7\n\ndata: [DONE]\n\n"]),
         )
 
     client = _client(handler)

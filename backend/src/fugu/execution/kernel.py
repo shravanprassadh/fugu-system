@@ -197,9 +197,7 @@ class PipelineExecutionKernel:
                 user_id=user_id,
             )
         except EntityNotFoundError as exc:
-            raise ThreadAccessDeniedError(
-                f"User {user_id} is not authorized to access thread {thread_id}."
-            ) from exc
+            raise ThreadAccessDeniedError(f"User {user_id} is not authorized to access thread {thread_id}.") from exc
 
     async def _mark_step_running(
         self,
@@ -332,7 +330,5 @@ def get_execution_kernel() -> PipelineExecutionKernel:
     return PipelineExecutionKernel(
         session_registry=get_session_registry(),
         provider_registry=get_provider_registry(),
-        credential_vault=ProviderCredentialVault(
-            SymmetricVaultEngine.from_settings()
-        ),
+        credential_vault=ProviderCredentialVault(SymmetricVaultEngine.from_settings()),
     )

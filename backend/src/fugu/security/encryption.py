@@ -53,9 +53,7 @@ class SymmetricVaultEngine:
             plaintext = self._cipher.decrypt(encrypted_ciphertext.encode("ascii"))
             return plaintext.decode("utf-8")
         except (InvalidToken, TypeError, ValueError, UnicodeError) as exc:
-            raise DecryptionFailedError(
-                "Provider credential authentication or decryption failed."
-            ) from exc
+            raise DecryptionFailedError("Provider credential authentication or decryption failed.") from exc
 
 
 class ProviderCredentialVault:

@@ -41,9 +41,7 @@ class ProviderRegistry:
         normalized = self.normalize_name(provider_name)
         with self._lock:
             if normalized in self._factories and not replace:
-                raise ProviderAlreadyRegisteredError(
-                    f"Provider {normalized!r} is already registered."
-                )
+                raise ProviderAlreadyRegisteredError(f"Provider {normalized!r} is already registered.")
             self._factories[normalized] = factory
 
     def resolve(self, provider_name: str) -> ExecutionProvider:
@@ -52,9 +50,7 @@ class ProviderRegistry:
         with self._lock:
             factory = self._factories.get(normalized)
         if factory is None:
-            raise ProviderNotRegisteredError(
-                f"Provider {normalized!r} is not registered."
-            )
+            raise ProviderNotRegisteredError(f"Provider {normalized!r} is not registered.")
         return factory()
 
     def registered_names(self) -> tuple[str, ...]:

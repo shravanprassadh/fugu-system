@@ -51,8 +51,7 @@ class SecurityIntegrationContext:
 async def security_context() -> AsyncIterator[SecurityIntegrationContext]:
     """Create an isolated application with independent in-memory async databases."""
     engines: dict[DatabaseTarget, AsyncEngine] = {
-        target: create_async_engine("sqlite+aiosqlite:///:memory:")
-        for target in DatabaseTarget
+        target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
     registry = DatabaseSessionRegistry(engines)
     for engine in engines.values():

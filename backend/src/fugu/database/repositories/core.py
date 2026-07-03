@@ -213,9 +213,7 @@ class PipelineRepository:
             step_name=step_name,
         )
         if step_run is None:
-            raise EntityNotFoundError(
-                f"Pipeline step trace {step_name!r} for run {run_id} does not exist."
-            )
+            raise EntityNotFoundError(f"Pipeline step trace {step_name!r} for run {run_id} does not exist.")
         return step_run
 
     @staticmethod

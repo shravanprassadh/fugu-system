@@ -22,8 +22,7 @@ from alembic.config import Config
 async def session_registry() -> AsyncIterator[DatabaseSessionRegistry]:
     """Create independent in-memory engines without requiring external PostgreSQL services."""
     engines: dict[DatabaseTarget, AsyncEngine] = {
-        target: create_async_engine("sqlite+aiosqlite:///:memory:")
-        for target in DatabaseTarget
+        target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
     registry = DatabaseSessionRegistry(engines)
 
@@ -137,12 +136,7 @@ def test_alembic_upgrade_and_downgrade(tmp_path: Path) -> None:
     command.upgrade(alembic_config, "head")
 
     with sqlite3.connect(database_path) as connection:
-        table_names = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
+        table_names = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
     assert {
         "users",
@@ -157,12 +151,7 @@ def test_alembic_upgrade_and_downgrade(tmp_path: Path) -> None:
     command.downgrade(alembic_config, "base")
 
     with sqlite3.connect(database_path) as connection:
-        remaining_tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
+        remaining_tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
     assert "users" not in remaining_tables
     assert "threads" not in remaining_tables

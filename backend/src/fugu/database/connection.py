@@ -136,16 +136,12 @@ class DatabaseSessionRegistry:
         except (OperationalError, InterfaceError):
             await self._rollback_or_raise(
                 session,
-                DatabaseUnavailableError(
-                    f"Database target {normalized_target.value!r} is unavailable."
-                ),
+                DatabaseUnavailableError(f"Database target {normalized_target.value!r} is unavailable."),
             )
         except SQLAlchemyError:
             await self._rollback_or_raise(
                 session,
-                QueryExecutionError(
-                    f"Database statement failed on target {normalized_target.value!r}."
-                ),
+                QueryExecutionError(f"Database statement failed on target {normalized_target.value!r}."),
             )
         except BaseException as exc:
             await self._rollback_or_raise(session, exc)
@@ -164,13 +160,9 @@ class DatabaseSessionRegistry:
                 f"Connection pool acquisition timed out for target {normalized_target.value!r}."
             ) from exc
         except (OperationalError, InterfaceError) as exc:
-            raise DatabaseUnavailableError(
-                f"Database target {normalized_target.value!r} is unavailable."
-            ) from exc
+            raise DatabaseUnavailableError(f"Database target {normalized_target.value!r} is unavailable.") from exc
         except SQLAlchemyError as exc:
-            raise QueryExecutionError(
-                f"Readiness query failed on target {normalized_target.value!r}."
-            ) from exc
+            raise QueryExecutionError(f"Readiness query failed on target {normalized_target.value!r}.") from exc
 
     async def dispose_pools(self) -> None:
         """Gracefully close all configured connection pools."""

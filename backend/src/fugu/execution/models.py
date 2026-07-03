@@ -24,12 +24,8 @@ class PipelineStepDefinition:
     @classmethod
     def from_record(cls, step: PipelineStep) -> PipelineStepDefinition:
         prerequisites = step.prerequisite_dependencies
-        if not isinstance(prerequisites, list) or not all(
-            isinstance(item, str) for item in prerequisites
-        ):
-            raise TypeError(
-                f"Pipeline step {step.step_name!r} has malformed prerequisite data."
-            )
+        if not isinstance(prerequisites, list) or not all(isinstance(item, str) for item in prerequisites):
+            raise TypeError(f"Pipeline step {step.step_name!r} has malformed prerequisite data.")
         return cls(
             name=step.step_name,
             sequence_order_position=step.sequence_order_position,

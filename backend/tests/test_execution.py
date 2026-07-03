@@ -79,8 +79,7 @@ class ExecutionContext:
 @pytest_asyncio.fixture
 async def execution_context() -> AsyncIterator[ExecutionContext]:
     engines: dict[DatabaseTarget, AsyncEngine] = {
-        target: create_async_engine("sqlite+aiosqlite:///:memory:")
-        for target in DatabaseTarget
+        target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
     registry = DatabaseSessionRegistry(engines)
     for engine in engines.values():
@@ -91,9 +90,7 @@ async def execution_context() -> AsyncIterator[ExecutionContext]:
     provider_registry = ProviderRegistry()
     provider_registry.register("mock", lambda: ScriptedProvider(script))
 
-    vault = ProviderCredentialVault(
-        SymmetricVaultEngine(Fernet.generate_key().decode("ascii"))
-    )
+    vault = ProviderCredentialVault(SymmetricVaultEngine(Fernet.generate_key().decode("ascii")))
     kernel = PipelineExecutionKernel(
         session_registry=registry,
         provider_registry=provider_registry,
@@ -183,9 +180,7 @@ def test_graph_resolver_orders_multi_path_dag_deterministically() -> None:
 
 def test_graph_resolver_rejects_missing_prerequisite() -> None:
     with pytest.raises(PrerequisiteNotFoundError):
-        PipelineDependencyGraphResolver(
-            [_step("Terminal", 1, prerequisites=["Missing"], terminal=True)]
-        )
+        PipelineDependencyGraphResolver([_step("Terminal", 1, prerequisites=["Missing"], terminal=True)])
 
 
 def test_graph_resolver_rejects_cycles() -> None:
@@ -244,16 +239,11 @@ async def test_kernel_streams_only_terminal_output_and_persists_clean_message(
     )
     events = [event async for event in execution_context.kernel.execute(prepared)]
 
-    token_events = [
-        event for event in events if event.event_type is PipelineEventType.TOKEN
-    ]
+    token_events = [event for event in events if event.event_type is PipelineEventType.TOKEN]
     assert [event.token for event in token_events] == ["Final", " answer"]
     assert {event.step_name for event in token_events} == {"Terminal"}
 
-    requests_by_model = {
-        request.model_identifier: request
-        for request in execution_context.script.requests
-    }
+    requests_by_model = {request.model_identifier: request for request in execution_context.script.requests}
     assert "root-output" in requests_by_model["branch-a"].prompt_content
     assert "root-output" in requests_by_model["branch-b"].prompt_content
     terminal_prompt = requests_by_model["terminal"].prompt_content
@@ -338,9 +328,7 @@ async def test_failed_intermediate_stage_preserves_user_message_and_failure_trac
             step_name="Terminal",
         )
 
-    assert [(message.role, message.content) for message in messages] == [
-        ("user", "Persist this prompt")
-    ]
+    assert [(message.role, message.content) for message in messages] == [("user", "Persist this prompt")]
     assert pipeline_run.status == "failed"
     assert pipeline_run.error_code == "ProviderTransportError"
     assert failed_trace.status == "failed"
@@ -392,6 +380,4 @@ async def test_execution_route_maps_cross_user_access_to_http_403(
         )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == (
-        "The authenticated user cannot execute against this thread."
-    )
+    assert response.json()["detail"] == ("The authenticated user cannot execute against this thread.")

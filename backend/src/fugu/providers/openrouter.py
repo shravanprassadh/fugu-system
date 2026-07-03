@@ -87,9 +87,7 @@ class OpenRouterStreamProvider(ExecutionProvider):
         timeout_seconds: float | None = None,
     ) -> None:
         if timeout_seconds is None:
-            timeout_seconds = (
-                get_settings().network_request_timeout if client is None else 45.0
-            )
+            timeout_seconds = get_settings().network_request_timeout if client is None else 45.0
         if timeout_seconds <= 0:
             raise ValueError("Provider timeouts must be positive.")
         self._client = client
@@ -121,9 +119,7 @@ class OpenRouterStreamProvider(ExecutionProvider):
         }
         messages: list[dict[str, str]] = []
         if request.system_directives.strip():
-            messages.append(
-                {"role": "system", "content": request.system_directives}
-            )
+            messages.append({"role": "system", "content": request.system_directives})
         messages.append({"role": "user", "content": request.prompt_content})
         payload = {
             "model": request.model_identifier,
@@ -159,41 +155,29 @@ class OpenRouterStreamProvider(ExecutionProvider):
         except ProviderError:
             raise
         except httpx.TimeoutException as exc:
-            raise ProviderTimeoutError(
-                "The OpenRouter request exceeded its configured timeout."
-            ) from exc
+            raise ProviderTimeoutError("The OpenRouter request exceeded its configured timeout.") from exc
         except httpx.HTTPError as exc:
-            raise ProviderTransportError(
-                "The OpenRouter transport failed before the stream completed."
-            ) from exc
+            raise ProviderTransportError("The OpenRouter transport failed before the stream completed.") from exc
 
     @staticmethod
     def _raise_for_status(status_code: int) -> None:
         if status_code in {401, 403}:
-            raise ProviderAuthenticationError(
-                "OpenRouter rejected the provider credential."
-            )
+            raise ProviderAuthenticationError("OpenRouter rejected the provider credential.")
         if status_code == 429:
             raise ProviderRateLimitError("OpenRouter rate limits were exceeded.")
         if status_code in {408, 504}:
             raise ProviderTimeoutError("OpenRouter reported a request timeout.")
         if status_code < 200 or status_code >= 300:
-            raise ProviderTransportError(
-                f"OpenRouter returned unsuccessful HTTP status {status_code}."
-            )
+            raise ProviderTransportError(f"OpenRouter returned unsuccessful HTTP status {status_code}.")
 
     @classmethod
     def _extract_token(cls, event_data: str) -> str | None:
         try:
             payload = json.loads(event_data)
         except json.JSONDecodeError as exc:
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted an invalid JSON SSE payload."
-            ) from exc
+            raise ProviderResponseMalformedError("OpenRouter emitted an invalid JSON SSE payload.") from exc
         if not isinstance(payload, dict):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted a non-object JSON SSE payload."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted a non-object JSON SSE payload.")
 
         error_payload = payload.get("error")
         if error_payload is not None:
@@ -203,39 +187,29 @@ class OpenRouterStreamProvider(ExecutionProvider):
         if choices is None:
             return None
         if not isinstance(choices, list):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted a non-list choices payload."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted a non-list choices payload.")
         if not choices:
             return None
 
         first_choice = choices[0]
         if not isinstance(first_choice, dict):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted a malformed choice object."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted a malformed choice object.")
         delta = first_choice.get("delta")
         if delta is None:
             return None
         if not isinstance(delta, dict):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted a malformed delta object."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted a malformed delta object.")
         content = delta.get("content")
         if content is None:
             return None
         if not isinstance(content, str):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted non-text token content."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted non-text token content.")
         return content or None
 
     @staticmethod
     def _raise_provider_error(error_payload: Any) -> None:
         if not isinstance(error_payload, dict):
-            raise ProviderResponseMalformedError(
-                "OpenRouter emitted a malformed provider error object."
-            )
+            raise ProviderResponseMalformedError("OpenRouter emitted a malformed provider error object.")
         code = str(error_payload.get("code", ""))
         message = error_payload.get("message", "Provider request failed.")
         safe_message = message if isinstance(message, str) else "Provider request failed."

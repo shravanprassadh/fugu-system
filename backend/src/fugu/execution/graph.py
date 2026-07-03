@@ -37,16 +37,10 @@ class PipelineDependencyGraphResolver:
 
         positions = [step.sequence_order_position for step in definitions]
         if len(positions) != len(set(positions)):
-            raise DuplicateSequencePositionError(
-                "Pipeline sequence positions must be unique."
-            )
+            raise DuplicateSequencePositionError("Pipeline sequence positions must be unique.")
 
-        self.steps: dict[str, PipelineStepDefinition] = {
-            step.name: step for step in definitions
-        }
-        self.adjacency_list: dict[str, set[str]] = {
-            step.name: set() for step in definitions
-        }
+        self.steps: dict[str, PipelineStepDefinition] = {step.name: step for step in definitions}
+        self.adjacency_list: dict[str, set[str]] = {step.name: set() for step in definitions}
         self.in_degree: dict[str, int] = {step.name: 0 for step in definitions}
         self._build_graph()
         self._resolved_sequence = self._resolve_topological_sequence()
@@ -57,13 +51,10 @@ class PipelineDependencyGraphResolver:
             seen_dependencies: set[str] = set()
             for prerequisite in step.prerequisites:
                 if prerequisite == step.name:
-                    raise DependencyLoopError(
-                        f"Pipeline step {step.name!r} cannot depend on itself."
-                    )
+                    raise DependencyLoopError(f"Pipeline step {step.name!r} cannot depend on itself.")
                 if prerequisite not in self.steps:
                     raise PrerequisiteNotFoundError(
-                        f"Pipeline step {step.name!r} depends on unknown prerequisite "
-                        f"{prerequisite!r}."
+                        f"Pipeline step {step.name!r} depends on unknown prerequisite " f"{prerequisite!r}."
                     )
                 if prerequisite in seen_dependencies:
                     continue
@@ -103,22 +94,16 @@ class PipelineDependencyGraphResolver:
                     )
 
         if len(ordered_names) != len(self.steps):
-            raise DependencyLoopError(
-                "The pipeline contains a directed dependency cycle."
-            )
+            raise DependencyLoopError("The pipeline contains a directed dependency cycle.")
         return tuple(ordered_names)
 
     def _validate_terminal_step(self) -> str:
         terminal_steps = [step for step in self.steps.values() if step.is_terminal]
         if len(terminal_steps) != 1:
-            raise TerminalStepConfigurationError(
-                "Exactly one pipeline step must be marked as terminal."
-            )
+            raise TerminalStepConfigurationError("Exactly one pipeline step must be marked as terminal.")
         terminal_step = terminal_steps[0]
         if self.adjacency_list[terminal_step.name]:
-            raise TerminalStepConfigurationError(
-                f"Terminal step {terminal_step.name!r} must not have dependent steps."
-            )
+            raise TerminalStepConfigurationError(f"Terminal step {terminal_step.name!r} must not have dependent steps.")
         return terminal_step.name
 
     def resolve_safe_execution_sequence(self) -> list[str]:
