@@ -43,6 +43,13 @@ class UserRepository:
         result = await session.scalars(statement)
         return result.one_or_none()
 
+    @staticmethod
+    async def increment_token_version(session: AsyncSession, user: User) -> int:
+        """Revoke every existing token by advancing the user's session version."""
+        user.token_version += 1
+        await session.flush()
+        return user.token_version
+
 
 class ThreadRepository:
     """Persistence operations for user-owned conversation threads."""
