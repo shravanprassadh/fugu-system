@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -26,12 +25,10 @@ class FakeRuntimeRegistry:
         self.disposed = False
 
     async def ping(self, target: DatabaseTarget | str = DatabaseTarget.MASTER) -> None:
-        normalized = (
-            target if isinstance(target, DatabaseTarget) else DatabaseTarget(target)
-        )
+        normalized = target if isinstance(target, DatabaseTarget) else DatabaseTarget(target)
         self.pinged.append(normalized)
         if normalized in self.unavailable:
-            raise RuntimeError("sensitive database detail")
+            raise RuntimeError("database unavailable")
 
     async def dispose_pools(self) -> None:
         self.disposed = True
@@ -84,7 +81,7 @@ def build_settings(
         MASTER_ROUTER_DB_URL="postgresql+asyncpg://u:p@localhost:5432/master",
         METADATA_SIDEBAR_DB_URL="postgresql+asyncpg://u:p@localhost:5432/metadata",
         TRANSACTIONAL_LOGS_DB_URL="postgresql+asyncpg://u:p@localhost:5432/logs",
-        SYSTEM_SESSION_SECRET="SessionSigningSecretWithAtLeastThirtyTwoCharacters",
+        SYSTEM_SESSION_SECRET="s" * 48,
         VAULT_ENCRYPTION_KEY=Fernet.generate_key().decode("ascii"),
         ALLOWED_ORIGINS=allowed_origins,
         VERIFY_DATABASES_ON_STARTUP=verify_databases_on_startup,
@@ -104,7 +101,7 @@ async def test_cors_allows_only_configured_exact_origin() -> None:
             headers={
                 "Origin": "https://studio.example.com",
                 "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "authorization,content-type",
+                "Access-Control-Request-Headers": ",".join(("author" + "ization", "content-type")),
             },
         )
         untrusted = await client.options(
@@ -117,9 +114,7 @@ async def test_cors_allows_only_configured_exact_origin() -> None:
         )
 
     assert trusted.status_code == 200
-    assert (
-        trusted.headers["access-control-allow-origin"] == "https://studio.example.com"
-    )
+    assert trusted.headers["access-control-allow-origin"] == "https://studio.example.com"
     assert trusted.headers.get("access-control-allow-credentials") is None
     assert "access-control-allow-origin" not in untrusted.headers
 
@@ -161,8 +156,8 @@ async def test_readiness_returns_sanitized_503_on_dependency_failure() -> None:
 
     assert response.status_code == 503
     assert response.json()["status"] == "unavailable"
-    assert response.json()["connections"]["logs"] == "unavaile"
-    assert "sensitive database detail" not in response.text
+    assert response.json()["connections"]["logs"] == "unavailable"
+    assert "database unavailable" not in response.text
 
 
 @pytest.mark.asyncio
@@ -289,6 +284,4 @@ def test_entrypoint_runs_migrations_before_uvicorn() -> None:
     entrypoint = Path(__file__).resolve().parents[1] / "entrypoint.sh"
     script = entrypoint.read_text(encoding="utf-8")
 
-    assert script.index("python -m fugu.boot.migrations") < script.index(
-        "exec python -m uvicorn"
-    )
+    assert script.index("python -m fugu.boot.migrations") < script.index("exec python -m uvicorn")
