@@ -7,42 +7,12 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
-  commit-frontend-lock:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - name: Checkout feature branch
-        uses: actions/checkout@v4
-        with:
-          ref: feature/modular-kernel-core
-          fetch-depth: 0
-          show-progress: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.19.4"
-      - name: Generate dependency lock
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Commit generated lock
-        run: |
-          if [ -z "$(git status --porcelain -- package-lock.json)" ]; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "build: commit frontend dependency lock [skip ci]"
-          git push origin HEAD:feature/modular-kernel-core
-
   scaffold-verification:
     runs-on: ubuntu-latest
     steps:
@@ -79,6 +49,7 @@ jobs:
           test -f backend/tests/test_providers.py
           test -f backend/tests/test_execution.py
           test -f frontend/package.json
+          test -f frontend/package-lock.json
           test -f frontend/next.config.mjs
           test -f frontend/eslint.config.mjs
           test -f frontend/vitest.config.js
@@ -153,16 +124,9 @@ jobs:
         with:
           node-version: "20.19.4"
           cache: npm
-          cache-dependency-path: frontend/package.json
-      - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
-      - name: Upload generated dependency lock
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-package-lock
-          path: frontend/package-lock.json
-          if-no-files-found: error
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
       - name: Run frontend tests
         run: npm test
       - name: Run frontend lint
