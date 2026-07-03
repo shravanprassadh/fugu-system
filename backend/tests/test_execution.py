@@ -9,9 +9,6 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from fugu.api.dependencies import get_current_user
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Base, PipelineStep, User
@@ -36,6 +33,8 @@ from fugu.providers.base import ExecutionProvider, ProviderRequest
 from fugu.providers.exceptions import ProviderTransportError
 from fugu.providers.registry import ProviderRegistry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 @dataclass
