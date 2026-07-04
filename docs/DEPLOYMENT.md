@@ -1,37 +1,108 @@
-# Production deployment contract
+# Deployment Runbook
 
-This document defines the production assumptions for the Fugu backend on the `feature/modular-kernel-core` branch.
+This runbook defines the current deployment and operating contract for Fugu System.
 
-## Container startup sequence
+## Services
 
-The backend image starts through `backend/entrypoint.sh`:
+| Layer | Service | Notes |
+| --- | --- | --- |
+| Frontend | Vercel | Builds `frontend/` and requires `NEXT_PUBLIC_FUGU_API_BASE_URL` |
+| Backend | Render | Runs `backend/entrypoint.sh` and starts FastAPI/Uvicorn |
+| Database | Neon PostgreSQL | Used by Alembic and all runtime database pools |
+| CI | GitHub Actions | Secret scan, backend validation, frontend validation, production container validation |
+
+## Backend startup sequence
+
+The backend starts through `backend/entrypoint.sh`:
 
 1. Validate worker, port, timeout, proxy, and migration environment values.
-2. Acquire a PostgreSQL advisory lock through `python -m fugu.boot.migrations`.
-3. Run `alembic upgrade head` while the advisory lock is held.
-4. Release the lock after Alembic succeeds or fails.
-5. Start Uvicorn only after the schema reaches the current migration head.
+2. Run serialized Alembic migrations when `RUN_MIGRATIONS=true`.
+3. Acquire a PostgreSQL advisory lock through `python -m fugu.boot.migrations`.
+4. Run `alembic upgrade head` while the advisory lock is held.
+5. Release the lock after Alembic succeeds or fails.
+6. Start Uvicorn only after the schema reaches the current migration head.
 
 The advisory lock serializes migrations when several replicas start at the same time. A replica exits instead of serving traffic when migration execution fails or the lock cannot be acquired within `MIGRATION_LOCK_TIMEOUT_SECONDS`.
 
-Set `RUN_MIGRATIONS=false` only when migrations are executed by a separate, mandatory deployment job. Do not disable migrations without an equivalent pre-traffic schema gate.
+Set `RUN_MIGRATIONS=false` only when migrations are executed by a separate mandatory deployment job. Do not disable migrations without an equivalent pre-traffic schema gate.
 
-## Required environment values
+## Render backend configuration
 
-Inject secrets and connection strings through the deployment platform. Do not bake them into images, compose files, or repository variables visible to untrusted workflows.
+Required Render environment values:
 
-Required values:
+```text
+RUNTIME_ENVIRONMENT=production
+MASTER_ROUTER_DB_URL=postgresql://...
+METADATA_SIDEBAR_DB_URL=postgresql://...
+TRANSACTIONAL_LOGS_DB_URL=postgresql://...
+SYSTEM_SESSION_SECRET=<at-least-32-characters>
+VAULT_ENCRYPTION_KEY=<fernet-key>
+ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+RUN_MIGRATIONS=true
+VERIFY_DATABASES_ON_STARTUP=true
+SERVER_BIND_HOST=0.0.0.0
+SERVER_BIND_PORT=8000
+TRUST_PROXY_HEADERS=false
+```
 
-- `MASTER_ROUTER_DB_URL`
-- `METADATA_SIDEBAR_DB_URL`
-- `TRANSACTIONAL_LOGS_DB_URL`
-- `SYSTEM_SESSION_SECRET`
-- `VAULT_ENCRYPTION_KEY`
-- `ALLOWED_ORIGINS`
+Render may provide `PORT`; the entrypoint falls back to it when `SERVER_BIND_PORT` is not set.
 
-Set `RUNTIME_ENVIRONMENT=production` in production. Production CORS origins must be exact HTTPS origins without paths, wildcards, query strings, fragments, credentials, or loopback hosts.
+## Database URL rules
+
+The backend accepts these PostgreSQL schemes and normalizes them internally:
+
+```text
+postgresql://...
+postgres://...
+postgresql+asyncpg://...
+```
+
+For Neon SSL, `sslmode=require` is acceptable in the incoming URL. The application translates SSL options into the form needed by SQLAlchemy/asyncpg.
+
+Do not use SQLite URLs in production. Runtime migrations are PostgreSQL-only.
+
+## Vercel frontend configuration
+
+Set this environment variable on Vercel:
+
+```text
+NEXT_PUBLIC_FUGU_API_BASE_URL=https://your-render-backend.onrender.com
+```
+
+Do not append `/api`. The frontend already builds API calls with `/api/...` paths.
+
+Correct:
+
+```text
+https://your-render-backend.onrender.com
+```
+
+Incorrect:
+
+```text
+https://your-render-backend.onrender.com/api
+```
+
+After changing this variable, redeploy the frontend. Next.js public environment variables are baked into the build.
 
 ## CORS and browser boundary
+
+Render must allow the exact Vercel origin in `ALLOWED_ORIGINS`.
+
+Use origins only:
+
+```text
+ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+```
+
+Do not use:
+
+```text
+ALLOWED_ORIGINS=*
+ALLOWED_ORIGINS=https://your-vercel-app.vercel.app/api
+```
+
+Production origins must use HTTPS and cannot include paths, queries, fragments, usernames, or passwords.
 
 The API permits only:
 
@@ -41,20 +112,115 @@ The API permits only:
 
 Credentialed browser CORS is disabled because the current Studio uses an in-memory bearer credential rather than a cross-origin cookie. Untrusted origins receive no `Access-Control-Allow-Origin` header.
 
-The reverse proxy must preserve the browser `Origin` header. It must not inject permissive CORS headers of its own.
-
 ## Health and readiness
 
-Use separate orchestration probes:
+The backend root path `/` is not defined and can return `404 Not Found`. That is not itself a failure.
 
-- Liveness: `GET /api/health/live`
-- Readiness: `GET /api/health/ready`
+Use these routes:
 
-Liveness confirms that the process and event loop respond. It does not query external dependencies.
+```text
+GET /api/health/live
+GET /api/health/ready
+GET /api/docs
+```
 
-Readiness executes bounded `SELECT 1` checks against the master, metadata, and logs connection pools. Any unavailable pool returns HTTP 503 with sanitized target states. Database exception messages are never included in the response.
+Expected liveness response:
+
+```json
+{"status":"alive"}
+```
+
+Readiness executes bounded checks against the master, metadata, and logs connection pools. Any unavailable pool returns HTTP 503 with sanitized target states. Database exception messages are never included in the response.
 
 The application also verifies all pools before completing startup when `VERIFY_DATABASES_ON_STARTUP=true`. A failed startup check prevents traffic from reaching the worker.
+
+## First admin user
+
+The database does not contain a default user after a reset.
+
+### Preferred path when a shell is available
+
+Run this in the backend environment:
+
+```bash
+fugu-create-user --username admin --role admin
+```
+
+The command prompts for a password and writes an Argon2-hashed password to the `users` table.
+
+### Render Free path without shell
+
+Render Free does not provide a service shell. Use Neon SQL only after confirming you are connected to the same database used by `MASTER_ROUTER_DB_URL`.
+
+Generate an Argon2id password hash outside the database using the backend security code or another trusted local environment. Then insert it with this shape:
+
+```sql
+INSERT INTO users (
+    username,
+    password_hash,
+    role,
+    is_active,
+    token_version
+)
+VALUES (
+    'admin',
+    '<argon2id-password-hash>',
+    'admin',
+    true,
+    0
+)
+ON CONFLICT (username)
+DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    role = 'admin',
+    is_active = true,
+    token_version = users.token_version + 1;
+```
+
+Do not commit bootstrap passwords or password hashes to the repository.
+
+## Disposable database reset
+
+Only use this for prototype, staging, or disposable databases. Do not run this against production data that must be preserved.
+
+First confirm the target database:
+
+```sql
+SELECT
+  current_database() AS database_name,
+  current_user AS database_user,
+  current_schema() AS current_schema,
+  current_setting('search_path') AS search_path;
+```
+
+Then inspect existing tables:
+
+```sql
+SELECT table_schema, table_name
+FROM information_schema.tables
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+  AND table_type = 'BASE TABLE'
+ORDER BY table_schema, table_name;
+```
+
+For a clean disposable reset, drop all public tables:
+
+```sql
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT schemaname, tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('DROP TABLE IF EXISTS %I.%I CASCADE', r.schemaname, r.tablename);
+  END LOOP;
+END $$;
+```
+
+Verify no application tables remain, then trigger a Render manual deploy. Alembic should recreate the schema.
 
 ## Worker and connection-pool budget
 
@@ -73,15 +239,6 @@ Do not increase workers independently of the database connection budget. Horizon
 `TRUST_PROXY_HEADERS` defaults to `false`. Enable it only when every request reaches Uvicorn through a trusted proxy.
 
 When enabled, restrict `FORWARDED_ALLOW_IPS` to the proxy network or explicit addresses. Do not use a wildcard unless the container network itself provides a strong trust boundary.
-
-The proxy must:
-
-- Terminate TLS
-- Preserve streaming responses without buffering
-- Disable response buffering for the SSE execution route
-- Apply request-body and header-size limits
-- Use a timeout longer than the maximum permitted pipeline execution time
-- Route traffic only to replicas whose readiness probe succeeds
 
 ## Graceful shutdown
 
@@ -106,21 +263,51 @@ The backend image:
 
 The root filesystem can be mounted read-only. No application path requires persistent local writes.
 
-## Rolling deployment sequence
+## Common failures
 
-A safe rollout is:
+### Frontend login returns 404
 
-1. Build and scan the immutable image.
-2. Inject production configuration and secrets.
-3. Start the first replacement replica.
-4. Allow the entrypoint to serialize and apply migrations.
-5. Wait for `/api/health/ready` to return 200.
-6. Add the replica to the load balancer.
-7. Drain and terminate an old replica within the configured grace period.
-8. Repeat until the rollout completes.
+The frontend is probably calling the Vercel origin instead of the Render backend.
 
-Database migrations must remain backward-compatible for the duration of a rolling deployment. Destructive column removal should use an expand-and-contract sequence across separate releases.
+Check Vercel:
+
+```text
+NEXT_PUBLIC_FUGU_API_BASE_URL=https://your-render-backend.onrender.com
+```
+
+Then redeploy Vercel.
+
+### Backend root returns 404
+
+This is expected. Use `/api/health/live`, `/api/health/ready`, or `/api/docs`.
+
+### Alembic reports duplicate tables
+
+The database has tables but no matching Alembic version state, or Render points to a different Neon database than the one you reset. Confirm `MASTER_ROUTER_DB_URL` and inspect `information_schema.tables` in the exact target database.
+
+### Alembic reports multiple heads
+
+The migration graph has diverged. The intended migration graph is linear. Do not add another migration with the same `down_revision` as an existing revision unless you also create a merge migration.
+
+### Login returns 401
+
+The backend route is reachable, but credentials are invalid or the user is inactive.
+
+### Login returns 404
+
+The frontend is calling the wrong origin/path. A bad password gives `401`, not `404`.
+
+## CI expectations
+
+The required GitHub Actions gate covers:
+
+- Secret scanning
+- Backend Ruff formatting/linting, mypy, pytest, dependency audit
+- Frontend ESLint, Vitest, npm audit, Next.js build
+- Backend production container validation
+
+Do not merge deployment changes until the required gate is green.
 
 ## Branch and deployment policy
 
-CI reports objective validation through `Infrastructure Continuous Integration Gate / Required CI Gate`. Branch protection and deployment approval remain repository or environment policy. Production deployment should require the final CI gate, an immutable image digest, and environment approval.
+Production deployment should require the final CI gate, an immutable image digest, and environment approval. Stale branches should be closed rather than merged after a replacement PR has already landed on `main`.
