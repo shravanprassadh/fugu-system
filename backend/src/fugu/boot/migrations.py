@@ -56,6 +56,7 @@ async def run_schema_migrations(
     connection = await asyncpg.connect(
         dsn=migration_dsn,
         command_timeout=resolved_settings.network_request_timeout,
+        timeout=resolved_settings.network_request_timeout,
     )
     lock_acquired = False
 
