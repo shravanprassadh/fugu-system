@@ -155,7 +155,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m ruff check src tests 2>&1 | tee ci-artifacts/ruff-lint.log
+          python -m ruff check --fix src tests 2>&1 | tee ci-artifacts/ruff-lint.log
 
       - name: Enforce strict Mypy typing
         shell: bash
