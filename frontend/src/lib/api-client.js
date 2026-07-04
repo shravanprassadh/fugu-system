@@ -1,6 +1,6 @@
 import { studioStore } from "@/components/store";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_FUGU_API_BASE_URL ?? "";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_FUGU_API_BASE_URL ?? "").replace(/\/+$/, "");
 
 export class ApiRequestError extends Error {
   constructor(message, status = null) {
@@ -11,7 +11,8 @@ export class ApiRequestError extends Error {
 }
 
 function buildUrl(path) {
-  return `${API_BASE_URL}${path}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
 }
 
 async function parseError(response) {
