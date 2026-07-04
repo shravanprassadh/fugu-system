@@ -25,6 +25,7 @@ class MigrationProcessError(MigrationError):
     """Raised when the Alembic subprocess exits unsuccessfully."""
 
 
+
 def _resolve_alembic_config() -> Path:
     """Resolve Alembic configuration from the runtime working directory."""
     configured_path = os.getenv("ALEMBIC_CONFIG")
@@ -56,6 +57,7 @@ async def run_schema_migrations(
     connection = await asyncpg.connect(
         dsn=migration_dsn,
         command_timeout=resolved_settings.network_request_timeout,
+        timeout=resolved_settings.network_request_timeout,
     )
     lock_acquired = False
 
