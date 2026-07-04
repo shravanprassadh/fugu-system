@@ -8,11 +8,7 @@ import sys
 
 def test_boot_config_import_does_not_initialize_database_connections() -> None:
     """Configuration must import without re-entering the connection module."""
-    script = (
-        "import sys; "
-        "import fugu.boot.config; "
-        "assert 'fugu.database.connection' not in sys.modules"
-    )
+    script = "import sys; import fugu.boot.config; assert 'fugu.database.connection' not in sys.modules"
 
     completed = subprocess.run(
         [sys.executable, "-c", script],
