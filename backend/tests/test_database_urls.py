@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.engine import make_url
-
 from fugu.database.urls import asyncpg_dsn, sqlalchemy_asyncpg_url
+from sqlalchemy.engine import make_url
 
 
 def test_sqlalchemy_url_selects_asyncpg_for_plain_postgresql_scheme() -> None:
