@@ -5,10 +5,9 @@ from __future__ import annotations
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter
-from pydantic import BaseModel
-
 from fugu.api.dependencies import AdminUser
 from fugu.boot.config import get_settings
+from pydantic import BaseModel
 
 
 database_admin_router = APIRouter(prefix="/api/admin/database", tags=["database-administration"])
