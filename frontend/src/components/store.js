@@ -33,6 +33,49 @@ export function createStudioStore() {
     },
     clearSession: () => set({ ...initialState }),
     setThreads: (threads) => set({ threads: [...threads] }),
+<<<<<<< Updated upstream
+=======
+    upsertThread: (thread) =>
+      set((state) => {
+        const existingIndex = state.threads.findIndex((candidate) => candidate.id === thread.id);
+        if (existingIndex === -1) {
+          return { threads: [{ ...thread }, ...state.threads] };
+        }
+        const threads = [...state.threads];
+        threads[existingIndex] = { ...threads[existingIndex], ...thread };
+        return { threads };
+      }),
+    removeThread: (threadId) =>
+      set((state) => {
+        const threads = state.threads.filter((candidate) => candidate.id !== threadId);
+        if (state.activeThreadId !== threadId) {
+          return { threads };
+        }
+        return {
+          threads,
+          activeThreadId: null,
+          messages: [],
+          currentRunId: null,
+          currentRunStatus: "idle",
+          activeProcessingStep: null,
+          streamError: null,
+          activeRequestId: null,
+        };
+      }),
+    hydrateMessages: (threadId, messages) =>
+      set((state) => {
+        if (state.activeThreadId !== threadId) {
+          return state;
+        }
+        return {
+          messages: messages.map((message) => ({
+            id: String(message.id),
+            role: message.role,
+            content: message.content,
+          })),
+        };
+      }),
+>>>>>>> Stashed changes
     setActiveThread: (threadId) =>
       set({
         activeThreadId: threadId,

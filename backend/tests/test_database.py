@@ -8,22 +8,37 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+<<<<<<< Updated upstream
+=======
+from alembic.config import Config
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from alembic import command
+>>>>>>> Stashed changes
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.exceptions import DatabaseRoutingError, QueryExecutionError
 from fugu.database.models import Base
 from fugu.database.repositories import ThreadRepository, UserRepository
+<<<<<<< Updated upstream
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
 from alembic.config import Config
+=======
+from tests.database_helpers import create_sqlite_engine_map
+>>>>>>> Stashed changes
 
 
 @pytest_asyncio.fixture
 async def session_registry() -> AsyncIterator[DatabaseSessionRegistry]:
     """Create independent in-memory engines without requiring external PostgreSQL services."""
+<<<<<<< Updated upstream
     engines: dict[DatabaseTarget, AsyncEngine] = {
         target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
+=======
+    engines: dict[DatabaseTarget, AsyncEngine] = create_sqlite_engine_map()
+>>>>>>> Stashed changes
     registry = DatabaseSessionRegistry(engines)
 
     for engine in engines.values():

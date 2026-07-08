@@ -54,7 +54,11 @@ class PipelineDependencyGraphResolver:
                     raise DependencyLoopError(f"Pipeline step {step.name!r} cannot depend on itself.")
                 if prerequisite not in self.steps:
                     raise PrerequisiteNotFoundError(
+<<<<<<< Updated upstream
                         f"Pipeline step {step.name!r} depends on unknown prerequisite " f"{prerequisite!r}."
+=======
+                        f"Pipeline step {step.name!r} depends on unknown prerequisite {prerequisite!r}."
+>>>>>>> Stashed changes
                     )
                 if prerequisite in seen_dependencies:
                     continue

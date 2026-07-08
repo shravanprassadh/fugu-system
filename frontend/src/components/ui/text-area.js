@@ -11,7 +11,11 @@ export function PromptTextArea({ value, onChange, onSubmit, disabled }) {
       return;
     }
     element.style.height = "0px";
+<<<<<<< Updated upstream
     element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
+=======
+    element.style.height = `${Math.min(element.scrollHeight, 220)}px`;
+>>>>>>> Stashed changes
   }, [value]);
 
   function handleKeyDown(event) {
@@ -27,8 +31,13 @@ export function PromptTextArea({ value, onChange, onSubmit, disabled }) {
     <textarea
       ref={elementRef}
       className="prompt-textarea"
+<<<<<<< Updated upstream
       aria-label="Pipeline prompt"
       placeholder="Describe the task for the execution graph…"
+=======
+      aria-label="Message"
+      placeholder="Message Fugu…"
+>>>>>>> Stashed changes
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={handleKeyDown}

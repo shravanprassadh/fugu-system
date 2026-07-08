@@ -9,6 +9,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
+<<<<<<< Updated upstream
+=======
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+>>>>>>> Stashed changes
 from fugu.api.dependencies import (
     AdminUser,
     OwnedThread,
@@ -29,8 +35,12 @@ from fugu.security.exceptions import (
     InvalidTokenError,
     TokenExpiredError,
 )
+<<<<<<< Updated upstream
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+=======
+from tests.database_helpers import create_sqlite_engine_map
+>>>>>>> Stashed changes
 
 TEST_PASSWORD = "UltraSecureStudioAccessKeySignature2026"
 TEST_SIGNING_SECRET = "test-signing-secret-with-more-than-thirty-two-characters"
@@ -50,9 +60,13 @@ class SecurityIntegrationContext:
 @pytest_asyncio.fixture
 async def security_context() -> AsyncIterator[SecurityIntegrationContext]:
     """Create an isolated application with independent in-memory async databases."""
+<<<<<<< Updated upstream
     engines: dict[DatabaseTarget, AsyncEngine] = {
         target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
+=======
+    engines: dict[DatabaseTarget, AsyncEngine] = create_sqlite_engine_map()
+>>>>>>> Stashed changes
     registry = DatabaseSessionRegistry(engines)
     for engine in engines.values():
         async with engine.begin() as connection:

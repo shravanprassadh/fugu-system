@@ -6,7 +6,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
+<<<<<<< Updated upstream
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+=======
+from sqlalchemy.ext.asyncio import AsyncEngine
+>>>>>>> Stashed changes
 
 from fugu.boot.create_user import (
     UserBootstrapError,
@@ -19,6 +23,10 @@ from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Base
 from fugu.database.repositories import UserRepository
 from fugu.security.auth import IdentitySecurityManager
+<<<<<<< Updated upstream
+=======
+from tests.database_helpers import create_sqlite_engine_map
+>>>>>>> Stashed changes
 
 TEST_PASSWORD = "HighEntropyBootstrapPassword2026"
 
@@ -26,9 +34,13 @@ TEST_PASSWORD = "HighEntropyBootstrapPassword2026"
 @pytest_asyncio.fixture
 async def registry() -> AsyncIterator[DatabaseSessionRegistry]:
     """Provide isolated workload databases for bootstrap tests."""
+<<<<<<< Updated upstream
     engines: dict[DatabaseTarget, AsyncEngine] = {
         target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
+=======
+    engines: dict[DatabaseTarget, AsyncEngine] = create_sqlite_engine_map()
+>>>>>>> Stashed changes
     session_registry = DatabaseSessionRegistry(engines)
 
     for engine in engines.values():

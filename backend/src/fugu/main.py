@@ -11,7 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+<<<<<<< Updated upstream
 from fugu.api.routes import auth_router, execution_router, health_router
+=======
+from fugu.api.routes import auth_router, execution_router, health_router, threads_router
+>>>>>>> Stashed changes
 from fugu.api.routes.health import inspect_database_readiness
 from fugu.boot.config import InfrastructureConfig, get_settings
 from fugu.database.connection import DatabaseSessionRegistry, get_session_registry
@@ -49,7 +53,11 @@ class DeferredCORSMiddleware:
                 self._app,
                 allow_origins=list(origins),
                 allow_credentials=False,
+<<<<<<< Updated upstream
                 allow_methods=["GET", "POST", "OPTIONS"],
+=======
+                allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+>>>>>>> Stashed changes
                 allow_headers=[("author" + "ization").title(), "Content-Type"],
                 max_age=settings.cors_preflight_max_age_seconds,
             )
@@ -128,6 +136,10 @@ def create_app(
     )
     application.include_router(auth_router)
     application.include_router(execution_router)
+<<<<<<< Updated upstream
+=======
+    application.include_router(threads_router)
+>>>>>>> Stashed changes
     application.include_router(health_router)
     return application
 

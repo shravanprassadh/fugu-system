@@ -82,6 +82,22 @@ class ThreadRepository:
         result = await session.scalars(statement)
         return list(result.all())
 
+<<<<<<< Updated upstream
+=======
+    @staticmethod
+    async def rename(session: AsyncSession, *, thread: Thread, name: str) -> Thread:
+        """Update the display name of a thread already resolved through ownership."""
+        thread.name = name
+        await session.flush()
+        return thread
+
+    @staticmethod
+    async def delete(session: AsyncSession, *, thread: Thread) -> None:
+        """Delete a thread already resolved through ownership; children cascade."""
+        await session.delete(thread)
+        await session.flush()
+
+>>>>>>> Stashed changes
 
 class MessageRepository:
     """Persistence operations for messages scoped through thread ownership."""

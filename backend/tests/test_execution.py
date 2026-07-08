@@ -9,6 +9,12 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
+<<<<<<< Updated upstream
+=======
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+>>>>>>> Stashed changes
 from fugu.api.dependencies import get_current_user
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Base, PipelineStep, User
@@ -33,8 +39,12 @@ from fugu.providers.base import ExecutionProvider, ProviderRequest
 from fugu.providers.exceptions import ProviderTransportError
 from fugu.providers.registry import ProviderRegistry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
+<<<<<<< Updated upstream
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+=======
+from tests.database_helpers import create_sqlite_engine_map
+>>>>>>> Stashed changes
 
 
 @dataclass
@@ -78,9 +88,13 @@ class ExecutionContext:
 
 @pytest_asyncio.fixture
 async def execution_context() -> AsyncIterator[ExecutionContext]:
+<<<<<<< Updated upstream
     engines: dict[DatabaseTarget, AsyncEngine] = {
         target: create_async_engine("sqlite+aiosqlite:///:memory:") for target in DatabaseTarget
     }
+=======
+    engines: dict[DatabaseTarget, AsyncEngine] = create_sqlite_engine_map()
+>>>>>>> Stashed changes
     registry = DatabaseSessionRegistry(engines)
     for engine in engines.values():
         async with engine.begin() as connection:

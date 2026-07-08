@@ -75,3 +75,87 @@ export async function logout(fetchImpl = fetch) {
 export function apiUrl(path) {
   return buildUrl(path);
 }
+<<<<<<< Updated upstream
+=======
+
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/*
+ * Detects the API base misconfigurations that previously surfaced only as a
+ * confusing 404 on /api/auth/login. Returns a human-readable problem
+ * description, or null when the configuration is usable.
+ */
+export function getApiConfigurationProblem() {
+  if (API_BASE_URL.endsWith("/api")) {
+    return (
+      "NEXT_PUBLIC_FUGU_API_BASE_URL must not end with /api — the app already calls /api/… paths. " +
+      "Remove the /api suffix and redeploy the frontend."
+    );
+  }
+  if (API_BASE_URL) {
+    return null;
+  }
+  if (typeof window === "undefined" || LOCAL_HOSTNAMES.has(window.location.hostname)) {
+    // Same-origin calls are a legitimate local-development setup.
+    return null;
+  }
+  return (
+    "NEXT_PUBLIC_FUGU_API_BASE_URL is not set, so sign-in requests would go to this frontend domain " +
+    "and fail with 404. Set it to the backend origin (for example https://your-backend.onrender.com, " +
+    "without a trailing /api) in the deployment environment, then redeploy."
+  );
+}
+
+function requireSessionCredential(store) {
+  const sessionCredential = store.getState().sessionCredential;
+  if (!sessionCredential) {
+    throw new ApiRequestError("An authenticated session is required.", 401);
+  }
+  return sessionCredential;
+}
+
+async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch, store = studioStore } = {}) {
+  const sessionCredential = requireSessionCredential(store);
+  const headers = { Authorization: `Bearer ${sessionCredential}` };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  const response = await fetchImpl(buildUrl(path), {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (response.status === 401) {
+    store.getState().clearSession();
+    throw new ApiRequestError("The session has expired or was rejected.", 401);
+  }
+  if (!response.ok) {
+    throw new ApiRequestError(await parseError(response), response.status);
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  return response.json();
+}
+
+export function listThreads(options) {
+  return authorizedRequest("/api/threads", options);
+}
+
+export function createThread(name, options = {}) {
+  return authorizedRequest("/api/threads", { ...options, method: "POST", body: { name } });
+}
+
+export function fetchThreadMessages(threadId, options) {
+  return authorizedRequest(`/api/threads/${threadId}/messages`, options);
+}
+
+export function renameThread(threadId, name, options = {}) {
+  return authorizedRequest(`/api/threads/${threadId}`, { ...options, method: "PATCH", body: { name } });
+}
+
+export function deleteThread(threadId, options = {}) {
+  return authorizedRequest(`/api/threads/${threadId}`, { ...options, method: "DELETE" });
+}
+>>>>>>> Stashed changes

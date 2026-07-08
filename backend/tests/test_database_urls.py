@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import pytest
+<<<<<<< Updated upstream
 from fugu.database.urls import asyncpg_dsn, sqlalchemy_asyncpg_url
 from sqlalchemy.engine import make_url
 
+=======
+from sqlalchemy.engine import make_url
+
+from fugu.database.urls import asyncpg_dsn, sqlalchemy_asyncpg_url
+
+>>>>>>> Stashed changes
 
 def test_sqlalchemy_url_selects_asyncpg_for_plain_postgresql_scheme() -> None:
     normalized = make_url(sqlalchemy_asyncpg_url("postgresql://localhost/fugu"))

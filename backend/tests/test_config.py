@@ -5,9 +5,16 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
+<<<<<<< Updated upstream
 from fugu.boot.config import ConfigurationError, InfrastructureConfig, get_settings
 from pydantic import ValidationError
 
+=======
+from pydantic import ValidationError
+
+from fugu.boot.config import ConfigurationError, InfrastructureConfig, get_settings
+
+>>>>>>> Stashed changes
 REQUIRED_ENVIRONMENT_VARIABLES = (
     "MASTER_ROUTER_DB_URL",
     "METADATA_SIDEBAR_DB_URL",

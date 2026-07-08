@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 FROM python:3.11-slim-bookworm AS runtime
+=======
+FROM python:3.11.11-slim-bookworm AS runtime
+>>>>>>> Stashed changes
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

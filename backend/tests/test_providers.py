@@ -6,6 +6,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 import httpx
 import pytest
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 from fugu.providers.base import ExecutionProvider, ProviderRequest
 from fugu.providers.exceptions import (
     ProviderAlreadyRegisteredError,
@@ -99,8 +103,12 @@ def test_sse_parser_ignores_metadata_and_supports_multiline_data() -> None:
     parser = ServerSentEventParser()
 
     events = parser.feed(
+<<<<<<< Updated upstream
         ": keepalive\r\nevent: message\r\nid: 42\r\n"
         'data: {"choices":\r\ndata: [{"delta": {"content": "ok"}}]}\r\n\r\n'
+=======
+        ': keepalive\r\nevent: message\r\nid: 42\r\ndata: {"choices":\r\ndata: [{"delta": {"content": "ok"}}]}\r\n\r\n'
+>>>>>>> Stashed changes
     )
 
     assert events == ['{"choices":\n[{"delta": {"content": "ok"}}]}']
