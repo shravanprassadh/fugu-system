@@ -27,6 +27,8 @@ extend-exclude = ["src/fugu/boot/migrations.py"]
 select = ["E", "F", "W", "I", "N", "ASYNC"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["I001"]
 
 [tool.mypy]
 python_version = "3.11"
