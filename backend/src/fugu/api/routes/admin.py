@@ -4,15 +4,21 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal, cast
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, inspect, select, text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.sql.schema import Table
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
-from fugu.database.models import PipelineStep, ProviderCredential, Thread, User
+from fugu.boot.config import get_settings
+from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget, get_session_registry, set_runtime_session_registry
+from fugu.database.models import Base, PipelineStep, ProviderCredential, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository
+from fugu.database.urls import sqlalchemy_asyncpg_url
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
@@ -128,6 +134,42 @@ class UpdatePipelineStepPayload(BaseModel):
     is_terminal: bool | None = None
 
 
+class DatabaseConnectionPayload(BaseModel):
+    """Write-only database URLs used by the transfer workflow."""
+
+    master_router_db_url: str = Field(min_length=20, max_length=4_096)
+    metadata_sidebar_db_url: str = Field(min_length=20, max_length=4_096)
+    transactional_logs_db_url: str = Field(min_length=20, max_length=4_096)
+
+
+class DatabaseTransferPayload(DatabaseConnectionPayload):
+    """Guarded database transfer request."""
+
+    confirmation: str
+    replace_existing: bool = False
+    apply_to_current_process: bool = True
+
+
+class DatabaseTargetStatus(BaseModel):
+    """Sanitized database target status."""
+
+    target: str
+    masked_url: str
+    status: Literal["connected", "failed", "copied", "active"]
+    row_count: int | None = None
+    error: str | None = None
+
+
+class DatabaseTransferResponse(BaseModel):
+    """Result of a database connection test or guarded transfer."""
+
+    status: Literal["ready", "transferred"]
+    targets: list[DatabaseTargetStatus]
+    active_until_restart: bool = False
+    render_env_update_required: bool = False
+    note: str
+
+
 async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
     user = await UserRepository.get_by_id(session, user_id)
     if user is None:
@@ -164,6 +206,101 @@ async def _prevent_last_admin_loss(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one active administrator must remain.",
         )
+
+
+def _database_url_map(payload: DatabaseConnectionPayload) -> dict[DatabaseTarget, str]:
+    return {
+        DatabaseTarget.MASTER: payload.master_router_db_url,
+        DatabaseTarget.METADATA: payload.metadata_sidebar_db_url,
+        DatabaseTarget.LOGS: payload.transactional_logs_db_url,
+    }
+
+
+def _masked_database_url(url: str) -> str:
+    parsed = urlsplit(url)
+    username = "****" if parsed.username else ""
+    password = ":********" if parsed.password else ""
+    credentials = f"{username}{password}@" if username or password else ""
+    host = parsed.hostname or "unknown-host"
+    port = f":{parsed.port}" if parsed.port else ""
+    database = parsed.path or ""
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{parsed.scheme}://{credentials}{host}{port}{database}{query}"
+
+
+def _temporary_engine(url: str) -> AsyncEngine:
+    settings = get_settings()
+    return create_async_engine(
+        sqlalchemy_asyncpg_url(url),
+        pool_size=1,
+        max_overflow=0,
+        pool_pre_ping=True,
+        pool_timeout=settings.network_request_timeout,
+    )
+
+
+def _temporary_registry(urls: dict[DatabaseTarget, str]) -> DatabaseSessionRegistry:
+    return DatabaseSessionRegistry({target: _temporary_engine(url) for target, url in urls.items()})
+
+
+async def _dispose_engines(engines: dict[DatabaseTarget, AsyncEngine]) -> None:
+    for engine in engines.values():
+        await engine.dispose()
+
+
+async def _test_target_url(target: DatabaseTarget, url: str) -> DatabaseTargetStatus:
+    engine = _temporary_engine(url)
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        return DatabaseTargetStatus(target=target.value, masked_url=_masked_database_url(url), status="connected")
+    except Exception as exc:
+        return DatabaseTargetStatus(target=target.value, masked_url=_masked_database_url(url), status="failed", error=str(exc))
+    finally:
+        await engine.dispose()
+
+
+async def _table_exists(engine: AsyncEngine, table: Table) -> bool:
+    async with engine.connect() as connection:
+        return await connection.run_sync(lambda sync_connection: inspect(sync_connection).has_table(table.name))
+
+
+async def _destination_has_rows(engine: AsyncEngine) -> bool:
+    for table in Base.metadata.sorted_tables:
+        if not await _table_exists(engine, table):
+            continue
+        async with engine.connect() as connection:
+            count = await connection.scalar(select(func.count()).select_from(table))
+        if int(count or 0) > 0:
+            return True
+    return False
+
+
+async def _copy_database_target(source_engine: AsyncEngine, destination_engine: AsyncEngine, *, replace_existing: bool) -> int:
+    async with destination_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    if not replace_existing and await _destination_has_rows(destination_engine):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Destination database already contains rows. Enable replace_existing to overwrite it.",
+        )
+
+    copied_rows = 0
+    async with destination_engine.begin() as destination_connection:
+        if replace_existing:
+            for table in reversed(Base.metadata.sorted_tables):
+                await destination_connection.execute(table.delete())
+        for table in Base.metadata.sorted_tables:
+            if not await _table_exists(source_engine, table):
+                continue
+            async with source_engine.connect() as source_connection:
+                result = await source_connection.execute(select(table))
+                rows = [dict(row) for row in result.mappings().all()]
+            if rows:
+                await destination_connection.execute(table.insert(), rows)
+                copied_rows += len(rows)
+    return copied_rows
 
 
 @admin_router.get("/users", response_model=list[AdminUserResponse])
@@ -341,3 +478,88 @@ async def update_pipeline_step(
         step.is_terminal = payload.is_terminal
     await session.flush()
     return PipelineStepResponse.from_step(step)
+
+
+@admin_router.post("/database-transfer/test", response_model=DatabaseTransferResponse)
+async def test_database_transfer_targets(
+    payload: DatabaseConnectionPayload,
+    _: AdminUser,
+) -> DatabaseTransferResponse:
+    """Validate candidate database URLs without persisting or exposing credentials."""
+    results = [await _test_target_url(target, url) for target, url in _database_url_map(payload).items()]
+    failed = [result for result in results if result.status == "failed"]
+    if failed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=[result.model_dump() for result in failed])
+    return DatabaseTransferResponse(
+        status="ready",
+        targets=results,
+        note="All candidate database URLs accepted a test connection.",
+    )
+
+
+@admin_router.post("/database-transfer", response_model=DatabaseTransferResponse)
+async def transfer_databases(
+    payload: DatabaseTransferPayload,
+    _: AdminUser,
+) -> DatabaseTransferResponse:
+    """Copy data into new database targets and optionally hot-swap this process to them."""
+    if payload.confirmation != "TRANSFER DATABASES":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Type TRANSFER DATABASES exactly to confirm this operation.",
+        )
+
+    target_urls = _database_url_map(payload)
+    test_results = [await _test_target_url(target, url) for target, url in target_urls.items()]
+    failed = [result for result in test_results if result.status == "failed"]
+    if failed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=[result.model_dump() for result in failed])
+
+    source_registry = get_session_registry()
+    destination_engines = {target: _temporary_engine(url) for target, url in target_urls.items()}
+    transfer_results: list[DatabaseTargetStatus] = []
+    try:
+        for target, destination_engine in destination_engines.items():
+            try:
+                row_count = await _copy_database_target(
+                    source_registry.get_engine(target),
+                    destination_engine,
+                    replace_existing=payload.replace_existing,
+                )
+            except HTTPException:
+                raise
+            except SQLAlchemyError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Database transfer failed for target {target.value}: {exc}",
+                ) from exc
+            transfer_results.append(
+                DatabaseTargetStatus(
+                    target=target.value,
+                    masked_url=_masked_database_url(target_urls[target]),
+                    status="copied",
+                    row_count=row_count,
+                )
+            )
+
+        if payload.apply_to_current_process:
+            set_runtime_session_registry(DatabaseSessionRegistry(destination_engines))
+            transfer_results = [result.model_copy(update={"status": "active"}) for result in transfer_results]
+        else:
+            await _dispose_engines(destination_engines)
+
+        return DatabaseTransferResponse(
+            status="transferred",
+            targets=transfer_results,
+            active_until_restart=payload.apply_to_current_process,
+            render_env_update_required=payload.apply_to_current_process,
+            note=(
+                "Transfer complete. This process now uses the new pools until the next Render restart. "
+                "Update Render database environment variables to make the change persistent."
+                if payload.apply_to_current_process
+                else "Transfer complete. Current runtime database pools were not changed."
+            ),
+        )
+    except Exception:
+        await _dispose_engines(destination_engines)
+        raise
