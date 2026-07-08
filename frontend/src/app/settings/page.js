@@ -25,6 +25,31 @@ import {
 import { OperatorControls } from "./operator-controls";
 import styles from "./settings.module.css";
 
+const settingsSections = [
+  {
+    id: "general",
+    label: "General",
+    description: "Theme and client behavior",
+  },
+  {
+    id: "members",
+    label: "Members",
+    description: "Users and access",
+    adminOnly: true,
+  },
+  {
+    id: "ai",
+    label: "AI & operations",
+    description: "Providers, models, pipeline and transfer",
+    adminOnly: true,
+  },
+  {
+    id: "system",
+    label: "System",
+    description: "Health, routing and deployment variables",
+  },
+];
+
 const databaseRows = [
   {
     key: "master",
@@ -108,6 +133,7 @@ export default function SettingsPage() {
   const activeThreadId = useStudioStore((state) => state.activeThreadId);
   const setActiveThread = useStudioStore((state) => state.setActiveThread);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("general");
   const [browserOrigin] = useState(getBrowserOrigin);
   const [diagnostics, setDiagnostics] = useState({ status: "idle", payload: null, error: null, checkedAt: null });
   const [adminUsers, setAdminUsers] = useState([]);
@@ -198,6 +224,12 @@ export default function SettingsPage() {
       }
     };
   }, [isAuthenticated, expireSession, refreshDiagnostics, isAdmin, loadAdminUsers]);
+
+  useEffect(() => {
+    if (!isAdmin && ["members", "ai"].includes(activeSection)) {
+      setActiveSection("general");
+    }
+  }, [activeSection, isAdmin]);
 
   async function signOut() {
     await logout();
@@ -321,6 +353,8 @@ export default function SettingsPage() {
   const apiConfigurationProblem = getApiConfigurationProblem();
   const readinessStatus = diagnostics.payload?.status || diagnostics.status;
   const connectionStatuses = diagnostics.payload?.connections || {};
+  const visibleSections = settingsSections.filter((section) => !section.adminOnly || isAdmin);
+  const currentSection = visibleSections.find((section) => section.id === activeSection) || visibleSections[0];
 
   return (
     <main className="studio-shell">
@@ -353,185 +387,217 @@ export default function SettingsPage() {
           </button>
           <div>
             <h1 className="workspace-title" id="settings-title">Settings</h1>
-            <p className={styles.headerSubtitle}>Admin, provider, pipeline, runtime, database, and client controls for this Fugu environment.</p>
+            <p className={styles.headerSubtitle}>Configure Fugu without leaving the app.</p>
           </div>
         </header>
 
-        <div className="settings-grid">
-          <section className="settings-card settings-card-wide">
-            <div className={styles.cardHeaderRow}>
-              <div>
-                <p className="eyebrow">Admin console</p>
-                <h3>User management</h3>
-              </div>
-              <div className={styles.headerActions}>
-                <StatusPill status={isAdmin ? adminStatus : "not exposed"} />
-                {isAdmin ? (
-                  <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
-                    {adminStatus === "loading" ? "Loading…" : "Refresh users"}
-                  </button>
-                ) : null}
-              </div>
+        <div className="settings-shell">
+          <aside className="settings-nav" aria-label="Settings sections">
+            {visibleSections.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`settings-nav-item ${currentSection.id === section.id ? "settings-nav-item-active" : ""}`}
+                onClick={() => setActiveSection(section.id)}
+              >
+                <span className="settings-nav-label">{section.label}</span>
+                <span className="settings-nav-description">{section.description}</span>
+              </button>
+            ))}
+          </aside>
+
+          <div className="settings-content">
+            <div className="settings-section-heading">
+              <p className="eyebrow">{currentSection.label}</p>
+              <h2>{currentSection.description}</h2>
             </div>
-            {isAdmin ? (
-              <>
-                <p className="muted">Create users, disable access, change roles, reset passwords, and delete accounts without opening Neon.</p>
-                {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
-                {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
-                <form className={styles.adminForm} onSubmit={handleCreateUser}>
-                  <label>
-                    Username
-                    <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
-                  </label>
-                  <label>
-                    Initial password
-                    <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
-                  </label>
-                  <label>
-                    Role
-                    <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
-                      <option value="user">user</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </label>
-                  <label className={styles.checkboxLabel}>
-                    <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
-                    Active
-                  </label>
-                  <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create user</button>
-                </form>
-                <div className="matrix-wrapper" tabIndex="0">
-                  <table className="settings-matrix">
-                    <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Threads</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {adminUsers.map((account) => {
-                        const isSelf = account.id === userId;
-                        return (
-                          <tr key={account.id}>
-                            <td>
-                              <span className={styles.valueBlock}>{account.username}</span>
-                              <span className={styles.valueOwner}>ID {account.id} · token v{account.token_version}</span>
-                            </td>
-                            <td><StatusPill status={account.role} /></td>
-                            <td><StatusPill status={account.is_active ? "active" : "inactive"} /></td>
-                            <td>{account.thread_count}</td>
-                            <td>
-                              <div className={styles.adminActions}>
-                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}>
-                                  {account.role === "admin" ? "Make user" : "Make admin"}
-                                </button>
-                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
-                                  {account.is_active ? "Deactivate" : "Reactivate"}
-                                </button>
-                                <details className={styles.passwordReset}>
-                                  <summary>Reset password</summary>
-                                  <div className={styles.passwordResetFields}>
-                                    <input type="password" autoComplete="new-password" minLength={8} placeholder="New password" value={passwordDrafts[account.id] || ""} onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))} />
-                                    <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>Save</button>
-                                  </div>
-                                </details>
-                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
+
+            {currentSection.id === "general" ? (
+              <div className="settings-stack">
+                <section className="settings-pane">
+                  <div className="settings-row">
+                    <div>
+                      <h3>Theme</h3>
+                      <p className="muted">Choose a fixed theme or follow your device preference.</p>
+                    </div>
+                    <ThemeModePicker />
+                  </div>
+                </section>
+
+                <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>Client safety</h3>
+                      <p className="muted">Browser-side safeguards for rendering, sessions, cancellation, and stream errors.</p>
+                    </div>
+                  </div>
+                  <ul className="check-list settings-check-list">
+                    <li>Session state resets after expiry</li>
+                    <li>Messages render through an element-only markdown renderer; raw HTML is never interpreted</li>
+                    <li>Cancellation terminates the active request</li>
+                    <li>Malformed stream frames surface controlled errors</li>
+                  </ul>
+                </section>
+              </div>
+            ) : null}
+
+            {currentSection.id === "members" ? (
+              <div className="settings-stack">
+                <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>User management</h3>
+                      <p className="muted">Create users, change roles, reset passwords, and remove accounts.</p>
+                    </div>
+                    <div className={styles.headerActions}>
+                      <StatusPill status={adminStatus} />
+                      <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
+                        {adminStatus === "loading" ? "Loading…" : "Refresh"}
+                      </button>
+                    </div>
+                  </div>
+                  {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
+                  {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
+                  <form className={styles.adminForm} onSubmit={handleCreateUser}>
+                    <label>
+                      Username
+                      <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
+                    </label>
+                    <label>
+                      Initial password
+                      <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
+                    </label>
+                    <label>
+                      Role
+                      <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </label>
+                    <label className={styles.checkboxLabel}>
+                      <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
+                      Active
+                    </label>
+                    <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create</button>
+                  </form>
+                </section>
+
+                <section className="settings-pane">
+                  <div className="settings-list">
+                    {adminUsers.map((account) => {
+                      const isSelf = account.id === userId;
+                      return (
+                        <article className="settings-list-item" key={account.id}>
+                          <div className="settings-list-main">
+                            <div className="settings-list-title-row">
+                              <strong>{account.username}</strong>
+                              <StatusPill status={account.role} />
+                              <StatusPill status={account.is_active ? "active" : "inactive"} />
+                            </div>
+                            <p className="muted">ID {account.id} · token v{account.token_version} · {account.thread_count} threads</p>
+                          </div>
+                          <div className={styles.adminActions}>
+                            <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}>
+                              {account.role === "admin" ? "Make user" : "Make admin"}
+                            </button>
+                            <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
+                              {account.is_active ? "Deactivate" : "Reactivate"}
+                            </button>
+                            <details className={styles.passwordReset}>
+                              <summary>Reset password</summary>
+                              <div className={styles.passwordResetFields}>
+                                <input type="password" autoComplete="new-password" minLength={8} placeholder="New password" value={passwordDrafts[account.id] || ""} onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))} />
+                                <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>Save</button>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <p className="muted">Sign in as an admin to manage users. Regular users can view personal settings only.</p>
-            )}
-          </section>
-
-          <OperatorControls isAdmin={isAdmin} onUnauthorized={expireSession} />
-
-          <section className="settings-card settings-card-wide">
-            <div className={styles.cardHeaderRow}>
-              <div>
-                <p className="eyebrow">System diagnostics</p>
-                <h3>Backend and database readiness</h3>
+                            </details>
+                            <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
-              <div className={styles.headerActions}>
-                <StatusPill status={readinessStatus} />
-                <button type="button" className="button-ghost" onClick={refreshDiagnostics} disabled={diagnostics.status === "loading"}>
-                  {diagnostics.status === "loading" ? "Checking…" : "Refresh"}
-                </button>
+            ) : null}
+
+            {currentSection.id === "ai" ? <OperatorControls isAdmin={isAdmin} onUnauthorized={expireSession} /> : null}
+
+            {currentSection.id === "system" ? (
+              <div className="settings-stack">
+                <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>Backend readiness</h3>
+                      <p className="muted">Sanitized pool health from the live backend readiness endpoint.</p>
+                    </div>
+                    <div className={styles.headerActions}>
+                      <StatusPill status={readinessStatus} />
+                      <button type="button" className="button-ghost" onClick={refreshDiagnostics} disabled={diagnostics.status === "loading"}>
+                        {diagnostics.status === "loading" ? "Checking…" : "Refresh"}
+                      </button>
+                    </div>
+                  </div>
+                  {diagnostics.error ? <p className={styles.diagnosticError}>{diagnostics.error}</p> : null}
+                  <div className="settings-list">
+                    {databaseRows.map((row) => (
+                      <div className="settings-list-item" key={row.key}>
+                        <div className="settings-list-main">
+                          <div className="settings-list-title-row">
+                            <strong>{row.label}</strong>
+                            <StatusPill status={connectionStatuses[row.key] || (diagnostics.status === "loading" ? "checking" : "not checked")} />
+                          </div>
+                          <p className="muted"><code className={styles.inlineCode}>{row.variable}</code></p>
+                          <p className="muted">{row.purpose}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="muted">Last checked: {formatCheckedAt(diagnostics.checkedAt)}.</p>
+                </section>
+
+                <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>Deployment boundary</h3>
+                      <p className="muted">Frontend, backend, browser, and stream routing.</p>
+                    </div>
+                  </div>
+                  {apiConfigurationProblem ? <p className={styles.diagnosticError}>{apiConfigurationProblem}</p> : null}
+                  <dl className="definition-list settings-definition-list">
+                    <div><dt>Browser origin</dt><dd>{browserOrigin}</dd></div>
+                    {runtimeRows.map((row) => (
+                      <div key={row.label}>
+                        <dt>{row.label}</dt>
+                        <dd><span className={styles.valueBlock}>{row.value}</span><span className={styles.valueOwner}>{row.owner}</span></dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+
+                <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>Deployment variables</h3>
+                      <p className="muted">Deployment-level variables still owned by Render and Vercel.</p>
+                    </div>
+                  </div>
+                  <div className="settings-list">
+                    {secretRows.map((row) => (
+                      <div className="settings-list-item" key={row.variable}>
+                        <div className="settings-list-main">
+                          <div className="settings-list-title-row">
+                            <code className={styles.inlineCode}>{row.variable}</code>
+                            <span className="settings-meta-pill">{row.location}</span>
+                          </div>
+                          <p className="muted">{row.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               </div>
-            </div>
-            <p className="muted">This checks the live backend readiness endpoint and reports sanitized pool health.</p>
-            {diagnostics.error ? <p className={styles.diagnosticError}>{diagnostics.error}</p> : null}
-            <div className="matrix-wrapper" tabIndex="0">
-              <table className="settings-matrix">
-                <thead><tr><th>Database</th><th>Env variable</th><th>Status</th><th>Purpose</th></tr></thead>
-                <tbody>
-                  {databaseRows.map((row) => (
-                    <tr key={row.key}>
-                      <td>{row.label}</td>
-                      <td><code className={styles.inlineCode}>{row.variable}</code></td>
-                      <td><StatusPill status={connectionStatuses[row.key] || (diagnostics.status === "loading" ? "checking" : "not checked")} /></td>
-                      <td>{row.purpose}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="muted">Last checked: {formatCheckedAt(diagnostics.checkedAt)}.</p>
-          </section>
-
-          <section className="settings-card settings-card-wide">
-            <p className="eyebrow">Deployment boundary</p>
-            <h3>Frontend, backend, and routing</h3>
-            {apiConfigurationProblem ? <p className={styles.diagnosticError}>{apiConfigurationProblem}</p> : null}
-            <dl className="definition-list">
-              <div><dt>Browser origin</dt><dd>{browserOrigin}</dd></div>
-              {runtimeRows.map((row) => (
-                <div key={row.label}>
-                  <dt>{row.label}</dt>
-                  <dd><span className={styles.valueBlock}>{row.value}</span><span className={styles.valueOwner}>{row.owner}</span></dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          <section className="settings-card settings-card-wide">
-            <p className="eyebrow">Deployment secrets</p>
-            <h3>Render and Vercel variables</h3>
-            <p className="muted">These deployment-level variables are still owned by Render/Vercel. For app-level secrets, use Provider credentials above.</p>
-            <div className="matrix-wrapper" tabIndex="0">
-              <table className="settings-matrix">
-                <thead><tr><th>Variable</th><th>Where set</th><th>Use</th></tr></thead>
-                <tbody>
-                  {secretRows.map((row) => (
-                    <tr key={row.variable}>
-                      <td><code className={styles.inlineCode}>{row.variable}</code></td>
-                      <td>{row.location}</td>
-                      <td>{row.description}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="settings-card">
-            <p className="eyebrow">Appearance</p>
-            <h3>Theme</h3>
-            <p className="muted">Light is the default. System follows your device preference and updates live when it changes.</p>
-            <ThemeModePicker />
-          </section>
-
-          <section className="settings-card">
-            <p className="eyebrow">Client boundary</p>
-            <h3>Rendering and lifecycle</h3>
-            <ul className="check-list">
-              <li>Session state resets after expiry</li>
-              <li>Messages render through an element-only markdown renderer; raw HTML is never interpreted</li>
-              <li>Cancellation terminates the active request</li>
-              <li>Malformed frames surface controlled errors</li>
-            </ul>
-          </section>
+            ) : null}
+          </div>
         </div>
       </section>
     </main>
