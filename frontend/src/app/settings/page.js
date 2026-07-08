@@ -22,13 +22,8 @@ import {
   refreshThreads,
   renameThreadEverywhere,
 } from "../../lib/workspace";
+import { OperatorControls } from "./operator-controls";
 import styles from "./settings.module.css";
-
-const pipelineRows = [
-  { step: "Input analysis", provider: "Server configuration", mode: "internal" },
-  { step: "Reasoning branch", provider: "Server configuration", mode: "internal" },
-  { step: "Terminal synthesis", provider: "Server configuration", mode: "streamed" },
-];
 
 const databaseRows = [
   {
@@ -57,13 +52,11 @@ const runtimeRows = [
   { label: "Backend ready probe", value: apiUrl("/api/health/ready"), owner: "Render route" },
   { label: "Session mode", value: "Volatile memory", owner: "Browser runtime" },
   { label: "Stream protocol", value: "Server-Sent Events", owner: "Backend API" },
-  { label: "Reconnect policy", value: "Pre-connection retry only", owner: "Client runtime" },
 ];
 
 const secretRows = [
   { variable: "SYSTEM_SESSION_SECRET", location: "Render env", description: "JWT/session signing secret." },
-  { variable: "VAULT_ENCRYPTION_KEY", location: "Render env + GitHub secret", description: "Encrypts provider credentials before database storage." },
-  { variable: "FUGU_PROVIDER_SECRET", location: "GitHub secret only", description: "Provider API key used by the bootstrap workflow." },
+  { variable: "VAULT_ENCRYPTION_KEY", location: "Render env", description: "Encrypts provider credentials before database storage." },
   { variable: "ALLOWED_ORIGINS", location: "Render env", description: "Exact Vercel origins allowed by CORS." },
   { variable: "NEXT_PUBLIC_FUGU_API_BASE_URL", location: "Vercel env", description: "Public backend origin. Must not include trailing /api." },
 ];
@@ -72,7 +65,7 @@ const emptyNewUser = { username: "", password: "", role: "user", isActive: true 
 
 function statusTone(status) {
   const normalized = String(status || "").toLowerCase();
-  if (["ready", "connected", "alive", "success", "active"].includes(normalized)) {
+  if (["ready", "connected", "alive", "success", "active", "admin", "user"].includes(normalized)) {
     return "success";
   }
   if (["loading", "checking", "pending"].includes(normalized)) {
@@ -360,7 +353,7 @@ export default function SettingsPage() {
           </button>
           <div>
             <h1 className="workspace-title" id="settings-title">Settings</h1>
-            <p className={styles.headerSubtitle}>Deployment, runtime, database, users, and client controls for this Fugu environment.</p>
+            <p className={styles.headerSubtitle}>Admin, provider, pipeline, runtime, database, and client controls for this Fugu environment.</p>
           </div>
         </header>
 
@@ -388,24 +381,11 @@ export default function SettingsPage() {
                 <form className={styles.adminForm} onSubmit={handleCreateUser}>
                   <label>
                     Username
-                    <input
-                      value={newUser.username}
-                      minLength={3}
-                      maxLength={255}
-                      onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))}
-                      required
-                    />
+                    <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
                   </label>
                   <label>
                     Initial password
-                    <input
-                      type="password"
-                      autoComplete="new-password"
-                      value={newUser.password}
-                      minLength={8}
-                      onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
-                      required
-                    />
+                    <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
                   </label>
                   <label>
                     Role
@@ -415,11 +395,7 @@ export default function SettingsPage() {
                     </select>
                   </label>
                   <label className={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={newUser.isActive}
-                      onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))}
-                    />
+                    <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
                     Active
                   </label>
                   <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create user</button>
@@ -441,46 +417,20 @@ export default function SettingsPage() {
                             <td>{account.thread_count}</td>
                             <td>
                               <div className={styles.adminActions}>
-                                <button
-                                  type="button"
-                                  className="button-ghost"
-                                  disabled={isSelf || adminStatus === "loading"}
-                                  onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}
-                                >
+                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}>
                                   {account.role === "admin" ? "Make user" : "Make admin"}
                                 </button>
-                                <button
-                                  type="button"
-                                  className="button-ghost"
-                                  disabled={isSelf || adminStatus === "loading"}
-                                  onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}
-                                >
+                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
                                   {account.is_active ? "Deactivate" : "Reactivate"}
                                 </button>
                                 <details className={styles.passwordReset}>
                                   <summary>Reset password</summary>
                                   <div className={styles.passwordResetFields}>
-                                    <input
-                                      type="password"
-                                      autoComplete="new-password"
-                                      minLength={8}
-                                      placeholder="New password"
-                                      value={passwordDrafts[account.id] || ""}
-                                      onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))}
-                                    />
-                                    <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>
-                                      Save
-                                    </button>
+                                    <input type="password" autoComplete="new-password" minLength={8} placeholder="New password" value={passwordDrafts[account.id] || ""} onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))} />
+                                    <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>Save</button>
                                   </div>
                                 </details>
-                                <button
-                                  type="button"
-                                  className="button-ghost"
-                                  disabled={isSelf || adminStatus === "loading"}
-                                  onClick={() => handleDeleteUser(account)}
-                                >
-                                  Delete
-                                </button>
+                                <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
                               </div>
                             </td>
                           </tr>
@@ -495,6 +445,8 @@ export default function SettingsPage() {
             )}
           </section>
 
+          <OperatorControls isAdmin={isAdmin} onUnauthorized={expireSession} />
+
           <section className="settings-card settings-card-wide">
             <div className={styles.cardHeaderRow}>
               <div>
@@ -508,9 +460,7 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
-            <p className="muted">
-              This checks the live backend readiness endpoint and reports sanitized pool health. Full SQL URLs are intentionally not exposed to the browser.
-            </p>
+            <p className="muted">This checks the live backend readiness endpoint and reports sanitized pool health.</p>
             {diagnostics.error ? <p className={styles.diagnosticError}>{diagnostics.error}</p> : null}
             <div className="matrix-wrapper" tabIndex="0">
               <table className="settings-matrix">
@@ -546,11 +496,9 @@ export default function SettingsPage() {
           </section>
 
           <section className="settings-card settings-card-wide">
-            <p className="eyebrow">Operator configuration</p>
-            <h3>Secrets and server-side variables</h3>
-            <p className="muted">
-              These are the values that belong in Render, Vercel, or GitHub Actions. The Settings page shows names and responsibility only; secret values stay server-side.
-            </p>
+            <p className="eyebrow">Deployment secrets</p>
+            <h3>Render and Vercel variables</h3>
+            <p className="muted">These deployment-level variables are still owned by Render/Vercel. For app-level secrets, use Provider credentials above.</p>
             <div className="matrix-wrapper" tabIndex="0">
               <table className="settings-matrix">
                 <thead><tr><th>Variable</th><th>Where set</th><th>Use</th></tr></thead>
@@ -570,9 +518,7 @@ export default function SettingsPage() {
           <section className="settings-card">
             <p className="eyebrow">Appearance</p>
             <h3>Theme</h3>
-            <p className="muted">
-              Light is the default. System follows your device preference and updates live when it changes.
-            </p>
+            <p className="muted">Light is the default. System follows your device preference and updates live when it changes.</p>
             <ThemeModePicker />
           </section>
 
@@ -585,24 +531,6 @@ export default function SettingsPage() {
               <li>Cancellation terminates the active request</li>
               <li>Malformed frames surface controlled errors</li>
             </ul>
-          </section>
-
-          <section className="settings-card settings-card-wide">
-            <p className="eyebrow">Graph topology</p>
-            <h3>Configured execution stages</h3>
-            <div className="matrix-wrapper" tabIndex="0">
-              <table className="settings-matrix">
-                <thead><tr><th>Stage</th><th>Provider</th><th>Visibility</th></tr></thead>
-                <tbody>
-                  {pipelineRows.map((row) => (
-                    <tr key={row.step}>
-                      <td>{row.step}</td><td>{row.provider}</td><td>{row.mode}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="muted">Pipeline definitions and provider configuration remain controlled by the backend bootstrap workflow.</p>
           </section>
         </div>
       </section>
