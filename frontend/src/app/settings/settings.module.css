@@ -1,0 +1,108 @@
+.headerSubtitle {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.cardHeaderRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0.22rem 0.58rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.statusPillSuccess {
+  border-color: rgba(44, 125, 82, 0.35);
+  background: rgba(44, 125, 82, 0.1);
+  color: #2c7d52;
+}
+
+.statusPillDanger {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.statusPillLoading {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.statusPillNeutral {
+  border-color: var(--line-strong);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.inlineCode {
+  display: inline-flex;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--code-bg);
+  color: var(--soft);
+  padding: 0.12rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.valueBlock {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.valueOwner {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.diagnosticError {
+  margin: 0.85rem 0 0;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 0.75rem 0.85rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .cardHeaderRow {
+    display: grid;
+  }
+
+  .headerActions {
+    justify-content: flex-start;
+  }
+}
