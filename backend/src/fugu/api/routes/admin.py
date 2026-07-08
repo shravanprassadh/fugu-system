@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -35,7 +35,7 @@ class AdminUserResponse(BaseModel):
         return cls(
             id=user.id,
             username=user.username,
-            role=user.role,  # type: ignore[arg-type]
+            role=cast(UserRole, user.role),
             is_active=user.is_active,
             token_version=user.token_version,
             created_at=user.created_at,
@@ -74,6 +74,12 @@ async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
 
 async def _active_admin_count(session: AsyncSession) -> int:
     statement = select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
+    result = await session.scalar(statement)
+    return int(result or 0)
+
+
+async def _thread_count(session: AsyncSession, user_id: int) -> int:
+    statement = select(func.count()).select_from(Thread).where(Thread.user_id == user_id)
     result = await session.scalar(statement)
     return int(result or 0)
 
@@ -147,7 +153,10 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user changes were supplied.")
     target_user = await _get_user_or_404(session, user_id)
     if target_user.id == current_admin.id and (payload.role == "user" or payload.is_active is False):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot disable or demote your own admin account.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot disable or demote your own admin account.",
+        )
     await _prevent_last_admin_loss(
         session,
         target_user=target_user,
@@ -160,7 +169,7 @@ async def update_user(
         target_user.is_active = payload.is_active
     target_user.token_version += 1
     await session.flush()
-    return AdminUserResponse.from_user(target_user, thread_count=len(target_user.threads))
+    return AdminUserResponse.from_user(target_user, thread_count=await _thread_count(session, target_user.id))
 
 
 @admin_router.post("/users/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
