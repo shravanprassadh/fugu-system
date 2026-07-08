@@ -22,12 +22,28 @@ def test_sqlalchemy_url_translates_libpq_sslmode_for_asyncpg() -> None:
     assert "sslmode" not in normalized.query
 
 
+def test_sqlalchemy_url_drops_neon_channel_binding_for_asyncpg() -> None:
+    normalized = make_url(sqlalchemy_asyncpg_url("postgresql://localhost/fugu?sslmode=require&channel_binding=require"))
+
+    assert normalized.drivername == "postgresql+asyncpg"
+    assert normalized.query["ssl"] == "require"
+    assert "channel_binding" not in normalized.query
+
+
 def test_direct_asyncpg_dsn_translates_sqlalchemy_ssl_option() -> None:
     normalized = make_url(asyncpg_dsn("postgresql+asyncpg://localhost/fugu?ssl=verify-full"))
 
     assert normalized.drivername == "postgresql"
     assert normalized.query["sslmode"] == "verify-full"
     assert "ssl" not in normalized.query
+
+
+def test_direct_asyncpg_dsn_drops_neon_channel_binding() -> None:
+    normalized = make_url(asyncpg_dsn("postgresql://localhost/fugu?sslmode=require&channel_binding=require"))
+
+    assert normalized.drivername == "postgresql"
+    assert normalized.query["sslmode"] == "require"
+    assert "channel_binding" not in normalized.query
 
 
 def test_conflicting_ssl_options_are_rejected() -> None:
