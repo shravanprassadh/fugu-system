@@ -11,6 +11,7 @@ import {
 } from "../../components/ui/message-renderer";
 import { PromptTextArea } from "../../components/ui/text-area";
 import { logout } from "../../lib/api-client";
+import { loadModelPreference } from "../../lib/model-options";
 import { executePipelineStream } from "../../lib/stream-client";
 import {
   createThreadFromPrompt,
@@ -238,6 +239,7 @@ export default function ChatPage() {
       await executePipelineStream({
         threadId,
         prompt: normalized,
+        modelPreference: loadModelPreference(),
         signal: controller.signal,
         requestId,
       });
@@ -320,61 +322,53 @@ export default function ChatPage() {
           >
             <MenuIcon />
           </button>
-          <h1 className="workspace-title" title={activeThread?.name ?? "New chat"}>
-            {activeThread?.name ?? "New chat"}
-          </h1>
-          {isRunning ? (
-            <span className="run-indicator" aria-live="polite">
-              <span className="run-indicator-dot" aria-hidden="true" />
-              {activeStep ? `Running · ${activeStep}` : "Running"}
-            </span>
+          <h1 className="workspace-title">{activeThread?.name || "New conversation"}</h1>
+          {activeStep ? (
+            <div className="run-indicator" title={activeStep}>
+              <span className="run-indicator-dot" />
+              <span>{activeStep}</span>
+            </div>
           ) : null}
         </header>
 
-        {isNewChat && !isHistoryLoading ? (
-          <div className="hero">
+        {isNewChat ? (
+          <section className="hero">
             <div className="hero-inner">
-              <p className="hero-mark" aria-hidden="true">河豚</p>
+              <p className="hero-mark">FUGU</p>
               <h2 className="hero-greeting">{greeting}</h2>
-              <p className="hero-subtitle">
-                Your prompt starts a new conversation and streams the pipeline&apos;s final stage back here.
-              </p>
+              <p className="hero-subtitle">Start a thread and Fugu will stream the terminal response while persisting the full execution trace.</p>
               {composer}
             </div>
-          </div>
+            {workspaceError || streamError ? (
+              <p className="form-error hero-error">{workspaceError || streamError}</p>
+            ) : null}
+          </section>
         ) : (
           <>
-            <div className="message-scroll" ref={scrollRef} onScroll={handleScroll} aria-live="polite">
+            <div className="message-scroll" ref={scrollRef} onScroll={handleScroll}>
               <div className="message-column">
-                {isHistoryLoading ? (
-                  <p className="history-loading">Loading conversation…</p>
-                ) : (
-                  messages.map((message, index) => {
-                    const isLast = index === messages.length - 1;
-                    const isStreamingMessage = isLast && isRunning && message.role === "assistant";
-                    if (message.role === "user") {
-                      return (
-                        <article className="message message-user" key={message.id}>
-                          <SafePlaintextRenderer rawContentText={message.content} />
-                        </article>
-                      );
-                    }
-                    return (
-                      <article
-                        className={`message message-assistant${isStreamingMessage ? " message-streaming" : ""}`}
-                        key={message.id}
-                      >
-                        {message.content ? (
-                          <SafeMarkdownRenderer rawContentText={message.content} />
-                        ) : (
-                          <span className="thinking-dots" aria-label="Waiting for the first token">
-                            <span /><span /><span />
-                          </span>
-                        )}
-                      </article>
-                    );
-                  })
-                )}
+                {workspaceError || streamError ? (
+                  <p className="stream-error">{workspaceError || streamError}</p>
+                ) : null}
+                {isHistoryLoading ? <p className="history-loading">Loading conversation…</p> : null}
+                {messages.map((message) => (
+                  <article key={message.id} className={`message message-${message.role} ${isRunning && message === messages[messages.length - 1] ? "message-streaming" : ""}`}>
+                    {message.role === "assistant" ? (
+                      <SafeMarkdownRenderer content={message.content} />
+                    ) : (
+                      <SafePlaintextRenderer content={message.content} />
+                    )}
+                  </article>
+                ))}
+                {isRunning && !messages.at(-1)?.content ? (
+                  <div className="message message-assistant">
+                    <div className="thinking-dots" aria-label="Fugu is thinking">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                ) : null}
               </div>
               {showJumpToLatest ? (
                 <button type="button" className="jump-to-latest" onClick={jumpToLatest} aria-label="Jump to latest message">
@@ -382,33 +376,9 @@ export default function ChatPage() {
                 </button>
               ) : null}
             </div>
-
-            <div className="composer-dock">
-              {streamError ? (
-                <div className="stream-error" role="alert">
-                  <span>{streamError}</span>
-                  {lastPrompt && !isRunning ? (
-                    <button type="button" className="button-ghost" onClick={() => runPrompt(lastPrompt)}>
-                      Retry
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              {workspaceError ? (
-                <div className="stream-error" role="alert">
-                  <span>{workspaceError}</span>
-                </div>
-              ) : null}
-              {composer}
-            </div>
+            <div className="composer-dock">{composer}</div>
           </>
         )}
-
-        {isNewChat && workspaceError ? (
-          <div className="stream-error hero-error" role="alert">
-            <span>{workspaceError}</span>
-          </div>
-        ) : null}
       </section>
     </main>
   );
