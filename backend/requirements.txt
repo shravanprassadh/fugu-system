@@ -1,7 +1,0 @@
--r requirements-runtime.txt
-
-aiosqlite==0.20.0
-pytest==9.1.1
-pytest-asyncio==1.4.0
-mypy==1.10.1
-ruff==0.4.10
