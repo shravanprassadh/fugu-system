@@ -1,3 +1,4 @@
+# fmt: off
 """Administrative API routes for Fugu operators."""
 
 from __future__ import annotations
