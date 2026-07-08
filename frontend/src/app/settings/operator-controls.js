@@ -5,12 +5,22 @@ import { useCallback, useEffect, useState } from "react";
 import {
   listPipelineSteps,
   listProviderCredentials,
+  testDatabaseTransferTargets,
+  transferDatabases,
   updatePipelineStep,
   upsertProviderCredential,
 } from "../../lib/api-client";
 import styles from "./settings.module.css";
 
 const emptyProviderForm = { providerName: "openrouter", secret: "" };
+const emptyDatabaseForm = {
+  masterRouterDbUrl: "",
+  metadataSidebarDbUrl: "",
+  transactionalLogsDbUrl: "",
+  confirmation: "",
+  replaceExisting: false,
+  applyToCurrentProcess: true,
+};
 
 function StatusPill({ children, tone = "neutral" }) {
   const className = `${styles.statusPill} ${styles[`statusPill${tone[0].toUpperCase()}${tone.slice(1)}`]}`;
@@ -34,10 +44,22 @@ function dependencyText(step) {
   return step.prerequisite_dependencies?.length ? step.prerequisite_dependencies.join(", ") : "";
 }
 
+function databaseStatusTone(status) {
+  if (["connected", "copied", "active"].includes(status)) {
+    return "success";
+  }
+  if (status === "failed") {
+    return "danger";
+  }
+  return "neutral";
+}
+
 export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [providerCredentials, setProviderCredentials] = useState([]);
   const [pipelineSteps, setPipelineSteps] = useState([]);
   const [providerForm, setProviderForm] = useState(emptyProviderForm);
+  const [databaseForm, setDatabaseForm] = useState(emptyDatabaseForm);
+  const [databaseResult, setDatabaseResult] = useState(null);
   const [pipelineDrafts, setPipelineDrafts] = useState({});
   const [status, setStatus] = useState("idle");
   const [notice, setNotice] = useState("");
@@ -102,6 +124,42 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     }
   }
 
+  async function handleDatabaseTest(event) {
+    event.preventDefault();
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const result = await testDatabaseTransferTargets(databaseForm);
+      setDatabaseResult(result);
+      setNotice("Candidate database URLs accepted test connections.");
+      setStatus("ready");
+    } catch (operationError) {
+      handleError(operationError, "Could not test candidate database URLs.");
+    }
+  }
+
+  async function handleDatabaseTransfer() {
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const result = await transferDatabases(databaseForm);
+      setDatabaseResult(result);
+      setNotice("Database transfer completed. Runtime pools have been updated for this process.");
+      setDatabaseForm((current) => ({
+        ...current,
+        masterRouterDbUrl: "",
+        metadataSidebarDbUrl: "",
+        transactionalLogsDbUrl: "",
+        confirmation: "",
+      }));
+      setStatus("ready");
+    } catch (operationError) {
+      handleError(operationError, "Could not transfer databases.");
+    }
+  }
+
   function updateDraft(stepId, patch) {
     setPipelineDrafts((current) => ({
       ...current,
@@ -144,11 +202,114 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       <section className="settings-card settings-card-wide">
         <div className={styles.cardHeaderRow}>
           <div>
+            <p className="eyebrow">Database transfer</p>
+            <h3>Connection migration and controlled reconnect</h3>
+          </div>
+          <div className={styles.headerActions}>
+            <StatusPill tone={status === "failed" ? "danger" : status === "loading" ? "loading" : "success"}>{status}</StatusPill>
+          </div>
+        </div>
+        <p className="muted">
+          Paste new Postgres URLs, test them, then transfer current tables. URLs are submitted as write-only values; results are returned with passwords masked.
+        </p>
+        {error ? <p className={styles.diagnosticError}>{error}</p> : null}
+        {notice ? <p className={styles.diagnosticSuccess}>{notice}</p> : null}
+        <form className={styles.databaseTransferForm} onSubmit={handleDatabaseTest}>
+          <label>
+            Master router DB URL
+            <input
+              type="password"
+              autoComplete="off"
+              value={databaseForm.masterRouterDbUrl}
+              onChange={(event) => setDatabaseForm((current) => ({ ...current, masterRouterDbUrl: event.target.value }))}
+              required
+            />
+          </label>
+          <label>
+            Metadata sidebar DB URL
+            <input
+              type="password"
+              autoComplete="off"
+              value={databaseForm.metadataSidebarDbUrl}
+              onChange={(event) => setDatabaseForm((current) => ({ ...current, metadataSidebarDbUrl: event.target.value }))}
+              required
+            />
+          </label>
+          <label>
+            Transactional logs DB URL
+            <input
+              type="password"
+              autoComplete="off"
+              value={databaseForm.transactionalLogsDbUrl}
+              onChange={(event) => setDatabaseForm((current) => ({ ...current, transactionalLogsDbUrl: event.target.value }))}
+              required
+            />
+          </label>
+          <div className={styles.transferToggles}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={databaseForm.replaceExisting}
+                onChange={(event) => setDatabaseForm((current) => ({ ...current, replaceExisting: event.target.checked }))}
+              />
+              Replace rows in destination
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={databaseForm.applyToCurrentProcess}
+                onChange={(event) => setDatabaseForm((current) => ({ ...current, applyToCurrentProcess: event.target.checked }))}
+              />
+              Use new pools now
+            </label>
+          </div>
+          <button type="submit" className="button-ghost" disabled={status === "loading"}>Test connections</button>
+        </form>
+        <div className={styles.transferConfirmRow}>
+          <label>
+            Confirmation phrase
+            <input
+              value={databaseForm.confirmation}
+              onChange={(event) => setDatabaseForm((current) => ({ ...current, confirmation: event.target.value }))}
+              placeholder="TRANSFER DATABASES"
+            />
+          </label>
+          <button
+            type="button"
+            className="button-primary"
+            onClick={handleDatabaseTransfer}
+            disabled={status === "loading" || databaseForm.confirmation !== "TRANSFER DATABASES"}
+          >
+            Transfer and reconnect
+          </button>
+        </div>
+        {databaseResult ? (
+          <div className="matrix-wrapper" tabIndex="0">
+            <table className="settings-matrix">
+              <thead><tr><th>Target</th><th>Status</th><th>Rows copied</th><th>Masked URL</th></tr></thead>
+              <tbody>
+                {databaseResult.targets.map((target) => (
+                  <tr key={target.target}>
+                    <td>{target.target}</td>
+                    <td><StatusPill tone={databaseStatusTone(target.status)}>{target.status}</StatusPill></td>
+                    <td>{target.row_count ?? "—"}</td>
+                    <td><code className={styles.inlineCode}>{target.masked_url}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted">{databaseResult.note}</p>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="settings-card settings-card-wide">
+        <div className={styles.cardHeaderRow}>
+          <div>
             <p className="eyebrow">Secrets</p>
             <h3>Provider credentials</h3>
           </div>
           <div className={styles.headerActions}>
-            <StatusPill tone={status === "failed" ? "danger" : status === "loading" ? "loading" : "success"}>{status}</StatusPill>
             <button type="button" className="button-ghost" onClick={refreshOperatorState} disabled={status === "loading"}>
               Refresh operator state
             </button>
@@ -157,8 +318,6 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
         <p className="muted">
           Rotate provider API keys without opening Neon. Existing secret values are write-only: they are encrypted server-side and never rendered back into the browser.
         </p>
-        {error ? <p className={styles.diagnosticError}>{error}</p> : null}
-        {notice ? <p className={styles.diagnosticSuccess}>{notice}</p> : null}
         <form className={styles.adminForm} onSubmit={handleProviderSubmit}>
           <label>
             Provider
