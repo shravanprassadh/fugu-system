@@ -45,6 +45,7 @@ class PreparedPipeline:
     thread_id: int
     user_id: int
     initial_prompt: str
+    conversation_context: str
     ordered_steps: tuple[PipelineStepDefinition, ...]
     step_run_ids: dict[str, int]
     terminal_step_name: str
