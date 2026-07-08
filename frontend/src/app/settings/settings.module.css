@@ -87,14 +87,105 @@
   font-size: 0.78rem;
 }
 
-.diagnosticError {
+.diagnosticError,
+.diagnosticSuccess {
   margin: 0.85rem 0 0;
-  border: 1px solid var(--danger);
   border-radius: 10px;
-  background: var(--danger-soft);
-  color: var(--danger);
   padding: 0.75rem 0.85rem;
   line-height: 1.5;
+}
+
+.diagnosticError {
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.diagnosticSuccess {
+  border: 1px solid rgba(44, 125, 82, 0.35);
+  background: rgba(44, 125, 82, 0.1);
+  color: #2c7d52;
+}
+
+.adminForm {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) minmax(120px, 0.55fr) auto auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin: 1rem 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 0.9rem;
+}
+
+.adminForm label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.adminForm select {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.78rem 0.9rem;
+}
+
+.checkboxLabel {
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 0.45rem !important;
+  min-height: 2.8rem;
+}
+
+.checkboxLabel input {
+  width: auto;
+}
+
+.adminActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.passwordReset {
+  min-width: 12rem;
+}
+
+.passwordReset summary {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--soft);
+  padding: 0.5rem 0.85rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.passwordReset summary:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.passwordResetFields {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.passwordResetFields input {
+  min-width: 12rem;
+}
+
+@media (max-width: 900px) {
+  .adminForm {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
