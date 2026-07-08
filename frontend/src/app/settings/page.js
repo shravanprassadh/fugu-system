@@ -226,9 +226,13 @@ export default function SettingsPage() {
   }, [isAuthenticated, expireSession, refreshDiagnostics, isAdmin, loadAdminUsers]);
 
   useEffect(() => {
-    if (!isAdmin && ["members", "ai"].includes(activeSection)) {
-      setActiveSection("general");
+    if (isAdmin || !["members", "ai"].includes(activeSection)) {
+      return undefined;
     }
+    const timer = window.setTimeout(() => {
+      setActiveSection("general");
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [activeSection, isAdmin]);
 
   async function signOut() {
