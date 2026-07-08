@@ -17,12 +17,13 @@ from fugu.providers.exceptions import (
     ProviderTimeoutError,
     ProviderTransportError,
 )
+from fugu.providers.nvidia import NVIDIA_CHAT_COMPLETIONS_URL, NvidiaStreamProvider
 from fugu.providers.openrouter import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
     OpenRouterStreamProvider,
     ServerSentEventParser,
 )
-from fugu.providers.registry import ProviderRegistry
+from fugu.providers.registry import ProviderRegistry, get_provider_registry
 
 
 class FakeProvider(ExecutionProvider):
@@ -53,12 +54,12 @@ class ChunkedByteStream(httpx.AsyncByteStream):
 AsyncTransportHandler = Callable[[httpx.Request], Awaitable[httpx.Response]]
 
 
-def _request() -> ProviderRequest:
+def _request(*, model_identifier: str = "openai/gpt-test") -> ProviderRequest:
     return ProviderRequest(
         prompt_content="Explain the modular kernel.",
         system_directives="Answer precisely.",
         credential_token="provider-secret",
-        model_identifier="openai/gpt-test",
+        model_identifier=model_identifier,
     )
 
 
@@ -66,8 +67,8 @@ def _client(handler: AsyncTransportHandler) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-async def _collect(provider: OpenRouterStreamProvider) -> list[str]:
-    return [token async for token in provider.generate_token_stream(_request())]
+async def _collect(provider: ExecutionProvider, *, model_identifier: str = "openai/gpt-test") -> list[str]:
+    return [token async for token in provider.generate_token_stream(_request(model_identifier=model_identifier))]
 
 
 def test_provider_registry_registration_resolution_and_duplicates() -> None:
@@ -83,6 +84,16 @@ def test_provider_registry_registration_resolution_and_duplicates() -> None:
 
     registry.register("openrouter", AlternateFakeProvider, replace=True)
     assert isinstance(registry.resolve("openrouter"), AlternateFakeProvider)
+
+
+def test_default_provider_registry_includes_openrouter_and_nvidia() -> None:
+    """The production registry exposes every supported hosted execution provider."""
+    get_provider_registry.cache_clear()
+    registry = get_provider_registry()
+
+    assert registry.registered_names() == ("nvidia", "openrouter")
+    assert isinstance(registry.resolve("nvidia"), NvidiaStreamProvider)
+    assert isinstance(registry.resolve("openrouter"), OpenRouterStreamProvider)
 
 
 def test_provider_registry_rejects_unknown_and_blank_names() -> None:
@@ -125,6 +136,30 @@ async def test_openrouter_reconstructs_fragmented_sse_chunks() -> None:
     provider = OpenRouterStreamProvider(client=client)
     try:
         assert await _collect(provider) == ["Sovereign", " Kernel"]
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_reconstructs_fragmented_sse_chunks() -> None:
+    """NVIDIA OpenAI-compatible SSE chunks are reconstructed safely."""
+    chunks = [
+        b'data: {"choices":[{"delta":{"content":"Acceler',
+        b'ated"}}]}\n\ndata: {"choices":[{"delta":{"content":" inference"}}]}\n\n',
+        b"data: [DONE]\n\n",
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == NVIDIA_CHAT_COMPLETIONS_URL
+        assert request.headers["authorization"] == "Bearer provider-secret"
+        payload = request.read().decode("utf-8")
+        assert "meta/llama" in payload
+        return httpx.Response(200, stream=ChunkedByteStream(chunks))
+
+    client = _client(handler)
+    provider = NvidiaStreamProvider(client=client)
+    try:
+        assert await _collect(provider, model_identifier="meta/llama-3.1-70b-instruct") == ["Accelerated", " inference"]
     finally:
         await client.aclose()
 
@@ -185,6 +220,36 @@ async def test_openrouter_maps_http_statuses(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "expected_error"),
+    [
+        (401, ProviderAuthenticationError),
+        (403, ProviderAuthenticationError),
+        (429, ProviderRateLimitError),
+        (408, ProviderTimeoutError),
+        (504, ProviderTimeoutError),
+        (500, ProviderTransportError),
+    ],
+)
+async def test_nvidia_maps_http_statuses(
+    status_code: int,
+    expected_error: type[Exception],
+) -> None:
+    """NVIDIA HTTP statuses map to stable typed application failures."""
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code)
+
+    client = _client(handler)
+    provider = NvidiaStreamProvider(client=client)
+    try:
+        with pytest.raises(expected_error):
+            await _collect(provider)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_openrouter_maps_network_timeout() -> None:
     """HTTPX timeout exceptions become ProviderTimeoutError."""
 
@@ -236,6 +301,25 @@ async def test_openrouter_rejects_invalid_json_payload() -> None:
 
 
 @pytest.mark.asyncio
+async def test_nvidia_rejects_invalid_json_payload() -> None:
+    """Invalid NVIDIA SSE JSON is raised as a typed malformed-response error."""
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=ChunkedByteStream([b"data: {invalid-json}\n\n"]),
+        )
+
+    client = _client(handler)
+    provider = NvidiaStreamProvider(client=client)
+    try:
+        with pytest.raises(ProviderResponseMalformedError):
+            await _collect(provider)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_openrouter_ignores_non_data_sse_frames() -> None:
     """SSE comments and metadata frames do not crash or produce tokens."""
 
@@ -278,6 +362,38 @@ async def test_openrouter_maps_vendor_error_frames(
 
     client = _client(handler)
     provider = OpenRouterStreamProvider(client=client)
+    try:
+        with pytest.raises(expected_error):
+            await _collect(provider)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "expected_error"),
+    [
+        (401, ProviderAuthenticationError),
+        (429, ProviderRateLimitError),
+        (504, ProviderTimeoutError),
+        (500, ProviderTransportError),
+    ],
+)
+async def test_nvidia_maps_vendor_error_frames(
+    code: int,
+    expected_error: type[Exception],
+) -> None:
+    """NVIDIA error objects inside successful streams map to typed errors."""
+    payload = f'data: {{"error":{{"code":{code},"message":"provider failure"}}}}\n\n'
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=ChunkedByteStream([payload.encode("utf-8")]),
+        )
+
+    client = _client(handler)
+    provider = NvidiaStreamProvider(client=client)
     try:
         with pytest.raises(expected_error):
             await _collect(provider)
