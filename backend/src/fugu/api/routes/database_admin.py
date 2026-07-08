@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from urllib.parse import urlsplit
-from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -18,7 +17,7 @@ database_admin_router = APIRouter(prefix="/api/admin/database", tags=["database-
 class DatabaseConnectionSummary(BaseModel):
     """Sanitized runtime database connection metadata."""
 
-    target: Literal["master", "metadata", "logs"]
+    target: str
     label: str
     env_key: str
     masked_url: str
