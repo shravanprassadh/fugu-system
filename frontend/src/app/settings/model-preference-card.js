@@ -42,7 +42,7 @@ export function ModelPreferenceCard() {
         </div>
         <span className={styles.statusPill}>user preference</span>
       </div>
-      <div className={styles.preferenceForm}>
+      <div className="settings-preference-form">
         <label>
           Provider
           <select value={providerType} onChange={(event) => updateProvider(event.target.value)}>
@@ -61,7 +61,7 @@ export function ModelPreferenceCard() {
         </label>
       </div>
       <p className="muted">
-        Admins still manage provider API keys in AI & operations. If a provider key is missing, runs using that provider will fail clearly.
+        Admins still manage provider API keys in AI operations. If a provider key is missing, runs using that provider will fail clearly.
       </p>
     </section>
   );
