@@ -27,6 +27,11 @@ async function openStream({ threadId, prompt, signal, fetchImpl, credential }) {
   });
 }
 
+function pipelineErrorMessage(payload) {
+  const error = payload.error || "The pipeline reported an execution failure.";
+  return payload.error_type ? `${payload.error_type}: ${error}` : error;
+}
+
 function applyEvent(store, requestId, event) {
   const payload = event.data;
   if (event.event === "done") {
@@ -61,7 +66,7 @@ function applyEvent(store, requestId, event) {
     store.getState().finishStream(requestId, "completed");
     return true;
   } else if (eventType === "error") {
-    const message = payload.error || "The pipeline reported an execution failure.";
+    const message = pipelineErrorMessage(payload);
     store.getState().updateExecution(requestId, {
       runId: payload.run_id,
       status: "failed",
