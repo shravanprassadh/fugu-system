@@ -16,6 +16,10 @@ _SUPPORTED_SSL_MODES = {
     "verify-ca",
     "verify-full",
 }
+# Neon/libpq URLs may include channel_binding=require. asyncpg does not expose
+# channel binding as a connect() keyword through SQLAlchemy, so preserving it in
+# the query causes: connect() got an unexpected keyword argument 'channel_binding'.
+_ASYNCPG_UNSUPPORTED_QUERY_OPTIONS = {"channel_binding"}
 
 
 def _postgresql_url(value: object) -> URL:
@@ -41,6 +45,12 @@ def _pop_single_query_value(
     return value
 
 
+def _drop_query_options(query: dict[str, QueryValue], keys: set[str]) -> None:
+    """Remove query options unsupported by the target driver."""
+    for key in keys:
+        query.pop(key, None)
+
+
 def _validated_ssl_mode(value: str | None) -> str | None:
     """Validate PostgreSQL SSL policy values shared by libpq and asyncpg."""
     if value is None:
@@ -57,6 +67,7 @@ def sqlalchemy_asyncpg_url(value: object) -> str:
     query: dict[str, QueryValue] = dict(database_url.query)
     ssl_mode = _validated_ssl_mode(_pop_single_query_value(query, "sslmode"))
     explicit_ssl = _validated_ssl_mode(_pop_single_query_value(query, "ssl"))
+    _drop_query_options(query, _ASYNCPG_UNSUPPORTED_QUERY_OPTIONS)
 
     if ssl_mode is not None and explicit_ssl is not None and ssl_mode != explicit_ssl:
         raise ValueError("Database URL contains conflicting ssl and sslmode values.")
@@ -78,6 +89,7 @@ def asyncpg_dsn(value: object) -> str:
     query: dict[str, QueryValue] = dict(database_url.query)
     ssl_mode = _validated_ssl_mode(_pop_single_query_value(query, "sslmode"))
     explicit_ssl = _validated_ssl_mode(_pop_single_query_value(query, "ssl"))
+    _drop_query_options(query, _ASYNCPG_UNSUPPORTED_QUERY_OPTIONS)
 
     if ssl_mode is not None and explicit_ssl is not None and ssl_mode != explicit_ssl:
         raise ValueError("Database URL contains conflicting ssl and sslmode values.")
