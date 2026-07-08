@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from fugu.boot.migrations import MigrationError, _resolve_alembic_config
 
 
