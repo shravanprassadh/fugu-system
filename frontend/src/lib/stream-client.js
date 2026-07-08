@@ -32,6 +32,46 @@ function pipelineErrorMessage(payload) {
   return payload.error_type ? `${payload.error_type}: ${error}` : error;
 }
 
+function validationDetailMessage(detail) {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+        if (item?.msg) {
+          const location = Array.isArray(item.loc) ? item.loc.join(".") : item.loc;
+          return location ? `${location}: ${item.msg}` : item.msg;
+        }
+        if (item?.detail) {
+          return item.detail;
+        }
+        return JSON.stringify(item);
+      })
+      .join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || detail.error || JSON.stringify(detail);
+  }
+  return null;
+}
+
+async function httpErrorMessage(response) {
+  try {
+    const payload = await response.json();
+    const detail = validationDetailMessage(payload.detail);
+    if (detail) {
+      return detail;
+    }
+  } catch {
+    // Fall through to generic status text.
+  }
+  return `The server returned status ${response.status}.`;
+}
+
 function applyEvent(store, requestId, event) {
   const payload = event.data;
   if (event.event === "done") {
@@ -127,14 +167,12 @@ export async function executePipelineStream({
     throw new StreamClientError("The session has expired or was rejected.", "session_expired");
   }
   if (!response.ok) {
+    const message = await httpErrorMessage(response);
     store.getState().updateExecution(requestId, {
       status: "failed",
-      error: `The server returned status ${response.status}.`,
+      error: message,
     });
-    throw new StreamClientError(
-      `The server returned status ${response.status}.`,
-      "http_failure",
-    );
+    throw new StreamClientError(message, "http_failure");
   }
   if (!response.body) {
     throw new StreamClientError("The server returned no streaming response body.", "missing_body");
