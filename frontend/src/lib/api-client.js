@@ -255,3 +255,37 @@ export function transferDatabases(form, options = {}) {
     },
   });
 }
+
+export function getRenderConfig(options) {
+  return authorizedRequest("/api/admin/render/config", options);
+}
+
+export function saveRenderConfig({ serviceId, apiToken }, options = {}) {
+  const body = { service_id: serviceId };
+  if (apiToken) {
+    body.api_token = apiToken;
+  }
+  return authorizedRequest("/api/admin/render/config", {
+    ...options,
+    method: "POST",
+    body,
+  });
+}
+
+export function testRenderConfig(options = {}) {
+  return authorizedRequest("/api/admin/render/config/test", {
+    ...options,
+    method: "POST",
+  });
+}
+
+export function persistDatabaseEnvToRender(form, options = {}) {
+  return authorizedRequest("/api/admin/render/database-env", {
+    ...options,
+    method: "POST",
+    body: {
+      ...databasePayloadFromForm(form),
+      trigger_deploy: form.triggerRenderDeploy,
+    },
+  });
+}
