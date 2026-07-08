@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from fugu.api.routes import auth_router, execution_router, health_router, threads_router
+from fugu.api.routes import admin_router, auth_router, execution_router, health_router, threads_router
 from fugu.api.routes.health import inspect_database_readiness
 from fugu.boot.config import InfrastructureConfig, get_settings
 from fugu.database.connection import DatabaseSessionRegistry, get_session_registry
@@ -127,6 +127,7 @@ def create_app(
         settings_provider=runtime_settings,
     )
     application.include_router(auth_router)
+    application.include_router(admin_router)
     application.include_router(execution_router)
     application.include_router(threads_router)
     application.include_router(health_router)
