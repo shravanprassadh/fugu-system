@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./settings-mobile.css";
 
 import { themeInitScript } from "../lib/theme";
 
