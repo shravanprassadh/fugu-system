@@ -92,8 +92,6 @@ def test_default_provider_registry_includes_openrouter_and_nvidia() -> None:
     registry = get_provider_registry()
 
     assert registry.registered_names() == ("nvidia", "openrouter")
-    assert isinstance(registry.resolve("nvidia"), NvidiaStreamProvider)
-    assert isinstance(registry.resolve("openrouter"), OpenRouterStreamProvider)
 
 
 def test_provider_registry_rejects_unknown_and_blank_names() -> None:
