@@ -62,8 +62,10 @@ class ProviderRegistry:
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
     """Build the application registry lazily to avoid import-time clients or settings."""
+    from fugu.providers.nvidia import NvidiaStreamProvider
     from fugu.providers.openrouter import OpenRouterStreamProvider
 
     registry = ProviderRegistry()
+    registry.register("nvidia", NvidiaStreamProvider)
     registry.register("openrouter", OpenRouterStreamProvider)
     return registry
