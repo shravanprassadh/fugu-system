@@ -22,6 +22,7 @@ import {
   refreshThreads,
   renameThreadEverywhere,
 } from "../../lib/workspace";
+import { ModelPreferenceCard } from "./model-preference-card";
 import { OperatorControls } from "./operator-controls";
 import styles from "./settings.module.css";
 
@@ -29,7 +30,7 @@ const settingsSections = [
   {
     id: "general",
     label: "General",
-    description: "Theme and client behavior",
+    description: "Theme, model and client behavior",
   },
   {
     id: "members",
@@ -39,8 +40,8 @@ const settingsSections = [
   },
   {
     id: "ai",
-    label: "AI & operations",
-    description: "Providers, models, pipeline and transfer",
+    label: "AI operations",
+    description: "API keys, pipeline, databases and deployment",
     adminOnly: true,
   },
   {
@@ -427,6 +428,8 @@ export default function SettingsPage() {
                     <ThemeModePicker />
                   </div>
                 </section>
+
+                <ModelPreferenceCard />
 
                 <section className="settings-pane">
                   <div className="settings-row settings-row-top">
