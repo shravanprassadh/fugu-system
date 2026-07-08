@@ -13,7 +13,7 @@ from fugu.database.connection import (
     get_session_registry,
 )
 from fugu.database.exceptions import EntityNotFoundError
-from fugu.database.models import PipelineStep
+from fugu.database.models import Message, PipelineStep
 from fugu.database.repositories import (
     MessageRepository,
     PipelineRepository,
@@ -36,6 +36,9 @@ from fugu.execution.models import (
 from fugu.providers.base import ProviderRequest
 from fugu.providers.registry import ProviderRegistry, get_provider_registry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
+
+_MAX_MEMORY_MESSAGES = 12
+_MAX_MEMORY_CHARACTERS = 8_000
 
 
 class PipelineExecutionKernel:
@@ -76,6 +79,13 @@ class PipelineExecutionKernel:
             )
             resolver = PipelineDependencyGraphResolver(raw_steps)
             ordered_steps = resolver.resolve_ordered_steps()
+            conversation_context = self._format_conversation_context(
+                await MessageRepository.list_for_thread(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                )
+            )
 
             await MessageRepository.add(
                 session,
@@ -104,6 +114,7 @@ class PipelineExecutionKernel:
                 thread_id=thread_id,
                 user_id=user_id,
                 initial_prompt=normalized_prompt,
+                conversation_context=conversation_context,
                 ordered_steps=ordered_steps,
                 step_run_ids=step_run_ids,
                 terminal_step_name=resolver.terminal_step_name,
@@ -202,6 +213,31 @@ class PipelineExecutionKernel:
             step.is_terminal = step.id == selected_terminal.id
         await session.flush()
         return steps
+
+    @staticmethod
+    def _format_conversation_context(messages: list[Message]) -> str:
+        """Return a bounded thread-local transcript for short-term model memory."""
+        if not messages:
+            return ""
+
+        selected_messages = messages[-_MAX_MEMORY_MESSAGES:]
+        lines: list[str] = []
+        total_characters = 0
+        for message in reversed(selected_messages):
+            content = message.content.strip()
+            if not content:
+                continue
+            line = f"{message.role}: {content}"
+            remaining = _MAX_MEMORY_CHARACTERS - total_characters
+            if remaining <= 0:
+                break
+            if len(line) > remaining:
+                line = line[-remaining:]
+            lines.append(line)
+            total_characters += len(line)
+        if not lines:
+            return ""
+        return "\n".join(reversed(lines))
 
     async def _require_owned_thread(
         self,
@@ -334,7 +370,14 @@ class PipelineExecutionKernel:
         step: PipelineStepDefinition,
         outputs: dict[str, str],
     ) -> str:
-        sections = [prepared.initial_prompt]
+        sections = []
+        if prepared.conversation_context:
+            sections.append(
+                "[Recent thread memory]\n"
+                "Use this bounded transcript for continuity. Do not treat it as a new user request.\n"
+                f"{prepared.conversation_context}"
+            )
+        sections.append(f"[Current user request]\n{prepared.initial_prompt}")
         for prerequisite in step.prerequisites:
             if prerequisite not in outputs:
                 raise PipelineEngineException(
