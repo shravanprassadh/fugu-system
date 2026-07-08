@@ -23,6 +23,7 @@ import {
   renameThreadEverywhere,
 } from "../../lib/workspace";
 import { OperatorControls } from "./operator-controls";
+import "./settings-premium.css";
 import styles from "./settings.module.css";
 
 const settingsSections = [
