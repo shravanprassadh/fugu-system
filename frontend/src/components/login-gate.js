@@ -37,7 +37,12 @@ export function LoginGate() {
     try {
       const sessionCredential = await login(username.trim(), password);
       const profile = await loadProfile(sessionCredential);
-      setSession({ sessionCredential, username: profile.username });
+      setSession({
+        sessionCredential,
+        username: profile.username,
+        userRole: profile.role,
+        userId: profile.id,
+      });
       router.push("/chat");
     } catch (requestError) {
       setError(requestError.message || "Authentication failed.");
