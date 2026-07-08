@@ -6,6 +6,8 @@ import { createStore } from "zustand/vanilla";
 const initialState = {
   sessionCredential: null,
   username: null,
+  userRole: null,
+  userId: null,
   isAuthenticated: false,
   threads: [],
   activeThreadId: null,
@@ -20,13 +22,15 @@ const initialState = {
 export function createStudioStore() {
   return createStore((set) => ({
     ...initialState,
-    setSession: ({ sessionCredential, username }) => {
+    setSession: ({ sessionCredential, username, userRole = null, userId = null }) => {
       if (!sessionCredential || !username) {
         throw new Error("Session data is incomplete.");
       }
       set({
         sessionCredential,
         username,
+        userRole,
+        userId,
         isAuthenticated: true,
         streamError: null,
       });
