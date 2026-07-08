@@ -14,14 +14,19 @@ function isAbortError(error) {
   return error?.name === "AbortError";
 }
 
-async function openStream({ threadId, prompt, signal, fetchImpl, credential }) {
+async function openStream({ threadId, prompt, modelPreference, signal, fetchImpl, credential }) {
+  const body = { prompt };
+  if (modelPreference?.providerType && modelPreference?.modelIdentifier) {
+    body.provider_type = modelPreference.providerType;
+    body.model_identifier = modelPreference.modelIdentifier;
+  }
   return fetchImpl(apiUrl(`/api/threads/${threadId}/execute`), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${credential}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(body),
     cache: "no-store",
     signal,
   });
@@ -121,6 +126,7 @@ function applyEvent(store, requestId, event) {
 export async function executePipelineStream({
   threadId,
   prompt,
+  modelPreference,
   signal,
   requestId,
   fetchImpl = fetch,
@@ -139,6 +145,7 @@ export async function executePipelineStream({
       response = await openStream({
         threadId,
         prompt,
+        modelPreference,
         signal,
         fetchImpl,
         credential,
