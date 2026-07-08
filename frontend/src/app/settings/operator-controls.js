@@ -7,22 +7,15 @@ import {
   apiUrl,
   getDatabaseConnections,
   getRenderConfig,
-  listPipelineSteps,
   listProviderCredentials,
   persistDatabaseEnvToRender,
   saveRenderConfig,
   testDatabaseTransferTargets,
   testRenderConfig,
   transferDatabases,
-  updatePipelineStep,
   upsertProviderCredential,
 } from "../../lib/api-client";
-import {
-  modelOptionsFor,
-  normalizeModel,
-  normalizeProvider,
-  supportedProviders,
-} from "../../lib/model-options";
+import { supportedProviders } from "../../lib/model-options";
 import styles from "./settings.module.css";
 
 const supportedProviderNames = new Set(supportedProviders.map((provider) => provider.value));
@@ -55,10 +48,6 @@ function formatTimestamp(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function dependencyText(step) {
-  return step.prerequisite_dependencies?.length ? step.prerequisite_dependencies.join(", ") : "";
 }
 
 function databaseStatusTone(status) {
@@ -101,7 +90,6 @@ async function responseErrorMessage(response) {
 
 export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [providerCredentials, setProviderCredentials] = useState([]);
-  const [pipelineSteps, setPipelineSteps] = useState([]);
   const [providerForm, setProviderForm] = useState(emptyProviderForm);
   const [renderForm, setRenderForm] = useState(emptyRenderForm);
   const [renderConfig, setRenderConfig] = useState(null);
@@ -111,7 +99,6 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [databaseForm, setDatabaseForm] = useState(emptyDatabaseForm);
   const [databaseResult, setDatabaseResult] = useState(null);
   const [databaseEditMode, setDatabaseEditMode] = useState(false);
-  const [pipelineDrafts, setPipelineDrafts] = useState({});
   const [status, setStatus] = useState("idle");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -131,15 +118,13 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     setStatus("loading");
     setError("");
     try {
-      const [credentials, steps, renderState, databaseState] = await Promise.all([
+      const [credentials, renderState, databaseState] = await Promise.all([
         listProviderCredentials(),
-        listPipelineSteps(),
         getRenderConfig(),
         getDatabaseConnections(),
       ]);
       const missingProviders = missingProviderOptions(credentials);
       setProviderCredentials(credentials);
-      setPipelineSteps(steps);
       setProviderForm((current) => ({
         ...current,
         providerName: missingProviders.some((provider) => provider.value === current.providerName)
@@ -154,21 +139,6 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
         apiToken: "",
       }));
       setDatabaseConnections(databaseState);
-      setPipelineDrafts((currentDrafts) => {
-        const nextDrafts = {};
-        for (const step of steps) {
-          const providerType = normalizeProvider(currentDrafts[step.id]?.providerType || step.provider_type);
-          const modelString = normalizeModel(providerType, currentDrafts[step.id]?.modelString || step.model_string);
-          nextDrafts[step.id] = {
-            providerType,
-            modelString,
-            systemPromptDirectives: currentDrafts[step.id]?.systemPromptDirectives ?? step.system_prompt_directives ?? "",
-            prerequisiteDependencies: currentDrafts[step.id]?.prerequisiteDependencies ?? dependencyText(step),
-            isTerminal: currentDrafts[step.id]?.isTerminal ?? step.is_terminal,
-          };
-        }
-        return nextDrafts;
-      });
       setStatus("ready");
     } catch (operationError) {
       handleError(operationError, "Could not load operator controls.");
@@ -325,48 +295,6 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       setStatus("ready");
     } catch (operationError) {
       handleError(operationError, "Could not transfer databases or persist them to Render.");
-    }
-  }
-
-  function updateDraft(stepId, patch) {
-    setPipelineDrafts((current) => ({
-      ...current,
-      [stepId]: { ...current[stepId], ...patch },
-    }));
-  }
-
-  function handlePipelineProviderChange(stepId, providerType) {
-    const normalizedProvider = normalizeProvider(providerType);
-    updateDraft(stepId, {
-      providerType: normalizedProvider,
-      modelString: modelOptionsFor(normalizedProvider)[0].value,
-    });
-  }
-
-  async function savePipelineStep(step) {
-    const draft = pipelineDrafts[step.id];
-    if (!draft) {
-      return;
-    }
-    const providerType = normalizeProvider(draft.providerType);
-    setStatus("loading");
-    setNotice("");
-    setError("");
-    try {
-      await updatePipelineStep(step.id, {
-        providerType,
-        modelString: normalizeModel(providerType, draft.modelString),
-        systemPromptDirectives: draft.systemPromptDirectives,
-        prerequisiteDependencies: draft.prerequisiteDependencies
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        isTerminal: draft.isTerminal,
-      });
-      setNotice(`Updated pipeline step ${step.step_name}.`);
-      await refreshOperatorState();
-    } catch (operationError) {
-      handleError(operationError, "Could not update pipeline step.");
     }
   }
 
@@ -583,35 +511,6 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
               );
             })}</tbody>
           </table>
-        </div>
-      </section>
-
-      <section className="settings-card settings-card-wide">
-        <p className="eyebrow">Execution graph</p>
-        <h3>Pipeline editor</h3>
-        <p className="muted">These changes apply to future runs because the backend loads pipeline steps from the database at execution time. User-facing model choice now lives in General Settings.</p>
-        <div className={styles.pipelineEditorList}>
-          {pipelineSteps.map((step) => {
-            const draft = pipelineDrafts[step.id] || {};
-            const providerType = normalizeProvider(draft.providerType);
-            const modelOptions = modelOptionsFor(providerType);
-            return (
-              <article className={styles.pipelineEditorCard} key={step.id}>
-                <div className={styles.cardHeaderRow}>
-                  <div><p className="eyebrow">Step {step.sequence_order_position}</p><h4>{step.step_name}</h4></div>
-                  <StatusPill tone={draft.isTerminal ? "success" : "neutral"}>{draft.isTerminal ? "terminal" : "internal"}</StatusPill>
-                </div>
-                <div className={styles.pipelineFields}>
-                  <label>Provider<select value={providerType} onChange={(event) => handlePipelineProviderChange(step.id, event.target.value)}>{supportedProviders.map((provider) => (<option key={provider.value} value={provider.value}>{provider.label}</option>))}</select></label>
-                  <label>Model<select value={normalizeModel(providerType, draft.modelString)} onChange={(event) => updateDraft(step.id, { modelString: event.target.value })}>{modelOptions.map((model) => (<option key={model.value} value={model.value}>{model.label}</option>))}</select></label>
-                  <label>Prerequisites, comma-separated<input value={draft.prerequisiteDependencies || ""} onChange={(event) => updateDraft(step.id, { prerequisiteDependencies: event.target.value })} /></label>
-                  <label className={styles.checkboxLabel}><input type="checkbox" checked={Boolean(draft.isTerminal)} onChange={(event) => updateDraft(step.id, { isTerminal: event.target.checked })} />Terminal output step</label>
-                </div>
-                <label className={styles.fullWidthLabel}>System prompt directives<textarea value={draft.systemPromptDirectives || ""} rows={5} onChange={(event) => updateDraft(step.id, { systemPromptDirectives: event.target.value })} /></label>
-                <button type="button" className="button-primary" onClick={() => savePipelineStep(step)} disabled={status === "loading"}>Save step</button>
-              </article>
-            );
-          })}
         </div>
       </section>
     </>
