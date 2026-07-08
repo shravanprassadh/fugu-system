@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   loadModelPreference,
@@ -11,8 +11,26 @@ import {
 } from "../../lib/model-options";
 import styles from "./settings.module.css";
 
+function providerInitial(provider) {
+  return provider.label.slice(0, 1).toUpperCase();
+}
+
+function modelTitle(modelId) {
+  const [, name = modelId] = modelId.split("/");
+  return name
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function modelFamily(modelId) {
+  return modelId.includes("/") ? modelId.split("/")[0] : "model";
+}
+
 export function ModelPreferenceCard() {
   const [preference, setPreference] = useState(loadModelPreference);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const handleChange = (event) => {
@@ -24,8 +42,20 @@ export function ModelPreferenceCard() {
 
   const providerType = normalizeProvider(preference.providerType);
   const models = modelOptionsFor(providerType);
+  const selectedModel = models.find((model) => model.value === preference.modelIdentifier) || models[0];
+  const filteredModels = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return models;
+    }
+    return models.filter((model) => {
+      const haystack = `${model.value} ${model.label}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [models, query]);
 
   function updateProvider(nextProviderType) {
+    setQuery("");
     setPreference(saveModelPreference({ providerType: nextProviderType }));
   }
 
@@ -34,7 +64,7 @@ export function ModelPreferenceCard() {
   }
 
   return (
-    <section className="settings-pane">
+    <section className="settings-pane model-preference-card">
       <div className="settings-row settings-row-top">
         <div>
           <h3>Model</h3>
@@ -42,24 +72,72 @@ export function ModelPreferenceCard() {
         </div>
         <span className={styles.statusPill}>user preference</span>
       </div>
-      <div className="settings-preference-form">
-        <label>
-          Provider
-          <select value={providerType} onChange={(event) => updateProvider(event.target.value)}>
-            {supportedProviders.map((provider) => (
-              <option key={provider.value} value={provider.value}>{provider.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Model
-          <select value={preference.modelIdentifier} onChange={(event) => updateModel(event.target.value)}>
-            {models.map((model) => (
-              <option key={model.value} value={model.value}>{model.label}</option>
-            ))}
-          </select>
-        </label>
+
+      <div className="model-provider-grid" role="radiogroup" aria-label="Model provider">
+        {supportedProviders.map((provider) => {
+          const selected = provider.value === providerType;
+          return (
+            <button
+              key={provider.value}
+              type="button"
+              className={`model-provider-card ${selected ? "model-card-selected" : ""}`}
+              onClick={() => updateProvider(provider.value)}
+              role="radio"
+              aria-checked={selected}
+            >
+              <span className="model-provider-mark" aria-hidden="true">{providerInitial(provider)}</span>
+              <span>
+                <strong>{provider.label}</strong>
+                <small>{provider.value === "openrouter" ? "Free tier only" : "Free NVIDIA catalog"}</small>
+              </span>
+            </button>
+          );
+        })}
       </div>
+
+      <div className="model-selected-summary">
+        <div>
+          <span className="model-selected-eyebrow">Selected model</span>
+          <strong>{modelTitle(selectedModel.value)}</strong>
+          <code>{selectedModel.value}</code>
+        </div>
+        <span className="model-family-pill">{modelFamily(selectedModel.value)}</span>
+      </div>
+
+      {models.length > 1 ? (
+        <label className="model-search-box">
+          Search models
+          <input
+            type="search"
+            placeholder="Search NVIDIA models…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+      ) : null}
+
+      <div className="model-option-list" role="radiogroup" aria-label="Available models">
+        {filteredModels.map((model) => {
+          const selected = model.value === selectedModel.value;
+          return (
+            <button
+              key={model.value}
+              type="button"
+              className={`model-option-card ${selected ? "model-card-selected" : ""}`}
+              onClick={() => updateModel(model.value)}
+              role="radio"
+              aria-checked={selected}
+            >
+              <span>
+                <strong>{modelTitle(model.value)}</strong>
+                <code>{model.value}</code>
+              </span>
+              <span className="model-family-pill">{modelFamily(model.value)}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <p className="muted">
         Admins still manage provider API keys in AI operations. If a provider key is missing, runs using that provider will fail clearly.
       </p>
