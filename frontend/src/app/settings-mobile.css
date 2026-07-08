@@ -1,17 +1,148 @@
-.settings-preference-form {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.55fr) minmax(240px, 1fr);
-  gap: 0.75rem;
-  align-items: end;
+.model-preference-card {
+  overflow: hidden;
 }
 
-.settings-preference-form label {
+.model-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.model-provider-card,
+.model-option-card {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.model-provider-card:hover,
+.model-option-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 44%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.model-card-selected {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line)) !important;
+  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface)) !important;
+  box-shadow: 0 14px 38px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.model-provider-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 5.4rem;
+  border-radius: 18px;
+  padding: 0.86rem;
+}
+
+.model-provider-card strong,
+.model-option-card strong,
+.model-selected-summary strong {
+  display: block;
+  font-size: 0.94rem;
+  letter-spacing: -0.015em;
+}
+
+.model-provider-card small {
+  display: block;
+  margin-top: 0.16rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.model-provider-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 13px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 74%, var(--surface)), color-mix(in srgb, var(--accent) 30%, var(--surface)));
+  color: var(--accent-contrast);
+  font-weight: 760;
+}
+
+.model-selected-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--accent) 12%, transparent), transparent 12rem),
+    color-mix(in srgb, var(--bg) 32%, var(--surface));
+  padding: 0.9rem;
+}
+
+.model-selected-eyebrow {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-selected-summary code,
+.model-option-card code {
+  display: block;
+  max-width: 100%;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.model-family-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 999px;
+  color: var(--soft);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  padding: 0.2rem 0.52rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.model-search-box {
   display: grid;
   gap: 0.38rem;
-  min-width: 0;
   color: var(--soft);
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 620;
+}
+
+.model-option-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: min(34rem, 52vh);
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  scrollbar-width: thin;
+}
+
+.model-option-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-radius: 16px;
+  padding: 0.76rem 0.82rem;
 }
 
 /* Phone-first Settings overrides. This intentionally flattens the desktop glass layout on small screens. */
@@ -156,9 +287,38 @@
     gap: 0.58rem !important;
   }
 
-  .settings-preference-form {
+  .model-provider-grid {
     grid-template-columns: 1fr !important;
-    gap: 0.65rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .model-provider-card {
+    min-height: auto !important;
+    border-radius: 14px !important;
+    padding: 0.72rem !important;
+  }
+
+  .model-provider-mark {
+    width: 2.05rem !important;
+    height: 2.05rem !important;
+    border-radius: 11px !important;
+  }
+
+  .model-selected-summary,
+  .model-option-card {
+    display: grid !important;
+    gap: 0.5rem !important;
+    border-radius: 14px !important;
+    padding: 0.72rem !important;
+  }
+
+  .model-option-list {
+    max-height: 24rem !important;
+    gap: 0.48rem !important;
+  }
+
+  .model-family-pill {
+    font-size: 0.66rem !important;
   }
 
   .settings-list {
