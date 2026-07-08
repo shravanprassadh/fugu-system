@@ -259,9 +259,18 @@ async def _test_target_url(target: DatabaseTarget, url: str) -> DatabaseTargetSt
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
-        return DatabaseTargetStatus(target=target.value, masked_url=_masked_database_url(url), status="connected")
+        return DatabaseTargetStatus(
+            target=target.value,
+            masked_url=_masked_database_url(url),
+            status="connected",
+        )
     except Exception as exc:
-        return DatabaseTargetStatus(target=target.value, masked_url=_masked_database_url(url), status="failed", error=str(exc))
+        return DatabaseTargetStatus(
+            target=target.value,
+            masked_url=_masked_database_url(url),
+            status="failed",
+            error=str(exc),
+        )
     finally:
         await engine.dispose()
 
@@ -282,7 +291,12 @@ async def _destination_has_rows(engine: AsyncEngine) -> bool:
     return False
 
 
-async def _copy_database_target(source_engine: AsyncEngine, destination_engine: AsyncEngine, *, replace_existing: bool) -> int:
+async def _copy_database_target(
+    source_engine: AsyncEngine,
+    destination_engine: AsyncEngine,
+    *,
+    replace_existing: bool,
+) -> int:
     async with destination_engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
 
@@ -480,7 +494,9 @@ async def update_pipeline_step(
     if "system_prompt_directives" in supplied_fields:
         step.system_prompt_directives = payload.system_prompt_directives
     if payload.prerequisite_dependencies is not None:
-        step.prerequisite_dependencies = [dependency.strip() for dependency in payload.prerequisite_dependencies if dependency.strip()]
+        step.prerequisite_dependencies = [
+            dependency.strip() for dependency in payload.prerequisite_dependencies if dependency.strip()
+        ]
     if payload.is_terminal is not None:
         step.is_terminal = payload.is_terminal
     await session.flush()
