@@ -1,3 +1,19 @@
+.settings-preference-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.55fr) minmax(240px, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.settings-preference-form label {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+  color: var(--soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 /* Phone-first Settings overrides. This intentionally flattens the desktop glass layout on small screens. */
 
 @media (max-width: 640px) {
@@ -138,6 +154,11 @@
   .settings-content .cardHeaderRow {
     display: grid !important;
     gap: 0.58rem !important;
+  }
+
+  .settings-preference-form {
+    grid-template-columns: 1fr !important;
+    gap: 0.65rem !important;
   }
 
   .settings-list {
