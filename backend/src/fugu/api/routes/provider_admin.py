@@ -8,7 +8,10 @@ from sqlalchemy import select
 from fugu.api.dependencies import AdminUser, MasterSession
 from fugu.database.models import ProviderCredential
 
-provider_admin_router = APIRouter(prefix="/api/admin/provider-credentials", tags=["provider-administration"])
+provider_admin_router = APIRouter(
+    prefix="/api/admin/provider-credentials",
+    tags=["provider-administration"],
+)
 _SUPPORTED_PROVIDER_NAMES = {"openrouter", "nvidia"}
 
 
@@ -23,7 +26,11 @@ def _normalized_supported_provider(provider_name: str) -> str:
     return normalized
 
 
-@provider_admin_router.delete("/{provider_name}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@provider_admin_router.delete(
+    "/{provider_name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def delete_provider_credential(
     provider_name: str,
     _: AdminUser,
