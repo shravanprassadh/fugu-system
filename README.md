@@ -11,7 +11,10 @@ This repository is currently deployment-ready as a prototype. The active cloud p
 ## What Fugu includes
 
 - **Authenticated Studio access** using username/password login and bearer tokens.
-- **FastAPI backend** with health, auth, and thread execution routes under `/api/...`.
+- **FastAPI backend** with health, auth, thread management, and thread execution routes under `/api/...`.
+- **Conversation workspace UI** with a sidebar of owned threads, thread creation, rename, and delete, plus persisted message history loading.
+- **Light, dark, and system theme modes** with a light default, applied before first paint and persisted per browser.
+- **Safe markdown rendering** of assistant output through an element-only renderer that never interprets raw HTML.
 - **Streaming execution endpoint** for prepared pipeline runs over Server-Sent Events.
 - **Async PostgreSQL data layer** using SQLAlchemy 2, asyncpg, and explicit database routing.
 - **Alembic migrations** applied at backend startup behind a PostgreSQL advisory lock.
@@ -59,6 +62,11 @@ Use these routes instead:
 | `POST` | `/api/auth/login` | Username/password login |
 | `GET` | `/api/auth/me` | Current authenticated profile |
 | `POST` | `/api/auth/logout` | Revoke active tokens for the user |
+| `GET` | `/api/threads` | List the authenticated user's threads, newest first |
+| `POST` | `/api/threads` | Create a new owned thread |
+| `GET` | `/api/threads/{thread_id}/messages` | Full message history of one owned thread |
+| `PATCH` | `/api/threads/{thread_id}` | Rename one owned thread |
+| `DELETE` | `/api/threads/{thread_id}` | Delete one owned thread and its history |
 | `POST` | `/api/threads/{thread_id}/execute` | Execute a thread pipeline and stream SSE events |
 
 ## Deployment model
@@ -123,6 +131,27 @@ fugu-create-user --username admin --role admin
 ```
 
 Render Free does not provide a service shell. In that case, use the Neon SQL bootstrap procedure in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#first-admin-user). Do not commit bootstrap passwords or password hashes to the repository.
+
+## Pipeline and provider bootstrap
+
+A fresh database has no pipeline definition and no provider credentials, so authenticated execution fails until both are seeded. Two operator commands close that gap:
+
+```bash
+# Seed the default three-stage pipeline (input analysis → reasoning branch → terminal synthesis)
+fugu-seed-pipeline --provider openrouter --model anthropic/claude-sonnet-4-5
+
+# Encrypt and store the provider API key (read from FUGU_PROVIDER_SECRET or an interactive prompt — never from arguments)
+FUGU_PROVIDER_SECRET="sk-or-..." fugu-set-provider-credential --provider openrouter
+```
+
+`fugu-seed-pipeline` refuses to overwrite an existing definition unless `--replace` is passed, validates the provider against the registered runtime adapters, and proves the seeded DAG resolves before writing anything. `fugu-set-provider-credential` rotates in place through the same encrypted vault used at runtime.
+
+## Frontend configuration validation
+
+`NEXT_PUBLIC_FUGU_API_BASE_URL` misconfiguration previously surfaced only as a confusing `404` on login. It is now caught in two layers:
+
+- **Build time** — `next build` fails with an explicit error if the value lacks an `http(s)://` scheme, ends with `/api`, or is missing on a Vercel deployment. Local and CI builds may omit the variable.
+- **Runtime** — the sign-in screen shows a prominent configuration error (and disables the form) when the app is served from a non-localhost domain without a configured backend origin, or when the value ends with `/api`.
 
 ## Local development
 
