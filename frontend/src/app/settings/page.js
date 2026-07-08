@@ -6,19 +6,89 @@ import { useCallback, useEffect, useState } from "react";
 import { StudioSidebar } from "../../components/sidebar";
 import { useStudioStore } from "../../components/store";
 import { ThemeModePicker } from "../../components/theme-toggle";
-import { logout } from "../../lib/api-client";
+import { apiUrl, getApiConfigurationProblem, logout } from "../../lib/api-client";
 import {
   deleteThreadEverywhere,
   openThread,
   refreshThreads,
   renameThreadEverywhere,
 } from "../../lib/workspace";
+import styles from "./settings.module.css";
 
 const pipelineRows = [
   { step: "Input analysis", provider: "Server configuration", mode: "internal" },
   { step: "Reasoning branch", provider: "Server configuration", mode: "internal" },
   { step: "Terminal synthesis", provider: "Server configuration", mode: "streamed" },
 ];
+
+const databaseRows = [
+  {
+    key: "master",
+    label: "Master router",
+    variable: "MASTER_ROUTER_DB_URL",
+    purpose: "Users, sessions, pipeline steps, provider credential metadata.",
+  },
+  {
+    key: "metadata",
+    label: "Metadata sidebar",
+    variable: "METADATA_SIDEBAR_DB_URL",
+    purpose: "Thread list, workspace metadata, message history indexes.",
+  },
+  {
+    key: "logs",
+    label: "Transactional logs",
+    variable: "TRANSACTIONAL_LOGS_DB_URL",
+    purpose: "Execution run records, stream events, audit-oriented transaction history.",
+  },
+];
+
+const runtimeRows = [
+  { label: "Frontend API origin", value: process.env.NEXT_PUBLIC_FUGU_API_BASE_URL || "Same origin", owner: "Vercel env" },
+  { label: "Backend live probe", value: apiUrl("/api/health/live"), owner: "Render route" },
+  { label: "Backend ready probe", value: apiUrl("/api/health/ready"), owner: "Render route" },
+  { label: "Session mode", value: "Volatile memory", owner: "Browser runtime" },
+  { label: "Stream protocol", value: "Server-Sent Events", owner: "Backend API" },
+  { label: "Reconnect policy", value: "Pre-connection retry only", owner: "Client runtime" },
+];
+
+const secretRows = [
+  { variable: "SYSTEM_SESSION_SECRET", location: "Render env", description: "JWT/session signing secret." },
+  { variable: "VAULT_ENCRYPTION_KEY", location: "Render env + GitHub secret", description: "Encrypts provider credentials before database storage." },
+  { variable: "FUGU_PROVIDER_SECRET", location: "GitHub secret only", description: "Provider API key used by the bootstrap workflow." },
+  { variable: "ALLOWED_ORIGINS", location: "Render env", description: "Exact Vercel origins allowed by CORS." },
+  { variable: "NEXT_PUBLIC_FUGU_API_BASE_URL", location: "Vercel env", description: "Public backend origin. Must not include trailing /api." },
+];
+
+function statusTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (["ready", "connected", "alive", "success"].includes(normalized)) {
+    return "success";
+  }
+  if (["loading", "checking", "pending"].includes(normalized)) {
+    return "loading";
+  }
+  if (["idle", "not checked", "not exposed"].includes(normalized)) {
+    return "neutral";
+  }
+  return "danger";
+}
+
+function StatusPill({ status }) {
+  const label = status || "not checked";
+  const tone = statusTone(label);
+  return <span className={`${styles.statusPill} ${styles[`statusPill${tone[0].toUpperCase()}${tone.slice(1)}`]}`}>{label}</span>;
+}
+
+function formatCheckedAt(value) {
+  if (!value) {
+    return "Not checked yet";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(value);
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -28,14 +98,49 @@ export default function SettingsPage() {
   const activeThreadId = useStudioStore((state) => state.activeThreadId);
   const setActiveThread = useStudioStore((state) => state.setActiveThread);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [browserOrigin, setBrowserOrigin] = useState("Resolving…");
+  const [diagnostics, setDiagnostics] = useState({ status: "idle", payload: null, error: null, checkedAt: null });
 
   const expireSession = useCallback(() => router.replace("/"), [router]);
+
+  const refreshDiagnostics = useCallback(async () => {
+    setDiagnostics((current) => ({ ...current, status: "loading", error: null }));
+    try {
+      const response = await fetch(apiUrl("/api/health/ready"), { cache: "no-store" });
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) {
+        throw new Error(payload?.status || `Readiness check failed with HTTP ${response.status}.`);
+      }
+      setDiagnostics({
+        status: payload?.status || "ready",
+        payload,
+        error: null,
+        checkedAt: new Date(),
+      });
+    } catch (error) {
+      setDiagnostics({
+        status: "unavailable",
+        payload: null,
+        error: error instanceof Error ? error.message : "Could not reach backend readiness endpoint.",
+        checkedAt: new Date(),
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/");
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    setBrowserOrigin(window.location.origin);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -46,7 +151,8 @@ export default function SettingsPage() {
         expireSession();
       }
     });
-  }, [isAuthenticated, expireSession]);
+    refreshDiagnostics();
+  }, [isAuthenticated, expireSession, refreshDiagnostics]);
 
   async function signOut() {
     await logout();
@@ -88,6 +194,10 @@ export default function SettingsPage() {
     return <main className="loading-shell">Restoring workspace…</main>;
   }
 
+  const apiConfigurationProblem = getApiConfigurationProblem();
+  const readinessStatus = diagnostics.payload?.status || diagnostics.status;
+  const connectionStatuses = diagnostics.payload?.connections || {};
+
   return (
     <main className="studio-shell">
       <StudioSidebar
@@ -117,28 +227,92 @@ export default function SettingsPage() {
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h1 className="workspace-title" id="settings-title">Settings</h1>
+          <div>
+            <h1 className="workspace-title" id="settings-title">Settings</h1>
+            <p className={styles.headerSubtitle}>Deployment, runtime, database, and client controls for this Fugu environment.</p>
+          </div>
         </header>
 
         <div className="settings-grid">
           <section className="settings-card settings-card-wide">
+            <div className={styles.cardHeaderRow}>
+              <div>
+                <p className="eyebrow">System diagnostics</p>
+                <h3>Backend and database readiness</h3>
+              </div>
+              <div className={styles.headerActions}>
+                <StatusPill status={readinessStatus} />
+                <button type="button" className="button-ghost" onClick={refreshDiagnostics} disabled={diagnostics.status === "loading"}>
+                  {diagnostics.status === "loading" ? "Checking…" : "Refresh"}
+                </button>
+              </div>
+            </div>
+            <p className="muted">
+              This checks the live backend readiness endpoint and reports sanitized pool health. Full SQL URLs are intentionally not exposed to the browser.
+            </p>
+            {diagnostics.error ? <p className={styles.diagnosticError}>{diagnostics.error}</p> : null}
+            <div className="matrix-wrapper" tabIndex="0">
+              <table className="settings-matrix">
+                <thead><tr><th>Database</th><th>Env variable</th><th>Status</th><th>Purpose</th></tr></thead>
+                <tbody>
+                  {databaseRows.map((row) => (
+                    <tr key={row.key}>
+                      <td>{row.label}</td>
+                      <td><code className={styles.inlineCode}>{row.variable}</code></td>
+                      <td><StatusPill status={connectionStatuses[row.key] || (diagnostics.status === "loading" ? "checking" : "not checked")} /></td>
+                      <td>{row.purpose}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted">Last checked: {formatCheckedAt(diagnostics.checkedAt)}.</p>
+          </section>
+
+          <section className="settings-card settings-card-wide">
+            <p className="eyebrow">Deployment boundary</p>
+            <h3>Frontend, backend, and routing</h3>
+            {apiConfigurationProblem ? <p className={styles.diagnosticError}>{apiConfigurationProblem}</p> : null}
+            <dl className="definition-list">
+              <div><dt>Browser origin</dt><dd>{browserOrigin}</dd></div>
+              {runtimeRows.map((row) => (
+                <div key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd><span className={styles.valueBlock}>{row.value}</span><span className={styles.valueOwner}>{row.owner}</span></dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="settings-card settings-card-wide">
+            <p className="eyebrow">Operator configuration</p>
+            <h3>Secrets and server-side variables</h3>
+            <p className="muted">
+              These are the values that belong in Render, Vercel, or GitHub Actions. The Settings page shows names and responsibility only; secret values stay server-side.
+            </p>
+            <div className="matrix-wrapper" tabIndex="0">
+              <table className="settings-matrix">
+                <thead><tr><th>Variable</th><th>Where set</th><th>Use</th></tr></thead>
+                <tbody>
+                  {secretRows.map((row) => (
+                    <tr key={row.variable}>
+                      <td><code className={styles.inlineCode}>{row.variable}</code></td>
+                      <td>{row.location}</td>
+                      <td>{row.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="settings-card">
             <p className="eyebrow">Appearance</p>
             <h3>Theme</h3>
             <p className="muted">
               Light is the default. System follows your device preference and updates live when it changes.
             </p>
             <ThemeModePicker />
-          </section>
-
-          <section className="settings-card">
-            <p className="eyebrow">Transport</p>
-            <h3>Runtime boundary</h3>
-            <dl className="definition-list">
-              <div><dt>API origin</dt><dd>{process.env.NEXT_PUBLIC_FUGU_API_BASE_URL || "Same origin"}</dd></div>
-              <div><dt>Session mode</dt><dd>Volatile memory</dd></div>
-              <div><dt>Stream protocol</dt><dd>Server-Sent Events</dd></div>
-              <div><dt>Reconnect policy</dt><dd>Pre-connection retry only</dd></div>
-            </dl>
           </section>
 
           <section className="settings-card">
@@ -167,7 +341,7 @@ export default function SettingsPage() {
                 </tbody>
               </table>
             </div>
-            <p className="muted">Pipeline definitions and provider configuration remain controlled by the backend.</p>
+            <p className="muted">Pipeline definitions and provider configuration remain controlled by the backend bootstrap workflow.</p>
           </section>
         </div>
       </section>
