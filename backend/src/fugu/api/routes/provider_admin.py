@@ -38,9 +38,7 @@ async def delete_provider_credential(
 ) -> Response:
     """Delete one configured provider credential so a new key can be added later."""
     normalized = _normalized_supported_provider(provider_name)
-    result = await session.scalars(
-        select(ProviderCredential).where(ProviderCredential.provider_name == normalized)
-    )
+    result = await session.scalars(select(ProviderCredential).where(ProviderCredential.provider_name == normalized))
     credential = result.first()
     if credential is None:
         raise HTTPException(
