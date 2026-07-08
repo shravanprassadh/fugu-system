@@ -18,6 +18,9 @@ function buildUrl(path) {
 async function parseError(response) {
   try {
     const payload = await response.json();
+    if (Array.isArray(payload.detail)) {
+      return payload.detail.map((item) => item.error || item.detail || JSON.stringify(item)).join("; ");
+    }
     return typeof payload.detail === "string"
       ? payload.detail
       : `Request failed with status ${response.status}.`;
@@ -222,4 +225,33 @@ export function updatePipelineStep(stepId, update, options = {}) {
     body.is_terminal = update.isTerminal;
   }
   return authorizedRequest(`/api/admin/pipeline-steps/${stepId}`, { ...options, method: "PATCH", body });
+}
+
+function databasePayloadFromForm(form) {
+  return {
+    master_router_db_url: form.masterRouterDbUrl,
+    metadata_sidebar_db_url: form.metadataSidebarDbUrl,
+    transactional_logs_db_url: form.transactionalLogsDbUrl,
+  };
+}
+
+export function testDatabaseTransferTargets(form, options = {}) {
+  return authorizedRequest("/api/admin/database-transfer/test", {
+    ...options,
+    method: "POST",
+    body: databasePayloadFromForm(form),
+  });
+}
+
+export function transferDatabases(form, options = {}) {
+  return authorizedRequest("/api/admin/database-transfer", {
+    ...options,
+    method: "POST",
+    body: {
+      ...databasePayloadFromForm(form),
+      confirmation: form.confirmation,
+      replace_existing: form.replaceExisting,
+      apply_to_current_process: form.applyToCurrentProcess,
+    },
+  });
 }
