@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from functools import lru_cache
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +62,8 @@ class PipelineExecutionKernel:
         thread_id: int,
         user_id: int,
         initial_prompt: str,
+        selected_provider_type: str | None = None,
+        selected_model_identifier: str | None = None,
     ) -> PreparedPipeline:
         """Validate ownership and DAG structure, then persist the run before network I/O."""
         normalized_prompt = initial_prompt.strip()
@@ -78,7 +81,12 @@ class PipelineExecutionKernel:
                 await PipelineRepository.list_steps(session),
             )
             resolver = PipelineDependencyGraphResolver(raw_steps)
-            ordered_steps = resolver.resolve_ordered_steps()
+            ordered_steps = self._apply_terminal_model_override(
+                ordered_steps=resolver.resolve_ordered_steps(),
+                terminal_step_name=resolver.terminal_step_name,
+                selected_provider_type=selected_provider_type,
+                selected_model_identifier=selected_model_identifier,
+            )
             conversation_context = self._format_conversation_context(
                 await MessageRepository.list_for_thread(
                     session,
@@ -213,6 +221,28 @@ class PipelineExecutionKernel:
             step.is_terminal = step.id == selected_terminal.id
         await session.flush()
         return steps
+
+    @staticmethod
+    def _apply_terminal_model_override(
+        *,
+        ordered_steps: tuple[PipelineStepDefinition, ...],
+        terminal_step_name: str,
+        selected_provider_type: str | None,
+        selected_model_identifier: str | None,
+    ) -> tuple[PipelineStepDefinition, ...]:
+        """Apply a user-selected response model to the terminal output step only."""
+        if not selected_provider_type or not selected_model_identifier:
+            return ordered_steps
+        return tuple(
+            replace(
+                step,
+                provider_type=selected_provider_type,
+                model_identifier=selected_model_identifier,
+            )
+            if step.name == terminal_step_name
+            else step
+            for step in ordered_steps
+        )
 
     @staticmethod
     def _format_conversation_context(messages: list[Message]) -> str:
