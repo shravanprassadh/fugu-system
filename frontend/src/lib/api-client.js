@@ -187,3 +187,39 @@ export function resetAdminUserPassword(userId, password, options = {}) {
 export function deleteAdminUser(userId, options = {}) {
   return authorizedRequest(`/api/admin/users/${userId}`, { ...options, method: "DELETE" });
 }
+
+export function listProviderCredentials(options) {
+  return authorizedRequest("/api/admin/provider-credentials", options);
+}
+
+export function upsertProviderCredential({ providerName, secret }, options = {}) {
+  return authorizedRequest("/api/admin/provider-credentials", {
+    ...options,
+    method: "POST",
+    body: { provider_name: providerName, secret },
+  });
+}
+
+export function listPipelineSteps(options) {
+  return authorizedRequest("/api/admin/pipeline-steps", options);
+}
+
+export function updatePipelineStep(stepId, update, options = {}) {
+  const body = {};
+  if (update.providerType !== undefined) {
+    body.provider_type = update.providerType;
+  }
+  if (update.modelString !== undefined) {
+    body.model_string = update.modelString;
+  }
+  if (update.systemPromptDirectives !== undefined) {
+    body.system_prompt_directives = update.systemPromptDirectives;
+  }
+  if (update.prerequisiteDependencies !== undefined) {
+    body.prerequisite_dependencies = update.prerequisiteDependencies;
+  }
+  if (update.isTerminal !== undefined) {
+    body.is_terminal = update.isTerminal;
+  }
+  return authorizedRequest(`/api/admin/pipeline-steps/${stepId}`, { ...options, method: "PATCH", body });
+}
