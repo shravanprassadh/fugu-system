@@ -14,7 +14,6 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from fugu.api.routes import (
     admin_router,
     auth_router,
-    database_admin_router,
     execution_router,
     health_router,
     provider_admin_router,
@@ -139,7 +138,6 @@ def create_app(
     application.include_router(admin_router)
     application.include_router(provider_admin_router)
     application.include_router(render_admin_router)
-    application.include_router(database_admin_router)
     application.include_router(execution_router)
     application.include_router(threads_router)
     application.include_router(health_router)
