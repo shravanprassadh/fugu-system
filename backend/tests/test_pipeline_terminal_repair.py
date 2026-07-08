@@ -6,7 +6,9 @@ import pytest
 
 from fugu.database.connection import DatabaseTarget
 from fugu.database.repositories import PipelineRepository
-from tests.test_execution import ExecutionContext, _seed_steps, _step, execution_context
+from tests.test_execution import ExecutionContext, _seed_steps, _step
+
+pytest_plugins = ("tests.test_execution",)
 
 
 @pytest.mark.asyncio
