@@ -13,6 +13,7 @@ from fugu.database.connection import (
     get_session_registry,
 )
 from fugu.database.exceptions import EntityNotFoundError
+from fugu.database.models import PipelineStep
 from fugu.database.repositories import (
     MessageRepository,
     PipelineRepository,
@@ -69,7 +70,10 @@ class PipelineExecutionKernel:
                 thread_id=thread_id,
                 user_id=user_id,
             )
-            raw_steps = await PipelineRepository.list_steps(session)
+            raw_steps = await self._ensure_single_terminal_step(
+                session,
+                await PipelineRepository.list_steps(session),
+            )
             resolver = PipelineDependencyGraphResolver(raw_steps)
             ordered_steps = resolver.resolve_ordered_steps()
 
@@ -182,6 +186,22 @@ class PipelineExecutionKernel:
             run_id=prepared.run_id,
             step_name=prepared.terminal_step_name,
         )
+
+    @staticmethod
+    async def _ensure_single_terminal_step(
+        session: AsyncSession,
+        steps: list[PipelineStep],
+    ) -> list[PipelineStep]:
+        """Repair terminal-step drift by selecting the latest configured step as the sole terminal."""
+        terminal_steps = [step for step in steps if step.is_terminal]
+        if len(terminal_steps) == 1 or not steps:
+            return steps
+
+        selected_terminal = max(terminal_steps or steps, key=lambda step: step.sequence_order_position)
+        for step in steps:
+            step.is_terminal = step.id == selected_terminal.id
+        await session.flush()
+        return steps
 
     async def _require_owned_thread(
         self,
