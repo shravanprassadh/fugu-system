@@ -16,6 +16,16 @@ import {
 } from "../../lib/api-client";
 import styles from "./settings.module.css";
 
+const supportedProviders = [
+  { value: "openrouter", label: "OpenRouter" },
+  { value: "nvidia", label: "NVIDIA" },
+];
+
+const supportedModelsByProvider = {
+  openrouter: [{ value: "openrouter/free", label: "OpenRouter free tier" }],
+  nvidia: [{ value: "meta/llama-3.1-70b-instruct", label: "Llama 3.1 70B Instruct" }],
+};
+
 const emptyProviderForm = { providerName: "openrouter", secret: "" };
 const emptyRenderForm = { serviceId: "", apiToken: "" };
 const emptyDatabaseForm = {
@@ -59,6 +69,19 @@ function databaseStatusTone(status) {
     return "danger";
   }
   return "neutral";
+}
+
+function normalizeProvider(provider) {
+  return supportedModelsByProvider[provider] ? provider : "openrouter";
+}
+
+function modelOptionsFor(provider) {
+  return supportedModelsByProvider[normalizeProvider(provider)];
+}
+
+function normalizeModel(provider, model) {
+  const options = modelOptionsFor(provider);
+  return options.some((option) => option.value === model) ? model : options[0].value;
 }
 
 export function OperatorControls({ isAdmin, onUnauthorized }) {
@@ -106,12 +129,14 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       setPipelineDrafts((currentDrafts) => {
         const nextDrafts = {};
         for (const step of steps) {
-          nextDrafts[step.id] = currentDrafts[step.id] || {
-            providerType: step.provider_type,
-            modelString: step.model_string,
-            systemPromptDirectives: step.system_prompt_directives || "",
-            prerequisiteDependencies: dependencyText(step),
-            isTerminal: step.is_terminal,
+          const providerType = normalizeProvider(currentDrafts[step.id]?.providerType || step.provider_type);
+          const modelString = normalizeModel(providerType, currentDrafts[step.id]?.modelString || step.model_string);
+          nextDrafts[step.id] = {
+            providerType,
+            modelString,
+            systemPromptDirectives: currentDrafts[step.id]?.systemPromptDirectives ?? step.system_prompt_directives ?? "",
+            prerequisiteDependencies: currentDrafts[step.id]?.prerequisiteDependencies ?? dependencyText(step),
+            isTerminal: currentDrafts[step.id]?.isTerminal ?? step.is_terminal,
           };
         }
         return nextDrafts;
@@ -137,7 +162,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     try {
       await upsertProviderCredential(providerForm);
       setProviderForm((current) => ({ ...current, secret: "" }));
-      setNotice(`Rotated credential for ${providerForm.providerName.trim().toLowerCase()}.`);
+      setNotice(`Rotated credential for ${providerForm.providerName}.`);
       await refreshOperatorState();
     } catch (operationError) {
       handleError(operationError, "Could not rotate provider credential.");
@@ -226,18 +251,27 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     }));
   }
 
+  function handlePipelineProviderChange(stepId, providerType) {
+    const normalizedProvider = normalizeProvider(providerType);
+    updateDraft(stepId, {
+      providerType: normalizedProvider,
+      modelString: modelOptionsFor(normalizedProvider)[0].value,
+    });
+  }
+
   async function savePipelineStep(step) {
     const draft = pipelineDrafts[step.id];
     if (!draft) {
       return;
     }
+    const providerType = normalizeProvider(draft.providerType);
     setStatus("loading");
     setNotice("");
     setError("");
     try {
       await updatePipelineStep(step.id, {
-        providerType: draft.providerType,
-        modelString: draft.modelString,
+        providerType,
+        modelString: normalizeModel(providerType, draft.modelString),
         systemPromptDirectives: draft.systemPromptDirectives,
         prerequisiteDependencies: draft.prerequisiteDependencies
           .split(",")
@@ -460,13 +494,15 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
         <form className={styles.adminForm} onSubmit={handleProviderSubmit}>
           <label>
             Provider
-            <input
+            <select
               value={providerForm.providerName}
               onChange={(event) => setProviderForm((current) => ({ ...current, providerName: event.target.value }))}
-              minLength={2}
-              maxLength={100}
               required
-            />
+            >
+              {supportedProviders.map((provider) => (
+                <option key={provider.value} value={provider.value}>{provider.label}</option>
+              ))}
+            </select>
           </label>
           <label>
             New API key / secret
@@ -502,11 +538,13 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
         <p className="eyebrow">Execution graph</p>
         <h3>Pipeline editor</h3>
         <p className="muted">
-          These changes apply to future runs because the backend loads pipeline steps from the database at execution time.
+          These changes apply to future runs because the backend loads pipeline steps from the database at execution time. Provider and model choices are constrained to the APIs currently supported by this app.
         </p>
         <div className={styles.pipelineEditorList}>
           {pipelineSteps.map((step) => {
             const draft = pipelineDrafts[step.id] || {};
+            const providerType = normalizeProvider(draft.providerType);
+            const modelOptions = modelOptionsFor(providerType);
             return (
               <article className={styles.pipelineEditorCard} key={step.id}>
                 <div className={styles.cardHeaderRow}>
@@ -519,11 +557,19 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
                 <div className={styles.pipelineFields}>
                   <label>
                     Provider
-                    <input value={draft.providerType || ""} onChange={(event) => updateDraft(step.id, { providerType: event.target.value })} />
+                    <select value={providerType} onChange={(event) => handlePipelineProviderChange(step.id, event.target.value)}>
+                      {supportedProviders.map((provider) => (
+                        <option key={provider.value} value={provider.value}>{provider.label}</option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Model
-                    <input value={draft.modelString || ""} onChange={(event) => updateDraft(step.id, { modelString: event.target.value })} />
+                    <select value={normalizeModel(providerType, draft.modelString)} onChange={(event) => updateDraft(step.id, { modelString: event.target.value })}>
+                      {modelOptions.map((model) => (
+                        <option key={model.value} value={model.value}>{model.label}</option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Prerequisites, comma-separated
