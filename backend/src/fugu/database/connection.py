@@ -159,7 +159,26 @@ class DatabaseSessionRegistry:
             await engine.dispose()
 
 
+_runtime_registry_override: DatabaseSessionRegistry | None = None
+
+
+def set_runtime_session_registry(registry: DatabaseSessionRegistry) -> None:
+    """Hot-swap the active registry for the current process until the next deployment restart."""
+    global _runtime_registry_override
+    _runtime_registry_override = registry
+    get_session_registry.cache_clear()
+
+
+def clear_runtime_session_registry() -> None:
+    """Return database routing to environment-backed settings."""
+    global _runtime_registry_override
+    _runtime_registry_override = None
+    get_session_registry.cache_clear()
+
+
 @lru_cache(maxsize=1)
 def get_session_registry() -> DatabaseSessionRegistry:
     """Create the application registry lazily after settings validation succeeds."""
+    if _runtime_registry_override is not None:
+        return _runtime_registry_override
     return DatabaseSessionRegistry.from_settings(get_settings())
