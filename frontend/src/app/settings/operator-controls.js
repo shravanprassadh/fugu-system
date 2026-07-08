@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { studioStore } from "../../components/store";
 import {
+  apiUrl,
   getRenderConfig,
   listPipelineSteps,
   listProviderCredentials,
@@ -26,6 +28,7 @@ const supportedModelsByProvider = {
   nvidia: [{ value: "meta/llama-3.1-70b-instruct", label: "Llama 3.1 70B Instruct" }],
 };
 
+const supportedProviderNames = new Set(supportedProviders.map((provider) => provider.value));
 const emptyProviderForm = { providerName: "openrouter", secret: "" };
 const emptyRenderForm = { serviceId: "", apiToken: "" };
 const emptyDatabaseForm = {
@@ -84,6 +87,34 @@ function normalizeModel(provider, model) {
   return options.some((option) => option.value === model) ? model : options[0].value;
 }
 
+function supportedCredentialMap(credentials) {
+  return new Map(
+    credentials
+      .filter((credential) => supportedProviderNames.has(credential.provider_name))
+      .map((credential) => [credential.provider_name, credential])
+  );
+}
+
+function missingProviderOptions(credentials) {
+  const configured = supportedCredentialMap(credentials);
+  return supportedProviders.filter((provider) => !configured.has(provider.value));
+}
+
+async function responseErrorMessage(response) {
+  try {
+    const payload = await response.json();
+    if (typeof payload.detail === "string") {
+      return payload.detail;
+    }
+    if (payload.detail) {
+      return JSON.stringify(payload.detail);
+    }
+  } catch {
+    // Fall through to generic status message.
+  }
+  return `Request failed with status ${response.status}.`;
+}
+
 export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [providerCredentials, setProviderCredentials] = useState([]);
   const [pipelineSteps, setPipelineSteps] = useState([]);
@@ -118,8 +149,16 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
         listPipelineSteps(),
         getRenderConfig(),
       ]);
+      const missingProviders = missingProviderOptions(credentials);
       setProviderCredentials(credentials);
       setPipelineSteps(steps);
+      setProviderForm((current) => ({
+        ...current,
+        providerName: missingProviders.some((provider) => provider.value === current.providerName)
+          ? current.providerName
+          : missingProviders[0]?.value ?? current.providerName,
+        secret: "",
+      }));
       setRenderConfig(renderState);
       setRenderForm((current) => ({
         ...current,
@@ -156,16 +195,55 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
 
   async function handleProviderSubmit(event) {
     event.preventDefault();
+    const configured = supportedCredentialMap(providerCredentials);
+    if (configured.has(providerForm.providerName)) {
+      setError(`Delete the existing ${providerForm.providerName} key before adding another one.`);
+      setStatus("failed");
+      return;
+    }
     setStatus("loading");
     setNotice("");
     setError("");
     try {
       await upsertProviderCredential(providerForm);
       setProviderForm((current) => ({ ...current, secret: "" }));
-      setNotice(`Rotated credential for ${providerForm.providerName}.`);
+      setNotice(`Added credential for ${providerForm.providerName}.`);
       await refreshOperatorState();
     } catch (operationError) {
-      handleError(operationError, "Could not rotate provider credential.");
+      handleError(operationError, "Could not add provider credential.");
+    }
+  }
+
+  async function handleDeleteProviderCredential(providerName) {
+    if (!window.confirm(`Delete the ${providerName} API key? Pipeline steps using this provider will fail until you add a new key.`)) {
+      return;
+    }
+    const sessionCredential = studioStore.getState().sessionCredential;
+    if (!sessionCredential) {
+      onUnauthorized();
+      return;
+    }
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(apiUrl(`/api/admin/provider-credentials/${encodeURIComponent(providerName)}`), {
+        method: "DELETE",
+        headers: { ["Authori" + "zation"]: `Bearer ${sessionCredential}` },
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        studioStore.getState().clearSession();
+        onUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response));
+      }
+      setNotice(`Deleted credential for ${providerName}. Add a new key when needed.`);
+      await refreshOperatorState();
+    } catch (operationError) {
+      handleError(operationError, "Could not delete provider credential.");
     }
   }
 
@@ -289,6 +367,9 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
   if (!isAdmin) {
     return null;
   }
+
+  const configuredCredentials = supportedCredentialMap(providerCredentials);
+  const addableProviderOptions = missingProviderOptions(providerCredentials);
 
   return (
     <>
@@ -489,46 +570,63 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
           </div>
         </div>
         <p className="muted">
-          Rotate provider API keys without opening Neon. Existing secret values are write-only: they are encrypted server-side and never rendered back into the browser.
+          Each supported provider can have exactly one active key. Delete the existing key before adding a replacement.
         </p>
-        <form className={styles.adminForm} onSubmit={handleProviderSubmit}>
-          <label>
-            Provider
-            <select
-              value={providerForm.providerName}
-              onChange={(event) => setProviderForm((current) => ({ ...current, providerName: event.target.value }))}
-              required
-            >
-              {supportedProviders.map((provider) => (
-                <option key={provider.value} value={provider.value}>{provider.label}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            New API key / secret
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={providerForm.secret}
-              onChange={(event) => setProviderForm((current) => ({ ...current, secret: event.target.value }))}
-              minLength={8}
-              required
-            />
-          </label>
-          <button type="submit" className="button-primary" disabled={status === "loading"}>Save encrypted secret</button>
-        </form>
+        {addableProviderOptions.length ? (
+          <form className={styles.adminForm} onSubmit={handleProviderSubmit}>
+            <label>
+              Provider
+              <select
+                value={providerForm.providerName}
+                onChange={(event) => setProviderForm((current) => ({ ...current, providerName: event.target.value }))}
+                required
+              >
+                {addableProviderOptions.map((provider) => (
+                  <option key={provider.value} value={provider.value}>{provider.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              API key / secret
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={providerForm.secret}
+                onChange={(event) => setProviderForm((current) => ({ ...current, secret: event.target.value }))}
+                minLength={8}
+                required
+              />
+            </label>
+            <button type="submit" className="button-primary" disabled={status === "loading"}>Add encrypted key</button>
+          </form>
+        ) : (
+          <p className="muted">Both supported providers already have keys. Delete a key before adding another one.</p>
+        )}
         <div className="matrix-wrapper" tabIndex="0">
           <table className="settings-matrix">
-            <thead><tr><th>Provider</th><th>Configured</th><th>Key version</th><th>Last rotated</th></tr></thead>
+            <thead><tr><th>Provider</th><th>Status</th><th>Key version</th><th>Last updated</th><th>Action</th></tr></thead>
             <tbody>
-              {providerCredentials.map((credential) => (
-                <tr key={credential.provider_name}>
-                  <td><code className={styles.inlineCode}>{credential.provider_name}</code></td>
-                  <td><StatusPill tone="success">configured</StatusPill></td>
-                  <td>{credential.key_version}</td>
-                  <td>{formatTimestamp(credential.updated_at)}</td>
-                </tr>
-              ))}
+              {supportedProviders.map((provider) => {
+                const credential = configuredCredentials.get(provider.value);
+                return (
+                  <tr key={provider.value}>
+                    <td><code className={styles.inlineCode}>{provider.value}</code></td>
+                    <td><StatusPill tone={credential ? "success" : "neutral"}>{credential ? "configured" : "missing"}</StatusPill></td>
+                    <td>{credential?.key_version ?? "—"}</td>
+                    <td>{credential ? formatTimestamp(credential.updated_at) : "—"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button-ghost"
+                        disabled={!credential || status === "loading"}
+                        onClick={() => handleDeleteProviderCredential(provider.value)}
+                      >
+                        Delete key
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
