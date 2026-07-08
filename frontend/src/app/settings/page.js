@@ -6,7 +6,16 @@ import { useCallback, useEffect, useState } from "react";
 import { StudioSidebar } from "../../components/sidebar";
 import { useStudioStore } from "../../components/store";
 import { ThemeModePicker } from "../../components/theme-toggle";
-import { apiUrl, getApiConfigurationProblem, logout } from "../../lib/api-client";
+import {
+  apiUrl,
+  createAdminUser,
+  deleteAdminUser,
+  getApiConfigurationProblem,
+  listAdminUsers,
+  logout,
+  resetAdminUserPassword,
+  updateAdminUser,
+} from "../../lib/api-client";
 import {
   deleteThreadEverywhere,
   openThread,
@@ -59,15 +68,17 @@ const secretRows = [
   { variable: "NEXT_PUBLIC_FUGU_API_BASE_URL", location: "Vercel env", description: "Public backend origin. Must not include trailing /api." },
 ];
 
+const emptyNewUser = { username: "", password: "", role: "user", isActive: true };
+
 function statusTone(status) {
   const normalized = String(status || "").toLowerCase();
-  if (["ready", "connected", "alive", "success"].includes(normalized)) {
+  if (["ready", "connected", "alive", "success", "active"].includes(normalized)) {
     return "success";
   }
   if (["loading", "checking", "pending"].includes(normalized)) {
     return "loading";
   }
-  if (["idle", "not checked", "not exposed"].includes(normalized)) {
+  if (["idle", "not checked", "not exposed", "inactive"].includes(normalized)) {
     return "neutral";
   }
   return "danger";
@@ -98,14 +109,23 @@ export default function SettingsPage() {
   const router = useRouter();
   const isAuthenticated = useStudioStore((state) => state.isAuthenticated);
   const username = useStudioStore((state) => state.username);
+  const userRole = useStudioStore((state) => state.userRole);
+  const userId = useStudioStore((state) => state.userId);
   const threads = useStudioStore((state) => state.threads);
   const activeThreadId = useStudioStore((state) => state.activeThreadId);
   const setActiveThread = useStudioStore((state) => state.setActiveThread);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [browserOrigin] = useState(getBrowserOrigin);
   const [diagnostics, setDiagnostics] = useState({ status: "idle", payload: null, error: null, checkedAt: null });
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminStatus, setAdminStatus] = useState("idle");
+  const [adminError, setAdminError] = useState("");
+  const [adminNotice, setAdminNotice] = useState("");
+  const [newUser, setNewUser] = useState(emptyNewUser);
+  const [passwordDrafts, setPasswordDrafts] = useState({});
 
   const expireSession = useCallback(() => router.replace("/"), [router]);
+  const isAdmin = userRole === "admin";
 
   const refreshDiagnostics = useCallback(async () => {
     setDiagnostics((current) => ({ ...current, status: "loading", error: null }));
@@ -136,6 +156,25 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadAdminUsers = useCallback(async () => {
+    if (!isAdmin) {
+      return;
+    }
+    setAdminStatus("loading");
+    setAdminError("");
+    try {
+      const users = await listAdminUsers();
+      setAdminUsers(users);
+      setAdminStatus("ready");
+    } catch (error) {
+      if (error?.status === 401) {
+        expireSession();
+      }
+      setAdminError(error.message || "Could not load users.");
+      setAdminStatus("failed");
+    }
+  }, [expireSession, isAdmin]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/");
@@ -154,8 +193,18 @@ export default function SettingsPage() {
     const diagnosticsTimer = window.setTimeout(() => {
       refreshDiagnostics();
     }, 0);
-    return () => window.clearTimeout(diagnosticsTimer);
-  }, [isAuthenticated, expireSession, refreshDiagnostics]);
+    const adminTimer = isAdmin
+      ? window.setTimeout(() => {
+          loadAdminUsers();
+        }, 0)
+      : null;
+    return () => {
+      window.clearTimeout(diagnosticsTimer);
+      if (adminTimer) {
+        window.clearTimeout(adminTimer);
+      }
+    };
+  }, [isAuthenticated, expireSession, refreshDiagnostics, isAdmin, loadAdminUsers]);
 
   async function signOut() {
     await logout();
@@ -190,6 +239,85 @@ export default function SettingsPage() {
           expireSession();
         }
       }
+    }
+  }
+
+  async function handleCreateUser(event) {
+    event.preventDefault();
+    setAdminError("");
+    setAdminNotice("");
+    setAdminStatus("loading");
+    try {
+      await createAdminUser(newUser);
+      setNewUser(emptyNewUser);
+      setAdminNotice(`Created ${newUser.username.trim()}.`);
+      await loadAdminUsers();
+    } catch (error) {
+      if (error?.status === 401) {
+        expireSession();
+      }
+      setAdminError(error.message || "Could not create user.");
+      setAdminStatus("failed");
+    }
+  }
+
+  async function handleUpdateUser(targetUser, update) {
+    setAdminError("");
+    setAdminNotice("");
+    setAdminStatus("loading");
+    try {
+      await updateAdminUser(targetUser.id, update);
+      setAdminNotice(`Updated ${targetUser.username}.`);
+      await loadAdminUsers();
+    } catch (error) {
+      if (error?.status === 401) {
+        expireSession();
+      }
+      setAdminError(error.message || "Could not update user.");
+      setAdminStatus("failed");
+    }
+  }
+
+  async function handleResetPassword(targetUser) {
+    const password = passwordDrafts[targetUser.id] || "";
+    if (password.length < 8) {
+      setAdminError("Passwords must be at least 8 characters.");
+      return;
+    }
+    setAdminError("");
+    setAdminNotice("");
+    setAdminStatus("loading");
+    try {
+      await resetAdminUserPassword(targetUser.id, password);
+      setPasswordDrafts((current) => ({ ...current, [targetUser.id]: "" }));
+      setAdminNotice(`Reset password for ${targetUser.username}.`);
+      await loadAdminUsers();
+    } catch (error) {
+      if (error?.status === 401) {
+        expireSession();
+      }
+      setAdminError(error.message || "Could not reset password.");
+      setAdminStatus("failed");
+    }
+  }
+
+  async function handleDeleteUser(targetUser) {
+    if (!window.confirm(`Delete user "${targetUser.username}" and all owned threads?`)) {
+      return;
+    }
+    setAdminError("");
+    setAdminNotice("");
+    setAdminStatus("loading");
+    try {
+      await deleteAdminUser(targetUser.id);
+      setAdminNotice(`Deleted ${targetUser.username}.`);
+      await loadAdminUsers();
+    } catch (error) {
+      if (error?.status === 401) {
+        expireSession();
+      }
+      setAdminError(error.message || "Could not delete user.");
+      setAdminStatus("failed");
     }
   }
 
@@ -232,11 +360,141 @@ export default function SettingsPage() {
           </button>
           <div>
             <h1 className="workspace-title" id="settings-title">Settings</h1>
-            <p className={styles.headerSubtitle}>Deployment, runtime, database, and client controls for this Fugu environment.</p>
+            <p className={styles.headerSubtitle}>Deployment, runtime, database, users, and client controls for this Fugu environment.</p>
           </div>
         </header>
 
         <div className="settings-grid">
+          <section className="settings-card settings-card-wide">
+            <div className={styles.cardHeaderRow}>
+              <div>
+                <p className="eyebrow">Admin console</p>
+                <h3>User management</h3>
+              </div>
+              <div className={styles.headerActions}>
+                <StatusPill status={isAdmin ? adminStatus : "not exposed"} />
+                {isAdmin ? (
+                  <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
+                    {adminStatus === "loading" ? "Loading…" : "Refresh users"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {isAdmin ? (
+              <>
+                <p className="muted">Create users, disable access, change roles, reset passwords, and delete accounts without opening Neon.</p>
+                {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
+                {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
+                <form className={styles.adminForm} onSubmit={handleCreateUser}>
+                  <label>
+                    Username
+                    <input
+                      value={newUser.username}
+                      minLength={3}
+                      maxLength={255}
+                      onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Initial password
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={newUser.password}
+                      minLength={8}
+                      onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Role
+                    <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
+                      <option value="user">user</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </label>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={newUser.isActive}
+                      onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))}
+                    />
+                    Active
+                  </label>
+                  <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create user</button>
+                </form>
+                <div className="matrix-wrapper" tabIndex="0">
+                  <table className="settings-matrix">
+                    <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Threads</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {adminUsers.map((account) => {
+                        const isSelf = account.id === userId;
+                        return (
+                          <tr key={account.id}>
+                            <td>
+                              <span className={styles.valueBlock}>{account.username}</span>
+                              <span className={styles.valueOwner}>ID {account.id} · token v{account.token_version}</span>
+                            </td>
+                            <td><StatusPill status={account.role} /></td>
+                            <td><StatusPill status={account.is_active ? "active" : "inactive"} /></td>
+                            <td>{account.thread_count}</td>
+                            <td>
+                              <div className={styles.adminActions}>
+                                <button
+                                  type="button"
+                                  className="button-ghost"
+                                  disabled={isSelf || adminStatus === "loading"}
+                                  onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}
+                                >
+                                  {account.role === "admin" ? "Make user" : "Make admin"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="button-ghost"
+                                  disabled={isSelf || adminStatus === "loading"}
+                                  onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}
+                                >
+                                  {account.is_active ? "Deactivate" : "Reactivate"}
+                                </button>
+                                <details className={styles.passwordReset}>
+                                  <summary>Reset password</summary>
+                                  <div className={styles.passwordResetFields}>
+                                    <input
+                                      type="password"
+                                      autoComplete="new-password"
+                                      minLength={8}
+                                      placeholder="New password"
+                                      value={passwordDrafts[account.id] || ""}
+                                      onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))}
+                                    />
+                                    <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>
+                                      Save
+                                    </button>
+                                  </div>
+                                </details>
+                                <button
+                                  type="button"
+                                  className="button-ghost"
+                                  disabled={isSelf || adminStatus === "loading"}
+                                  onClick={() => handleDeleteUser(account)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="muted">Sign in as an admin to manage users. Regular users can view personal settings only.</p>
+            )}
+          </section>
+
           <section className="settings-card settings-card-wide">
             <div className={styles.cardHeaderRow}>
               <div>
