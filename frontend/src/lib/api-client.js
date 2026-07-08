@@ -235,6 +235,10 @@ function databasePayloadFromForm(form) {
   };
 }
 
+export function getDatabaseConnections(options) {
+  return authorizedRequest("/api/admin/database/connections", options);
+}
+
 export function testDatabaseTransferTargets(form, options = {}) {
   return authorizedRequest("/api/admin/database-transfer/test", {
     ...options,
