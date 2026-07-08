@@ -90,6 +90,10 @@ function formatCheckedAt(value) {
   }).format(value);
 }
 
+function getBrowserOrigin() {
+  return typeof window === "undefined" ? "Resolving…" : window.location.origin;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const isAuthenticated = useStudioStore((state) => state.isAuthenticated);
@@ -98,7 +102,7 @@ export default function SettingsPage() {
   const activeThreadId = useStudioStore((state) => state.activeThreadId);
   const setActiveThread = useStudioStore((state) => state.setActiveThread);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [browserOrigin, setBrowserOrigin] = useState("Resolving…");
+  const [browserOrigin] = useState(getBrowserOrigin);
   const [diagnostics, setDiagnostics] = useState({ status: "idle", payload: null, error: null, checkedAt: null });
 
   const expireSession = useCallback(() => router.replace("/"), [router]);
@@ -139,19 +143,18 @@ export default function SettingsPage() {
   }, [isAuthenticated, router]);
 
   useEffect(() => {
-    setBrowserOrigin(window.location.origin);
-  }, []);
-
-  useEffect(() => {
     if (!isAuthenticated) {
-      return;
+      return undefined;
     }
     refreshThreads().catch((error) => {
       if (error?.status === 401) {
         expireSession();
       }
     });
-    refreshDiagnostics();
+    const diagnosticsTimer = window.setTimeout(() => {
+      refreshDiagnostics();
+    }, 0);
+    return () => window.clearTimeout(diagnosticsTimer);
   }, [isAuthenticated, expireSession, refreshDiagnostics]);
 
   async function signOut() {
