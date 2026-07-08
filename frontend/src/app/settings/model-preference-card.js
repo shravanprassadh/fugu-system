@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   loadModelPreference,
@@ -43,16 +43,10 @@ export function ModelPreferenceCard() {
   const providerType = normalizeProvider(preference.providerType);
   const models = modelOptionsFor(providerType);
   const selectedModel = models.find((model) => model.value === preference.modelIdentifier) || models[0];
-  const filteredModels = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return models;
-    }
-    return models.filter((model) => {
-      const haystack = `${model.value} ${model.label}`.toLowerCase();
-      return haystack.includes(normalizedQuery);
-    });
-  }, [models, query]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredModels = normalizedQuery
+    ? models.filter((model) => `${model.value} ${model.label}`.toLowerCase().includes(normalizedQuery))
+    : models;
 
   function updateProvider(nextProviderType) {
     setQuery("");
