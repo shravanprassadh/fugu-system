@@ -156,3 +156,34 @@ export function renameThread(threadId, name, options = {}) {
 export function deleteThread(threadId, options = {}) {
   return authorizedRequest(`/api/threads/${threadId}`, { ...options, method: "DELETE" });
 }
+
+export function listAdminUsers(options) {
+  return authorizedRequest("/api/admin/users", options);
+}
+
+export function createAdminUser({ username, password, role = "user", isActive = true }, options = {}) {
+  return authorizedRequest("/api/admin/users", {
+    ...options,
+    method: "POST",
+    body: { username, password, role, is_active: isActive },
+  });
+}
+
+export function updateAdminUser(userId, { role, isActive }, options = {}) {
+  const body = {};
+  if (role !== undefined) {
+    body.role = role;
+  }
+  if (isActive !== undefined) {
+    body.is_active = isActive;
+  }
+  return authorizedRequest(`/api/admin/users/${userId}`, { ...options, method: "PATCH", body });
+}
+
+export function resetAdminUserPassword(userId, password, options = {}) {
+  return authorizedRequest(`/api/admin/users/${userId}/password`, { ...options, method: "POST", body: { password } });
+}
+
+export function deleteAdminUser(userId, options = {}) {
+  return authorizedRequest(`/api/admin/users/${userId}`, { ...options, method: "DELETE" });
+}
