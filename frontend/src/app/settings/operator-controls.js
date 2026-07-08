@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  getRenderConfig,
   listPipelineSteps,
   listProviderCredentials,
+  persistDatabaseEnvToRender,
+  saveRenderConfig,
   testDatabaseTransferTargets,
+  testRenderConfig,
   transferDatabases,
   updatePipelineStep,
   upsertProviderCredential,
@@ -13,6 +17,7 @@ import {
 import styles from "./settings.module.css";
 
 const emptyProviderForm = { providerName: "openrouter", secret: "" };
+const emptyRenderForm = { serviceId: "", apiToken: "" };
 const emptyDatabaseForm = {
   masterRouterDbUrl: "",
   metadataSidebarDbUrl: "",
@@ -20,6 +25,8 @@ const emptyDatabaseForm = {
   confirmation: "",
   replaceExisting: false,
   applyToCurrentProcess: true,
+  persistToRender: true,
+  triggerRenderDeploy: true,
 };
 
 function StatusPill({ children, tone = "neutral" }) {
@@ -45,7 +52,7 @@ function dependencyText(step) {
 }
 
 function databaseStatusTone(status) {
-  if (["connected", "copied", "active"].includes(status)) {
+  if (["connected", "copied", "active", "updated", "configured"].includes(status)) {
     return "success";
   }
   if (status === "failed") {
@@ -58,6 +65,9 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [providerCredentials, setProviderCredentials] = useState([]);
   const [pipelineSteps, setPipelineSteps] = useState([]);
   const [providerForm, setProviderForm] = useState(emptyProviderForm);
+  const [renderForm, setRenderForm] = useState(emptyRenderForm);
+  const [renderConfig, setRenderConfig] = useState(null);
+  const [renderResult, setRenderResult] = useState(null);
   const [databaseForm, setDatabaseForm] = useState(emptyDatabaseForm);
   const [databaseResult, setDatabaseResult] = useState(null);
   const [pipelineDrafts, setPipelineDrafts] = useState({});
@@ -80,9 +90,19 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     setStatus("loading");
     setError("");
     try {
-      const [credentials, steps] = await Promise.all([listProviderCredentials(), listPipelineSteps()]);
+      const [credentials, steps, renderState] = await Promise.all([
+        listProviderCredentials(),
+        listPipelineSteps(),
+        getRenderConfig(),
+      ]);
       setProviderCredentials(credentials);
       setPipelineSteps(steps);
+      setRenderConfig(renderState);
+      setRenderForm((current) => ({
+        ...current,
+        serviceId: current.serviceId || renderState.service_id || "",
+        apiToken: "",
+      }));
       setPipelineDrafts((currentDrafts) => {
         const nextDrafts = {};
         for (const step of steps) {
@@ -124,6 +144,36 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     }
   }
 
+  async function handleRenderConfigSubmit(event) {
+    event.preventDefault();
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const result = await saveRenderConfig(renderForm);
+      setRenderConfig(result);
+      setRenderForm((current) => ({ ...current, apiToken: "" }));
+      setNotice("Render integration saved. The token is encrypted and will not be shown again.");
+      setStatus("ready");
+    } catch (operationError) {
+      handleError(operationError, "Could not save Render integration.");
+    }
+  }
+
+  async function handleRenderConfigTest() {
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const result = await testRenderConfig();
+      setRenderConfig(result);
+      setNotice("Render API token and service ID are valid.");
+      setStatus("ready");
+    } catch (operationError) {
+      handleError(operationError, "Could not validate Render integration.");
+    }
+  }
+
   async function handleDatabaseTest(event) {
     event.preventDefault();
     setStatus("loading");
@@ -146,7 +196,16 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     try {
       const result = await transferDatabases(databaseForm);
       setDatabaseResult(result);
-      setNotice("Database transfer completed. Runtime pools have been updated for this process.");
+      let renderUpdate = null;
+      if (databaseForm.persistToRender) {
+        renderUpdate = await persistDatabaseEnvToRender(databaseForm);
+        setRenderResult(renderUpdate);
+      }
+      setNotice(
+        renderUpdate
+          ? "Database transfer completed, Render env vars were updated, and Render deploy was triggered."
+          : "Database transfer completed. Runtime pools have been updated for this process."
+      );
       setDatabaseForm((current) => ({
         ...current,
         masterRouterDbUrl: "",
@@ -156,7 +215,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       }));
       setStatus("ready");
     } catch (operationError) {
-      handleError(operationError, "Could not transfer databases.");
+      handleError(operationError, "Could not transfer databases or persist them to Render.");
     }
   }
 
@@ -202,6 +261,69 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       <section className="settings-card settings-card-wide">
         <div className={styles.cardHeaderRow}>
           <div>
+            <p className="eyebrow">Render control plane</p>
+            <h3>Deployment API integration</h3>
+          </div>
+          <div className={styles.headerActions}>
+            <StatusPill tone={renderConfig?.configured ? "success" : "neutral"}>
+              {renderConfig?.configured ? "configured" : "not configured"}
+            </StatusPill>
+            <button type="button" className="button-ghost" onClick={handleRenderConfigTest} disabled={status === "loading" || !renderConfig?.configured}>
+              Test Render access
+            </button>
+          </div>
+        </div>
+        <p className="muted">
+          Save a Render API token and backend service ID once. Fugu then updates Render env vars and triggers a redeploy after database transfer.
+        </p>
+        <form className={styles.adminForm} onSubmit={handleRenderConfigSubmit}>
+          <label>
+            Render service ID
+            <input
+              value={renderForm.serviceId}
+              onChange={(event) => setRenderForm((current) => ({ ...current, serviceId: event.target.value }))}
+              placeholder="srv-..."
+              minLength={3}
+              required
+            />
+          </label>
+          <label>
+            Render API token
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={renderForm.apiToken}
+              onChange={(event) => setRenderForm((current) => ({ ...current, apiToken: event.target.value }))}
+              placeholder={renderConfig?.has_api_token ? "Stored token unchanged" : "Paste token once"}
+              minLength={renderConfig?.has_api_token ? undefined : 20}
+            />
+          </label>
+          <button type="submit" className="button-primary" disabled={status === "loading"}>Save Render config</button>
+        </form>
+        {renderConfig?.service_id ? (
+          <p className="muted">Stored service: <code className={styles.inlineCode}>{renderConfig.service_id}</code>. API token is stored encrypted and hidden.</p>
+        ) : null}
+        {renderResult ? (
+          <div className="matrix-wrapper" tabIndex="0">
+            <table className="settings-matrix">
+              <thead><tr><th>Render status</th><th>Service</th><th>Deploy</th><th>Env vars</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><StatusPill tone={databaseStatusTone(renderResult.status)}>{renderResult.status}</StatusPill></td>
+                  <td><code className={styles.inlineCode}>{renderResult.service_id}</code></td>
+                  <td>{renderResult.deploy_triggered ? renderResult.deploy_id || "triggered" : "not triggered"}</td>
+                  <td>{renderResult.updated_env_keys.join(", ")}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="muted">{renderResult.note}</p>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="settings-card settings-card-wide">
+        <div className={styles.cardHeaderRow}>
+          <div>
             <p className="eyebrow">Database transfer</p>
             <h3>Connection migration and controlled reconnect</h3>
           </div>
@@ -210,7 +332,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
           </div>
         </div>
         <p className="muted">
-          Paste new Postgres URLs, test them, then transfer current tables. URLs are submitted as write-only values; results are returned with passwords masked.
+          Paste new Postgres URLs, test them, transfer current tables, hot-swap this process, then persist the same URLs to Render and redeploy.
         </p>
         {error ? <p className={styles.diagnosticError}>{error}</p> : null}
         {notice ? <p className={styles.diagnosticSuccess}>{notice}</p> : null}
@@ -262,6 +384,23 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
               />
               Use new pools now
             </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={databaseForm.persistToRender}
+                onChange={(event) => setDatabaseForm((current) => ({ ...current, persistToRender: event.target.checked }))}
+              />
+              Persist to Render env
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={databaseForm.triggerRenderDeploy}
+                onChange={(event) => setDatabaseForm((current) => ({ ...current, triggerRenderDeploy: event.target.checked }))}
+                disabled={!databaseForm.persistToRender}
+              />
+              Trigger Render deploy
+            </label>
           </div>
           <button type="submit" className="button-ghost" disabled={status === "loading"}>Test connections</button>
         </form>
@@ -280,7 +419,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
             onClick={handleDatabaseTransfer}
             disabled={status === "loading" || databaseForm.confirmation !== "TRANSFER DATABASES"}
           >
-            Transfer and reconnect
+            Transfer, persist, and redeploy
           </button>
         </div>
         {databaseResult ? (
