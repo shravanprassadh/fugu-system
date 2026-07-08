@@ -37,6 +37,20 @@ def _sse(event_name: str, payload: object) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload)}\n\n"
 
 
+def _pipeline_error_payload(exc: PipelineRunFailureError) -> dict[str, object]:
+    origin = exc.origin
+    origin_message = str(origin) if origin is not None and str(origin) else str(exc)
+    origin_type = type(origin).__name__ if origin is not None else type(exc).__name__
+    return {
+        "event": "error",
+        "run_id": exc.run_id,
+        "step_name": exc.step_name,
+        "error": origin_message,
+        "error_type": origin_type,
+        "wrapper_error": str(exc),
+    }
+
+
 @execution_router.post("/{thread_id}/execute")
 async def execute_pipeline(
     thread_id: int,
@@ -67,15 +81,7 @@ async def execute_pipeline(
             async for event in kernel.execute(prepared):
                 yield _sse(event.event_type.value, event.to_payload())
         except PipelineRunFailureError as exc:
-            yield _sse(
-                "error",
-                {
-                    "event": "error",
-                    "run_id": exc.run_id,
-                    "step_name": exc.step_name,
-                    "error": str(exc),
-                },
-            )
+            yield _sse("error", _pipeline_error_payload(exc))
 
     return StreamingResponse(
         event_stream(),
