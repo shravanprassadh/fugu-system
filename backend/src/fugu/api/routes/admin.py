@@ -68,26 +68,18 @@ class ResetPasswordPayload(BaseModel):
 async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
     user = await UserRepository.get_by_id(session, user_id)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return user
 
 
 async def _active_admin_count(session: AsyncSession) -> int:
-    statement = (
-        select(func.count())
-        .select_from(User)
-        .where(User.role == "admin", User.is_active.is_(True))
-    )
+    statement = select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
     result = await session.scalar(statement)
     return int(result or 0)
 
 
 async def _thread_count(session: AsyncSession, user_id: int) -> int:
-    statement = (
-        select(func.count()).select_from(Thread).where(Thread.user_id == user_id)
-    )
+    statement = select(func.count()).select_from(Thread).where(Thread.user_id == user_id)
     result = await session.scalar(statement)
     return int(result or 0)
 
@@ -101,9 +93,7 @@ async def _prevent_last_admin_loss(
 ) -> None:
     current_is_active_admin = target_user.role == "admin" and target_user.is_active
     would_remain_admin = next_role in (None, "admin")
-    would_remain_active = (
-        target_user.is_active if next_is_active is None else next_is_active
-    )
+    would_remain_active = target_user.is_active if next_is_active is None else next_is_active
     if not current_is_active_admin or (would_remain_admin and would_remain_active):
         return
     if await _active_admin_count(session) <= 1:
@@ -127,14 +117,11 @@ async def list_users(
     )
     result = await session.execute(statement)
     return [
-        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0))
-        for user, thread_count in result.all()
+        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0)) for user, thread_count in result.all()
     ]
 
 
-@admin_router.post(
-    "/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED
-)
+@admin_router.post("/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: CreateUserPayload,
     _: AdminUser,
@@ -144,9 +131,7 @@ async def create_user(
     """Create a user without using Neon directly."""
     normalized_username = payload.username.strip()
     if await UserRepository.get_by_username(session, normalized_username) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Username already exists."
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists.")
     user = await UserRepository.add(
         session,
         username=normalized_username,
@@ -172,9 +157,7 @@ async def update_user(
             detail="No user changes were supplied.",
         )
     target_user = await _get_user_or_404(session, user_id)
-    if target_user.id == current_admin.id and (
-        payload.role == "user" or payload.is_active is False
-    ):
+    if target_user.id == current_admin.id and (payload.role == "user" or payload.is_active is False):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot disable or demote your own admin account.",
@@ -191,9 +174,7 @@ async def update_user(
         target_user.is_active = payload.is_active
     target_user.token_version += 1
     await session.flush()
-    return AdminUserResponse.from_user(
-        target_user, thread_count=await _thread_count(session, target_user.id)
-    )
+    return AdminUserResponse.from_user(target_user, thread_count=await _thread_count(session, target_user.id))
 
 
 @admin_router.post(
@@ -216,9 +197,7 @@ async def reset_user_password(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@admin_router.delete(
-    "/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
-)
+@admin_router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_user(
     user_id: int,
     current_admin: AdminUser,
@@ -231,9 +210,7 @@ async def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot delete your own admin account.",
         )
-    await _prevent_last_admin_loss(
-        session, target_user=target_user, next_is_active=False
-    )
+    await _prevent_last_admin_loss(session, target_user=target_user, next_is_active=False)
     await session.delete(target_user)
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
