@@ -15,7 +15,12 @@ from sqlalchemy.sql.schema import Table
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
 from fugu.boot.config import get_settings
-from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget, get_session_registry, set_runtime_session_registry
+from fugu.database.connection import (
+    DatabaseSessionRegistry,
+    DatabaseTarget,
+    get_session_registry,
+    set_runtime_session_registry,
+)
 from fugu.database.models import Base, PipelineStep, ProviderCredential, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository
 from fugu.database.urls import sqlalchemy_asyncpg_url
@@ -178,7 +183,11 @@ async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
 
 
 async def _active_admin_count(session: AsyncSession) -> int:
-    statement = select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
+    statement = (
+        select(func.count())
+        .select_from(User)
+        .where(User.role == "admin", User.is_active.is_(True))
+    )
     result = await session.scalar(statement)
     return int(result or 0)
 
@@ -237,10 +246,6 @@ def _temporary_engine(url: str) -> AsyncEngine:
         pool_pre_ping=True,
         pool_timeout=settings.network_request_timeout,
     )
-
-
-def _temporary_registry(urls: dict[DatabaseTarget, str]) -> DatabaseSessionRegistry:
-    return DatabaseSessionRegistry({target: _temporary_engine(url) for target, url in urls.items()})
 
 
 async def _dispose_engines(engines: dict[DatabaseTarget, AsyncEngine]) -> None:
@@ -317,7 +322,8 @@ async def list_users(
     )
     result = await session.execute(statement)
     return [
-        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0)) for user, thread_count in result.all()
+        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0))
+        for user, thread_count in result.all()
     ]
 
 
