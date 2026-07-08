@@ -4,6 +4,7 @@ from fugu.api.routes.admin import admin_router
 from fugu.api.routes.auth import auth_router
 from fugu.api.routes.execution import execution_router
 from fugu.api.routes.health import health_router
+from fugu.api.routes.render_admin import render_admin_router
 from fugu.api.routes.threads import threads_router
 
-__all__ = ["admin_router", "auth_router", "execution_router", "health_router", "threads_router"]
+__all__ = ["admin_router", "auth_router", "execution_router", "health_router", "render_admin_router", "threads_router"]
