@@ -1,5 +1,5 @@
 .headerSubtitle {
-  margin: 0.25rem 0 0;
+  margin: 0.2rem 0 0;
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.45;
@@ -15,9 +15,9 @@
 .headerActions {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
 .statusPill {
@@ -27,11 +27,12 @@
   width: fit-content;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  padding: 0.18rem 0.52rem;
+  padding: 0.18rem 0.54rem;
   font-family: var(--font-mono);
   font-size: 0.66rem;
   font-weight: 650;
   letter-spacing: 0.04em;
+  line-height: 1.35;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -55,21 +56,22 @@
 }
 
 .statusPillNeutral {
-  border-color: var(--line);
-  background: color-mix(in srgb, var(--surface) 80%, var(--bg));
+  border-color: color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--surface) 82%, var(--bg));
   color: var(--muted);
 }
 
 .inlineCode {
   display: inline-flex;
   max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 8px;
   background: var(--code-bg);
   color: var(--soft);
-  padding: 0.12rem 0.4rem;
+  padding: 0.14rem 0.42rem;
   font-family: var(--font-mono);
   font-size: 0.78rem;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -77,6 +79,7 @@
   display: block;
   font-family: var(--font-mono);
   font-size: 0.82rem;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -89,9 +92,9 @@
 
 .diagnosticError,
 .diagnosticSuccess {
-  margin: 0.85rem 0 0;
-  border-radius: 12px;
-  padding: 0.75rem 0.85rem;
+  margin: 0.75rem 0 0;
+  border-radius: 14px;
+  padding: 0.72rem 0.84rem;
   line-height: 1.5;
 }
 
@@ -111,25 +114,26 @@
 .databaseTransferForm,
 .transferConfirmRow {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.8rem;
   align-items: end;
-  margin: 1rem 0;
+  width: 100%;
+  margin: 0.9rem 0 0;
   border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  padding: 1rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  padding: 0.92rem;
 }
 
 .adminForm {
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) minmax(120px, 0.55fr) auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 }
 
 .databaseTransferForm {
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
 }
 
 .transferConfirmRow {
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .adminForm label,
@@ -138,7 +142,8 @@
 .pipelineEditorCard label,
 .fullWidthLabel {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.38rem;
+  min-width: 0;
   color: var(--soft);
   font-size: 0.82rem;
   font-weight: 600;
@@ -149,18 +154,27 @@
 .transferConfirmRow select,
 .pipelineEditorCard select {
   width: 100%;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 12px;
   background: var(--surface);
   color: var(--text);
-  padding: 0.78rem 0.9rem;
+  padding: 0.72rem 0.82rem;
+}
+
+.adminForm button,
+.databaseTransferForm button,
+.transferConfirmRow button {
+  align-self: end;
+  width: fit-content;
+  white-space: nowrap;
 }
 
 .transferToggles {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.5rem;
   grid-column: 1 / -1;
+  padding-top: 0.1rem;
 }
 
 .checkboxLabel {
@@ -168,30 +182,44 @@
   grid-template-columns: none !important;
   align-items: center;
   gap: 0.45rem !important;
-  min-height: 2.4rem;
+  width: fit-content;
+  min-height: 2.1rem;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  padding: 0.34rem 0.68rem;
+  color: var(--soft);
 }
 
 .checkboxLabel input {
   width: auto;
+  margin: 0;
 }
 
 .adminActions {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.45rem;
+  min-width: min(100%, 18rem);
 }
 
 .passwordReset {
-  min-width: 12rem;
+  min-width: 0;
 }
 
 .passwordReset summary {
-  border: 1px solid var(--line-strong);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
   border-radius: 999px;
   color: var(--soft);
   padding: 0.5rem 0.85rem;
   font-weight: 550;
+  list-style: none;
   cursor: pointer;
+}
+
+.passwordReset summary::-webkit-details-marker {
+  display: none;
 }
 
 .passwordReset summary:hover {
@@ -201,37 +229,39 @@
 
 .passwordResetFields {
   display: grid;
-  gap: 0.45rem;
-  margin-top: 0.5rem;
+  gap: 0.5rem;
+  width: min(100%, 16rem);
+  margin-top: 0.55rem;
 }
 
 .passwordResetFields input {
-  min-width: 12rem;
+  min-width: 0;
 }
 
 .pipelineEditorList {
   display: grid;
-  gap: 0.85rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
 }
 
 .pipelineEditorCard {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.85rem;
+  min-width: 0;
   border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 20px;
+  border-radius: 18px;
   background: color-mix(in srgb, var(--bg) 28%, var(--surface));
-  padding: 1rem;
+  padding: 0.92rem;
 }
 
 .pipelineEditorCard h4 {
-  margin: 0.15rem 0 0;
+  margin: 0.12rem 0 0;
   color: var(--text);
 }
 
 .pipelineFields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 0.75rem;
   align-items: end;
 }
@@ -243,15 +273,16 @@
 
 :global(.settings-panel) {
   isolation: isolate;
+  overflow: hidden;
   background:
     radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0, transparent 30rem),
     linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, var(--surface)), var(--bg));
 }
 
 :global(.settings-panel .workspace-header) {
-  min-height: 4.2rem;
+  min-height: 4.15rem;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
   backdrop-filter: blur(18px);
 }
 
@@ -259,12 +290,14 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(210px, 250px) minmax(0, 760px);
-  gap: clamp(1.2rem, 3vw, 2.4rem);
-  width: min(100%, 1120px);
+  grid-template-columns: 240px minmax(0, 760px);
+  align-items: start;
+  gap: clamp(1rem, 2.5vw, 2rem);
+  width: min(100%, 1080px);
   margin: 0 auto;
-  padding: clamp(1.25rem, 3vw, 2.2rem);
+  padding: clamp(1rem, 2.4vw, 1.8rem);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 :global(.settings-nav) {
@@ -272,27 +305,27 @@
   top: 0;
   align-self: start;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.24rem;
   border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.06);
-  padding: 0.45rem;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.055);
+  padding: 0.44rem;
   backdrop-filter: blur(18px);
 }
 
 :global(.settings-nav-item) {
   display: grid;
-  gap: 0.14rem;
+  gap: 0.12rem;
   width: 100%;
   border: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   background: transparent;
   color: var(--muted);
-  padding: 0.78rem 0.9rem;
+  padding: 0.72rem 0.82rem;
   text-align: left;
   cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 :global(.settings-nav-item:hover) {
@@ -303,18 +336,18 @@
 :global(.settings-nav-item-active) {
   background: color-mix(in srgb, var(--surface) 94%, var(--accent-soft));
   color: var(--text);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.07);
 }
 
 :global(.settings-nav-label) {
-  font-size: 0.95rem;
+  font-size: 0.94rem;
   font-weight: 680;
   letter-spacing: -0.01em;
 }
 
 :global(.settings-nav-description) {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -322,45 +355,63 @@
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 1.05rem;
+  gap: 0.9rem;
   animation: settingsFadeIn 180ms ease both;
 }
 
 @keyframes settingsFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 :global(.settings-section-heading) {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.2rem 0 0.35rem;
+  gap: 0.28rem;
+  padding: 0.1rem 0 0.2rem;
 }
 
 :global(.settings-section-heading h2) {
   margin: 0;
-  font-size: clamp(1.45rem, 3vw, 2.05rem);
+  font-size: clamp(1.35rem, 2.6vw, 1.9rem);
   font-weight: 690;
-  letter-spacing: -0.04em;
-  line-height: 1.08;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
 }
 
 :global(.settings-stack) {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
 :global(.settings-pane),
 :global(.settings-content .settings-card) {
+  display: grid;
+  gap: 0.72rem;
+  min-width: 0;
   border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.055);
-  padding: clamp(1rem, 2.2vw, 1.35rem);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 87%, transparent);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.052);
+  padding: clamp(0.95rem, 1.9vw, 1.2rem);
   backdrop-filter: blur(18px);
 }
 
 :global(.settings-content .settings-card) {
+  margin: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+}
+
+:global(.settings-content .settings-card:first-child) {
+  padding-top: clamp(0.95rem, 1.9vw, 1.2rem);
+}
+
+:global(.settings-content .settings-card:last-child) {
   border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
 }
 
@@ -380,7 +431,8 @@
 
 :global(.settings-pane p),
 :global(.settings-content .settings-card p) {
-  margin-top: 0.32rem;
+  margin: 0.1rem 0 0;
+  line-height: 1.5;
 }
 
 :global(.settings-row) {
@@ -388,6 +440,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
 }
 
 :global(.settings-row-top) {
@@ -396,32 +449,34 @@
 
 :global(.settings-list) {
   display: grid;
-  gap: 0.62rem;
-  margin-top: 0.9rem;
+  gap: 0.55rem;
+  margin-top: 0.2rem;
 }
 
 :global(.settings-list-item) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.9rem;
+  min-width: 0;
   border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 18px;
+  border-radius: 16px;
   background: color-mix(in srgb, var(--bg) 28%, var(--surface));
-  padding: 0.9rem;
+  padding: 0.82rem;
 }
 
 :global(.settings-list-main) {
   min-width: 0;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.22rem;
 }
 
 :global(.settings-list-title-row) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.42rem;
+  min-width: 0;
 }
 
 :global(.settings-list-title-row strong) {
@@ -444,38 +499,48 @@
 }
 
 :global(.settings-definition-list) {
-  margin-top: 0.9rem;
+  margin-top: 0.25rem;
 }
 
 :global(.settings-definition-list div) {
-  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(145px, 0.7fr) minmax(0, 1.3fr);
   border-top-color: color-mix(in srgb, var(--line) 70%, transparent);
+  padding: 0.68rem 0;
 }
 
 :global(.settings-check-list) {
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: 18px;
+  border-radius: 16px;
   background: color-mix(in srgb, var(--bg) 24%, var(--surface));
-  padding: 1rem 1rem 1rem 2rem;
+  padding: 0.85rem 0.95rem 0.85rem 1.85rem;
 }
 
 :global(.settings-content .matrix-wrapper) {
-  border-radius: 18px;
+  width: 100%;
+  margin: 0.55rem 0 0;
+  border-radius: 16px;
   border-color: color-mix(in srgb, var(--line) 76%, transparent);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   box-shadow: none;
 }
 
+:global(.settings-content .settings-matrix) {
+  min-width: 620px;
+}
+
 :global(.settings-content .settings-matrix th),
 :global(.settings-content .settings-matrix td) {
-  padding: 0.86rem 0.95rem;
+  padding: 0.68rem 0.78rem;
 }
 
 :global(.settings-content input),
 :global(.settings-content textarea),
 :global(.settings-content select) {
+  min-width: 0;
   border-color: color-mix(in srgb, var(--line-strong) 70%, transparent);
-  background: color-mix(in srgb, var(--surface) 90%, var(--bg));
+  background: color-mix(in srgb, var(--surface) 91%, var(--bg));
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 
@@ -493,7 +558,7 @@
 }
 
 :global(.settings-content .button-primary) {
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 :global(.settings-content .button-ghost) {
@@ -506,7 +571,7 @@
 
 :global(.settings-content .settings-card .eyebrow),
 :global(.settings-pane .eyebrow) {
-  margin-bottom: 0.38rem;
+  margin-bottom: 0.3rem;
 }
 
 :global(.settings-content .settings-card-wide),
@@ -521,7 +586,7 @@
 
 :global([data-theme="dark"] .settings-panel) {
   background:
-    radial-gradient(circle at 20% -4%, color-mix(in srgb, var(--accent) 16%, transparent) 0, transparent 34rem),
+    radial-gradient(circle at 20% -4%, color-mix(in srgb, var(--accent) 15%, transparent) 0, transparent 34rem),
     linear-gradient(180deg, #17191d, #111216);
 }
 
@@ -529,26 +594,27 @@
 :global([data-theme="dark"] .settings-pane),
 :global([data-theme="dark"] .settings-content .settings-card) {
   background: color-mix(in srgb, var(--surface) 74%, transparent);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.36);
+  box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32);
 }
 
 :global([data-theme="dark"] .settings-nav-item-active),
 :global([data-theme="dark"] .settings-list-item),
-:global([data-theme="dark"] .settings-check-list) {
+:global([data-theme="dark"] .settings-check-list),
+:global([data-theme="dark"] .pipelineEditorCard) {
   background: color-mix(in srgb, var(--surface) 72%, #0e1014);
 }
 
-@media (max-width: 1000px) {
-  .databaseTransferForm,
-  .pipelineFields {
-    grid-template-columns: 1fr;
+@media (max-width: 1100px) {
+  :global(.settings-shell) {
+    grid-template-columns: 220px minmax(0, 1fr);
+    width: 100%;
   }
 }
 
 @media (max-width: 980px) {
   :global(.settings-shell) {
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 0.9rem;
   }
 
   :global(.settings-nav) {
@@ -556,23 +622,15 @@
     display: flex;
     overflow-x: auto;
     border-radius: 18px;
+    scrollbar-width: none;
+  }
+
+  :global(.settings-nav::-webkit-scrollbar) {
+    display: none;
   }
 
   :global(.settings-nav-item) {
     min-width: 12rem;
-  }
-}
-
-@media (max-width: 900px) {
-  .adminForm,
-  .transferConfirmRow {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .cardHeaderRow {
-    display: grid;
   }
 
   .headerActions {
@@ -580,17 +638,51 @@
   }
 }
 
-@media (max-width: 680px) {
-  :global(.settings-shell) {
-    padding: 0.85rem;
-  }
-
+@media (max-width: 760px) {
+  .cardHeaderRow,
   :global(.settings-row),
   :global(.settings-list-item) {
     display: grid;
   }
 
+  .adminActions {
+    justify-content: flex-start;
+  }
+
+  .adminForm,
+  .databaseTransferForm,
+  .transferConfirmRow,
+  .pipelineFields {
+    grid-template-columns: 1fr;
+  }
+
+  .adminForm button,
+  .databaseTransferForm button,
+  .transferConfirmRow button {
+    width: 100%;
+  }
+
   :global(.settings-section-heading h2) {
-    font-size: 1.45rem;
+    font-size: 1.42rem;
+  }
+}
+
+@media (max-width: 560px) {
+  :global(.settings-shell) {
+    padding: 0.75rem;
+  }
+
+  :global(.settings-pane),
+  :global(.settings-content .settings-card) {
+    border-radius: 18px;
+    padding: 0.85rem;
+  }
+
+  .transferToggles {
+    display: grid;
+  }
+
+  .checkboxLabel {
+    width: 100%;
   }
 }
