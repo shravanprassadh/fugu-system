@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fugu.api.dependencies import CurrentUser
 from fugu.execution.exceptions import (
@@ -19,12 +19,35 @@ from fugu.execution.exceptions import (
 from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
+_SUPPORTED_PROVIDER_TYPES = {"openrouter", "nvidia"}
 
 
 class PipelineExecutionPayload(BaseModel):
     """Validated user prompt submitted to the pipeline engine."""
 
     prompt: str = Field(min_length=1, max_length=100_000)
+    provider_type: str | None = Field(default=None, min_length=1, max_length=50)
+    model_identifier: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_model_override(self) -> PipelineExecutionPayload:
+        """Ensure optional user model overrides remain inside supported providers."""
+        if self.provider_type is None and self.model_identifier is None:
+            return self
+        if not self.provider_type or not self.model_identifier:
+            raise ValueError("provider_type and model_identifier must be supplied together.")
+
+        provider_type = self.provider_type.strip().lower()
+        model_identifier = self.model_identifier.strip()
+        if provider_type not in _SUPPORTED_PROVIDER_TYPES:
+            supported = ", ".join(sorted(_SUPPORTED_PROVIDER_TYPES))
+            raise ValueError(f"Unsupported provider_type {self.provider_type!r}. Supported providers: {supported}.")
+        if provider_type == "openrouter" and model_identifier != "openrouter/free":
+            raise ValueError("OpenRouter is restricted to model_identifier='openrouter/free'.")
+
+        self.provider_type = provider_type
+        self.model_identifier = model_identifier
+        return self
 
 
 ExecutionKernel = Annotated[
@@ -64,6 +87,8 @@ async def execute_pipeline(
             thread_id=thread_id,
             user_id=current_user.id,
             initial_prompt=payload.prompt,
+            selected_provider_type=payload.provider_type,
+            selected_model_identifier=payload.model_identifier,
         )
     except ThreadAccessDeniedError as exc:
         raise HTTPException(
