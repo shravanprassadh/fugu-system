@@ -9,6 +9,8 @@ requires-python = ">=3.11,<3.12"
 
 [project.scripts]
 fugu-create-user = "fugu.boot.create_user:main"
+fugu-seed-pipeline = "fugu.boot.seed_pipeline:seed_pipeline_main"
+fugu-set-provider-credential = "fugu.boot.seed_pipeline:set_provider_credential_main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -25,8 +27,6 @@ extend-exclude = ["src/fugu/boot/migrations.py"]
 select = ["E", "F", "W", "I", "N", "ASYNC"]
 ignore = []
 
-[tool.ruff.lint.per-file-ignores]
-"tests/test_create_user.py" = ["I001"]
 
 [tool.mypy]
 python_version = "3.11"
