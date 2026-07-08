@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -11,8 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
-from fugu.database.models import Thread, User
-from fugu.database.repositories import UserRepository
+from fugu.database.models import PipelineStep, ProviderCredential, Thread, User
+from fugu.database.repositories import PipelineRepository, UserRepository
+from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
 
@@ -63,6 +64,68 @@ class ResetPasswordPayload(BaseModel):
     """Password reset payload submitted by an administrator."""
 
     password: str = Field(min_length=8, max_length=1_024)
+
+
+class ProviderCredentialResponse(BaseModel):
+    """Non-secret provider credential metadata."""
+
+    provider_name: str
+    key_version: int
+    created_at: datetime
+    updated_at: datetime
+    configured: bool = True
+
+    @classmethod
+    def from_credential(cls, credential: ProviderCredential) -> ProviderCredentialResponse:
+        return cls(
+            provider_name=credential.provider_name,
+            key_version=credential.key_version,
+            created_at=credential.created_at,
+            updated_at=credential.updated_at,
+        )
+
+
+class UpsertProviderCredentialPayload(BaseModel):
+    """Write-only provider secret rotation payload."""
+
+    provider_name: str = Field(min_length=2, max_length=100)
+    secret: str = Field(min_length=8, max_length=8_192)
+
+
+class PipelineStepResponse(BaseModel):
+    """Editable pipeline step metadata."""
+
+    id: int
+    sequence_order_position: int
+    step_name: str
+    provider_type: str
+    model_string: str
+    system_prompt_directives: str | None
+    prerequisite_dependencies: list[str]
+    is_terminal: bool
+
+    @classmethod
+    def from_step(cls, step: PipelineStep) -> PipelineStepResponse:
+        return cls(
+            id=step.id,
+            sequence_order_position=step.sequence_order_position,
+            step_name=step.step_name,
+            provider_type=step.provider_type,
+            model_string=step.model_string,
+            system_prompt_directives=step.system_prompt_directives,
+            prerequisite_dependencies=list(step.prerequisite_dependencies),
+            is_terminal=step.is_terminal,
+        )
+
+
+class UpdatePipelineStepPayload(BaseModel):
+    """Admin-editable pipeline step fields."""
+
+    provider_type: str | None = Field(default=None, min_length=2, max_length=100)
+    model_string: str | None = Field(default=None, min_length=2, max_length=255)
+    system_prompt_directives: str | None = Field(default=None, max_length=12_000)
+    prerequisite_dependencies: list[str] | None = None
+    is_terminal: bool | None = None
 
 
 async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
@@ -214,3 +277,67 @@ async def delete_user(
     await session.delete(target_user)
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.get("/provider-credentials", response_model=list[ProviderCredentialResponse])
+async def list_provider_credentials(
+    _: AdminUser,
+    session: MasterSession,
+) -> list[ProviderCredentialResponse]:
+    """List configured provider credentials without returning plaintext secrets."""
+    statement = select(ProviderCredential).order_by(ProviderCredential.provider_name.asc())
+    result = await session.scalars(statement)
+    return [ProviderCredentialResponse.from_credential(credential) for credential in result.all()]
+
+
+@admin_router.post("/provider-credentials", response_model=ProviderCredentialResponse)
+async def upsert_provider_credential(
+    payload: UpsertProviderCredentialPayload,
+    _: AdminUser,
+    session: MasterSession,
+) -> ProviderCredentialResponse:
+    """Create or rotate a provider API key from the admin console."""
+    vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
+    credential = await vault.store(
+        session,
+        provider_name=payload.provider_name,
+        plaintext_secret=payload.secret,
+    )
+    return ProviderCredentialResponse.from_credential(credential)
+
+
+@admin_router.get("/pipeline-steps", response_model=list[PipelineStepResponse])
+async def list_pipeline_steps(
+    _: AdminUser,
+    session: MasterSession,
+) -> list[PipelineStepResponse]:
+    """Return editable pipeline graph steps."""
+    return [PipelineStepResponse.from_step(step) for step in await PipelineRepository.list_steps(session)]
+
+
+@admin_router.patch("/pipeline-steps/{step_id}", response_model=PipelineStepResponse)
+async def update_pipeline_step(
+    step_id: int,
+    payload: UpdatePipelineStepPayload,
+    _: AdminUser,
+    session: MasterSession,
+) -> PipelineStepResponse:
+    """Update model/provider configuration for future pipeline runs."""
+    step = await session.get(PipelineStep, step_id)
+    if step is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline step not found.")
+    supplied_fields: dict[str, Any] = payload.model_dump(exclude_unset=True)
+    if not supplied_fields:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pipeline changes were supplied.")
+    if payload.provider_type is not None:
+        step.provider_type = payload.provider_type.strip().lower()
+    if payload.model_string is not None:
+        step.model_string = payload.model_string.strip()
+    if "system_prompt_directives" in supplied_fields:
+        step.system_prompt_directives = payload.system_prompt_directives
+    if payload.prerequisite_dependencies is not None:
+        step.prerequisite_dependencies = [dependency.strip() for dependency in payload.prerequisite_dependencies if dependency.strip()]
+    if payload.is_terminal is not None:
+        step.is_terminal = payload.is_terminal
+    await session.flush()
+    return PipelineStepResponse.from_step(step)
