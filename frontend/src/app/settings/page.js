@@ -26,6 +26,8 @@ import { ModelPreferenceCard } from "./model-preference-card";
 import { OperatorControls } from "./operator-controls";
 import styles from "./settings.module.css";
 
+const MAX_USER_ACCOUNTS = 3;
+
 const settingsSections = [
   {
     id: "general",
@@ -76,7 +78,7 @@ const runtimeRows = [
   { label: "Frontend API origin", value: process.env.NEXT_PUBLIC_FUGU_API_BASE_URL || "Same origin", owner: "Vercel env" },
   { label: "Backend live probe", value: apiUrl("/api/health/live"), owner: "Render route" },
   { label: "Backend ready probe", value: apiUrl("/api/health/ready"), owner: "Render route" },
-  { label: "Session mode", value: "Volatile memory", owner: "Browser runtime" },
+  { label: "Session mode", value: "48-hour persisted browser session", owner: "Browser runtime" },
   { label: "Stream protocol", value: "Server-Sent Events", owner: "Backend API" },
 ];
 
@@ -148,6 +150,7 @@ export default function SettingsPage() {
 
   const expireSession = useCallback(() => router.replace("/"), [router]);
   const isAdmin = userRole === "admin";
+  const hasReachedUserLimit = adminUsers.length >= MAX_USER_ACCOUNTS;
 
   const refreshDiagnostics = useCallback(async () => {
     setDiagnostics((current) => ({ ...current, status: "loading", error: null }));
@@ -276,6 +279,11 @@ export default function SettingsPage() {
 
   async function handleCreateUser(event) {
     event.preventDefault();
+    if (hasReachedUserLimit) {
+      setAdminError(`Fugu is limited to ${MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.`);
+      setAdminStatus("failed");
+      return;
+    }
     setAdminError("");
     setAdminNotice("");
     setAdminStatus("loading");
@@ -497,10 +505,10 @@ export default function SettingsPage() {
                   <div className="settings-row settings-row-top">
                     <div>
                       <h3>User management</h3>
-                      <p className="muted">Create users, change roles, reset passwords, and remove accounts.</p>
+                      <p className="muted">Create users, change roles, reset passwords, and remove accounts. Limit: {adminUsers.length}/{MAX_USER_ACCOUNTS} accounts.</p>
                     </div>
                     <div className={styles.headerActions}>
-                      <StatusPill status={adminStatus} />
+                      <StatusPill status={hasReachedUserLimit ? "limit reached" : adminStatus} />
                       <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
                         {adminStatus === "loading" ? "Loading…" : "Refresh"}
                       </button>
@@ -508,27 +516,28 @@ export default function SettingsPage() {
                   </div>
                   {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
                   {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
+                  {hasReachedUserLimit ? <p className={styles.diagnosticError}>Fugu is limited to {MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.</p> : null}
                   <form className={styles.adminForm} onSubmit={handleCreateUser}>
                     <label>
                       Username
-                      <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
+                      <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required disabled={hasReachedUserLimit} />
                     </label>
                     <label>
                       Initial password
-                      <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
+                      <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required disabled={hasReachedUserLimit} />
                     </label>
                     <label>
                       Role
-                      <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
+                      <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))} disabled={hasReachedUserLimit}>
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
                     </label>
                     <label className={styles.checkboxLabel}>
-                      <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
+                      <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} disabled={hasReachedUserLimit} />
                       Active
                     </label>
-                    <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create</button>
+                    <button type="submit" className="button-primary" disabled={adminStatus === "loading" || hasReachedUserLimit}>Create</button>
                   </form>
                 </section>
 
