@@ -23,6 +23,11 @@ _RENDER_DATABASE_ENV_KEYS = {
     "METADATA_SIDEBAR_DB_URL": "metadata_sidebar_db_url",
     "TRANSACTIONAL_LOGS_DB_URL": "transactional_logs_db_url",
 }
+_RENDER_DATABASE_TARGET_ENV_KEYS = {
+    "master": "MASTER_ROUTER_DB_URL",
+    "metadata": "METADATA_SIDEBAR_DB_URL",
+    "logs": "TRANSACTIONAL_LOGS_DB_URL",
+}
 
 
 class RenderConfigPayload(BaseModel):
@@ -46,6 +51,13 @@ class RenderDatabaseEnvPayload(BaseModel):
     master_router_db_url: str = Field(min_length=20, max_length=4_096)
     metadata_sidebar_db_url: str = Field(min_length=20, max_length=4_096)
     transactional_logs_db_url: str = Field(min_length=20, max_length=4_096)
+    trigger_deploy: bool = True
+
+
+class RenderSingleDatabaseEnvPayload(BaseModel):
+    """One database URL that should be persisted into one Render service env var."""
+
+    database_url: str = Field(min_length=20, max_length=4_096)
     trigger_deploy: bool = True
 
 
@@ -167,6 +179,16 @@ async def _require_render_config(session: AsyncSession) -> _RenderConfig:
     return config
 
 
+def _normalize_database_target(target: str) -> str:
+    normalized = target.strip().lower()
+    if normalized not in _RENDER_DATABASE_TARGET_ENV_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown database target. Use master, metadata, or logs.",
+        )
+    return normalized
+
+
 async def _upsert_render_env_var(config: _RenderConfig, key: str, value: str) -> None:
     await _render_request(
         "PUT",
@@ -259,5 +281,33 @@ async def persist_database_env_to_render(
             "The restarted service will load the persisted database URLs."
             if payload.trigger_deploy
             else "Render environment variables were updated. Trigger a deploy before expecting them to take effect."
+        ),
+    )
+
+
+@render_admin_router.post("/database-env/{target}", response_model=RenderEnvUpdateResult)
+async def persist_single_database_env_to_render(
+    target: str,
+    payload: RenderSingleDatabaseEnvPayload,
+    _: AdminUser,
+    session: MasterSession,
+) -> RenderEnvUpdateResult:
+    """Persist one database URL to one Render env var and optionally trigger a deploy."""
+    normalized_target = _normalize_database_target(target)
+    render_key = _RENDER_DATABASE_TARGET_ENV_KEYS[normalized_target]
+    config = await _require_render_config(session)
+    await _upsert_render_env_var(config, render_key, payload.database_url)
+    deploy_id = await _trigger_render_deploy(config) if payload.trigger_deploy else None
+    return RenderEnvUpdateResult(
+        status="updated",
+        service_id=config.service_id,
+        updated_env_keys=[render_key],
+        deploy_triggered=payload.trigger_deploy,
+        deploy_id=deploy_id,
+        note=(
+            f"{render_key} was updated in Render and a deploy was triggered. "
+            "The restarted service will load the new database URL."
+            if payload.trigger_deploy
+            else f"{render_key} was updated in Render. Trigger a deploy before expecting it to take effect."
         ),
     )
