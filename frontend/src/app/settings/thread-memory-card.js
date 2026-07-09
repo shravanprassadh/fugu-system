@@ -311,7 +311,7 @@ export function ThreadMemoryCard({ onUnauthorized }) {
   );
 }
 
-export function ThreadMemoryModal({ open, activeThreadId, activeThreadName, onClose, onUnauthorized }) {
+export function ThreadMemoryModal({ open, activeThreadId, activeThreadName, onClose, onUnauthorized, onAfterRegenerate }) {
   const [memory, setMemory] = useState(null);
   const [memoryStatus, setMemoryStatus] = useState("idle");
   const [memoryNotice, setMemoryNotice] = useState("");
@@ -385,8 +385,11 @@ export function ThreadMemoryModal({ open, activeThreadId, activeThreadName, onCl
     try {
       const payload = await regenerateThreadMemory(activeThreadId);
       setMemory(payload);
-      setMemoryNotice("Thread memory regenerated.");
+      setMemoryNotice("Thread memory regenerated. Thread title updated if the summarizer found a better heading.");
       setMemoryStatus("ready");
+      if (onAfterRegenerate) {
+        await onAfterRegenerate();
+      }
     } catch (operationError) {
       if (operationError?.status === 401) {
         handleUnauthorized();
@@ -436,7 +439,7 @@ export function ThreadMemoryModal({ open, activeThreadId, activeThreadName, onCl
               <div style={sectionTitleRowStyle}>
                 <div>
                   <strong>Summary actions</strong>
-                  <p className="muted">Refresh reads the stored summary. Regenerate rebuilds it using the key managed in Settings.</p>
+                  <p className="muted">Refresh reads the stored summary. Regenerate rebuilds it and can update the thread title.</p>
                 </div>
                 <div style={actionRowStyle}>
                   <button
