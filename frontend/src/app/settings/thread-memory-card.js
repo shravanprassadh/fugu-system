@@ -14,7 +14,7 @@ import styles from "./settings.module.css";
 
 const MEMORY_MODEL_FALLBACK = "gemini-2.5-flash-lite";
 
-const keyModalOverlayStyle = {
+const modalOverlayStyle = {
   position: "fixed",
   inset: 0,
   zIndex: 90,
@@ -33,7 +33,18 @@ const keyModalDialogStyle = {
   padding: "1.1rem",
 };
 
-const keyModalHeaderStyle = {
+const summaryModalDialogStyle = {
+  width: "min(100%, 46rem)",
+  maxHeight: "min(82dvh, 48rem)",
+  overflow: "auto",
+  border: "1px solid color-mix(in srgb, var(--line) 78%, transparent)",
+  borderRadius: "24px",
+  background: "var(--surface)",
+  boxShadow: "0 30px 90px rgba(0, 0, 0, 0.28)",
+  padding: "1.1rem",
+};
+
+const modalHeaderStyle = {
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
@@ -87,11 +98,22 @@ function formatTimestamp(value) {
   }).format(new Date(value));
 }
 
-export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthorized }) {
-  const [memory, setMemory] = useState(null);
-  const [memoryStatus, setMemoryStatus] = useState("idle");
-  const [memoryNotice, setMemoryNotice] = useState("");
-  const [memoryError, setMemoryError] = useState("");
+function useEscapeToClose(isOpen, onClose) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+}
+
+export function ThreadMemoryCard({ onUnauthorized }) {
   const [config, setConfig] = useState(null);
   const [configStatus, setConfigStatus] = useState("idle");
   const [configNotice, setConfigNotice] = useState("");
@@ -103,30 +125,13 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     onUnauthorized();
   }, [onUnauthorized]);
 
-  const loadMemory = useCallback(async () => {
-    if (!activeThreadId) {
-      setMemory(null);
-      setMemoryStatus("idle");
-      setMemoryNotice("");
-      setMemoryError("");
-      return;
-    }
-    setMemoryStatus("loading");
-    setMemoryNotice("");
-    setMemoryError("");
-    try {
-      const payload = await fetchThreadMemory(activeThreadId);
-      setMemory(payload);
-      setMemoryStatus("ready");
-    } catch (operationError) {
-      if (operationError?.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-      setMemoryError(operationError.message || "Could not load thread memory.");
-      setMemoryStatus("failed");
-    }
-  }, [activeThreadId, handleUnauthorized]);
+  const closeKeyModal = useCallback(() => {
+    setApiKeyDraft("");
+    setConfigError("");
+    setIsKeyModalOpen(false);
+  }, []);
+
+  useEscapeToClose(isKeyModalOpen, closeKeyModal);
 
   const loadConfig = useCallback(async () => {
     setConfigStatus("loading");
@@ -146,37 +151,15 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
   }, [handleUnauthorized]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      loadMemory();
-      loadConfig();
-    }, 0);
+    const timer = window.setTimeout(loadConfig, 0);
     return () => window.clearTimeout(timer);
-  }, [loadConfig, loadMemory]);
-
-  useEffect(() => {
-    if (!isKeyModalOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        closeKeyModal();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isKeyModalOpen]);
+  }, [loadConfig]);
 
   function openKeyModal() {
     setApiKeyDraft("");
     setConfigError("");
     setConfigNotice("");
     setIsKeyModalOpen(true);
-  }
-
-  function closeKeyModal() {
-    setApiKeyDraft("");
-    setConfigError("");
-    setIsKeyModalOpen(false);
   }
 
   async function handleSaveConfig(event) {
@@ -231,62 +214,29 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     }
   }
 
-  async function handleRegenerateMemory() {
-    if (!activeThreadId) {
-      return;
-    }
-    setMemoryStatus("generating");
-    setMemoryNotice("");
-    setMemoryError("");
-    try {
-      const payload = await regenerateThreadMemory(activeThreadId);
-      setMemory(payload);
-      setMemoryNotice("Thread memory generated and saved.");
-      setMemoryStatus("ready");
-    } catch (operationError) {
-      if (operationError?.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-      setMemoryError(operationError.message || "Could not regenerate thread memory.");
-      setMemoryStatus("failed");
-    }
-  }
-
-  const visibleMemoryStatus = ["loading", "generating"].includes(memoryStatus)
-    ? memoryStatus
-    : memory?.status || "not selected";
-  const summary = memory?.summary_md?.trim() || "";
   const configLabel = config?.configured ? "configured" : "not configured";
   const keyActionLabel = config?.configured ? "Change key" : "Add key";
-  const canGenerateMemory = Boolean(
-    activeThreadId && config?.configured && !["loading", "generating"].includes(memoryStatus),
-  );
 
   return (
     <section className="settings-card settings-card-wide">
       <div className={styles.cardHeaderRow}>
         <div>
           <p className="eyebrow">Thread memory</p>
-          <h3>Memory setup</h3>
-          <p className="muted">Configure the separate summarizer key and manage the active thread summary.</p>
+          <h3>Memory key setup</h3>
+          <p className="muted">Manage the separate Google AI Studio key used only for thread summaries.</p>
         </div>
-        <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
+        <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
+          {configStatus === "saving" ? "saving" : configLabel}
+        </StatusPill>
       </div>
 
-      <div className="settings-list" style={{ display: "grid", gap: "0.9rem" }}>
+      <div className="settings-list">
         <div className="settings-list-item">
           <div className="settings-list-main">
             <div style={sectionTitleRowStyle}>
               <div>
-                <p className="eyebrow">Setup</p>
-                <div className="settings-list-title-row">
-                  <strong>Google AI Studio memory key</strong>
-                  <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
-                    {configStatus === "saving" ? "saving" : configLabel}
-                  </StatusPill>
-                </div>
-                <p className="muted">Stored separately from OpenRouter/NVIDIA chat keys. Used only for summarising threads.</p>
+                <strong>Google AI Studio memory key</strong>
+                <p className="muted">Stored separately from OpenRouter/NVIDIA chat keys. Summary viewing is available from the chat header.</p>
               </div>
               <div style={actionRowStyle}>
                 <button type="button" className="button-primary" onClick={openKeyModal} disabled={configStatus === "saving"}>
@@ -312,58 +262,10 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
             {configError && !isKeyModalOpen ? <p className={styles.diagnosticError}>{configError}</p> : null}
           </div>
         </div>
-
-        <div className="settings-list-item">
-          <div className="settings-list-main">
-            <div style={sectionTitleRowStyle}>
-              <div>
-                <p className="eyebrow">Active thread</p>
-                <div className="settings-list-title-row">
-                  <strong>{activeThreadId ? activeThreadName || `Thread ${activeThreadId}` : "No thread selected"}</strong>
-                  <StatusPill tone={memory?.has_memory ? "success" : "neutral"}>{memory?.has_memory ? "summary saved" : "no summary"}</StatusPill>
-                </div>
-                <p className="muted">Refresh reads the stored summary. Regenerate rebuilds it now using the memory key.</p>
-              </div>
-              <div style={actionRowStyle}>
-                <button
-                  type="button"
-                  className="button-ghost"
-                  onClick={loadMemory}
-                  disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}
-                >
-                  {memoryStatus === "loading" ? "Loading…" : "Refresh"}
-                </button>
-                <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
-                  {memoryStatus === "generating" ? "Generating…" : "Regenerate"}
-                </button>
-              </div>
-            </div>
-
-            {!activeThreadId ? <p className="muted">Open a chat thread to view or generate memory.</p> : null}
-            {activeThreadId && !config?.configured ? <p className={styles.diagnosticError}>Add the Google AI Studio memory key before regenerating.</p> : null}
-            {memoryNotice ? <p className={styles.diagnosticSuccess}>{memoryNotice}</p> : null}
-            {memoryError ? <p className={styles.diagnosticError}>{memoryError}</p> : null}
-            {memory?.error_message ? <p className={styles.diagnosticError}>{memory.error_message}</p> : null}
-
-            <dl className="definition-list settings-definition-list">
-              <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : "Waiting for first update"}</dd></div>
-              <div><dt>Last summarized message</dt><dd>{memory?.last_summarized_message_id ?? "Not summarized yet"}</dd></div>
-              <div><dt>Updated</dt><dd>{formatTimestamp(memory?.updated_at)}</dd></div>
-            </dl>
-
-            {summary ? (
-              <div className="message message-assistant" style={{ marginTop: "0.85rem" }}>
-                <SafeMarkdownRenderer content={summary} />
-              </div>
-            ) : (
-              <p className="muted">No stored summary yet. Add the key, then regenerate or continue the conversation.</p>
-            )}
-          </div>
-        </div>
       </div>
 
       {isKeyModalOpen ? (
-        <div style={keyModalOverlayStyle} role="presentation" onMouseDown={closeKeyModal}>
+        <div style={modalOverlayStyle} role="presentation" onMouseDown={closeKeyModal}>
           <div
             role="dialog"
             aria-modal="true"
@@ -371,7 +273,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
             style={keyModalDialogStyle}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div style={keyModalHeaderStyle}>
+            <div style={modalHeaderStyle}>
               <div>
                 <p className="eyebrow">Thread memory key</p>
                 <h3 id="thread-memory-key-title">{config?.configured ? "Change Google AI Studio key" : "Add Google AI Studio key"}</h3>
@@ -406,5 +308,181 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function ThreadMemoryModal({ open, activeThreadId, activeThreadName, onClose, onUnauthorized }) {
+  const [memory, setMemory] = useState(null);
+  const [memoryStatus, setMemoryStatus] = useState("idle");
+  const [memoryNotice, setMemoryNotice] = useState("");
+  const [memoryError, setMemoryError] = useState("");
+  const [config, setConfig] = useState(null);
+  const [configError, setConfigError] = useState("");
+
+  const handleUnauthorized = useCallback(() => {
+    onUnauthorized();
+  }, [onUnauthorized]);
+
+  useEscapeToClose(open, onClose);
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const payload = await getThreadMemoryConfig();
+      setConfig(payload);
+      setConfigError("");
+    } catch (operationError) {
+      if (operationError?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      setConfigError(operationError.message || "Could not load memory key status.");
+    }
+  }, [handleUnauthorized]);
+
+  const loadMemory = useCallback(async () => {
+    if (!activeThreadId) {
+      setMemory(null);
+      setMemoryStatus("idle");
+      setMemoryNotice("");
+      setMemoryError("");
+      return;
+    }
+    setMemoryStatus("loading");
+    setMemoryNotice("");
+    setMemoryError("");
+    try {
+      const payload = await fetchThreadMemory(activeThreadId);
+      setMemory(payload);
+      setMemoryStatus("ready");
+    } catch (operationError) {
+      if (operationError?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      setMemoryError(operationError.message || "Could not load thread memory.");
+      setMemoryStatus("failed");
+    }
+  }, [activeThreadId, handleUnauthorized]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      loadConfig();
+      loadMemory();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadConfig, loadMemory, open]);
+
+  async function handleRegenerateMemory() {
+    if (!activeThreadId) {
+      return;
+    }
+    setMemoryStatus("generating");
+    setMemoryNotice("");
+    setMemoryError("");
+    try {
+      const payload = await regenerateThreadMemory(activeThreadId);
+      setMemory(payload);
+      setMemoryNotice("Thread memory regenerated.");
+      setMemoryStatus("ready");
+    } catch (operationError) {
+      if (operationError?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      setMemoryError(operationError.message || "Could not regenerate thread memory.");
+      setMemoryStatus("failed");
+    }
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  const visibleMemoryStatus = ["loading", "generating"].includes(memoryStatus)
+    ? memoryStatus
+    : memory?.status || "not selected";
+  const summary = memory?.summary_md?.trim() || "";
+  const canGenerateMemory = Boolean(
+    activeThreadId && config?.configured && !["loading", "generating"].includes(memoryStatus),
+  );
+
+  return (
+    <div style={modalOverlayStyle} role="presentation" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="thread-memory-summary-title"
+        style={summaryModalDialogStyle}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div style={modalHeaderStyle}>
+          <div>
+            <p className="eyebrow">Thread memory</p>
+            <h3 id="thread-memory-summary-title">Current thread summary</h3>
+            <p className="muted">{activeThreadId ? activeThreadName || `Thread ${activeThreadId}` : "No thread selected"}</p>
+          </div>
+          <div style={actionRowStyle}>
+            <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
+            <button type="button" className="button-ghost" onClick={onClose}>Close</button>
+          </div>
+        </div>
+
+        <div className="settings-list" style={{ display: "grid", gap: "0.9rem" }}>
+          <div className="settings-list-item">
+            <div className="settings-list-main">
+              <div style={sectionTitleRowStyle}>
+                <div>
+                  <strong>Summary actions</strong>
+                  <p className="muted">Refresh reads the stored summary. Regenerate rebuilds it using the key managed in Settings.</p>
+                </div>
+                <div style={actionRowStyle}>
+                  <button
+                    type="button"
+                    className="button-ghost"
+                    onClick={loadMemory}
+                    disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}
+                  >
+                    {memoryStatus === "loading" ? "Loading…" : "Refresh"}
+                  </button>
+                  <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
+                    {memoryStatus === "generating" ? "Generating…" : "Regenerate"}
+                  </button>
+                </div>
+              </div>
+              {!activeThreadId ? <p className="muted">Open a chat thread to view or generate memory.</p> : null}
+              {activeThreadId && !config?.configured ? <p className={styles.diagnosticError}>Add the Google AI Studio memory key in Settings before regenerating.</p> : null}
+              {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
+              {memoryNotice ? <p className={styles.diagnosticSuccess}>{memoryNotice}</p> : null}
+              {memoryError ? <p className={styles.diagnosticError}>{memoryError}</p> : null}
+              {memory?.error_message ? <p className={styles.diagnosticError}>{memory.error_message}</p> : null}
+              <dl className="definition-list settings-definition-list">
+                <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : config?.model_identifier || MEMORY_MODEL_FALLBACK}</dd></div>
+                <div><dt>Last summarized message</dt><dd>{memory?.last_summarized_message_id ?? "Not summarized yet"}</dd></div>
+                <div><dt>Updated</dt><dd>{formatTimestamp(memory?.updated_at)}</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <div className="settings-list-item">
+            <div className="settings-list-main">
+              <div className="settings-list-title-row">
+                <strong>Stored summary</strong>
+                <StatusPill tone={memory?.has_memory ? "success" : "neutral"}>{memory?.has_memory ? "available" : "empty"}</StatusPill>
+              </div>
+              {summary ? (
+                <div className="message message-assistant" style={{ marginTop: "0.85rem" }}>
+                  <SafeMarkdownRenderer content={summary} />
+                </div>
+              ) : (
+                <p className="muted">No stored summary yet. Add the key in Settings, then regenerate or continue the conversation.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
