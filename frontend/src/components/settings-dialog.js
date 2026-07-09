@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ModelPreferenceCard } from "../app/settings/model-preference-card";
 import { OperatorControls } from "../app/settings/operator-controls";
 import styles from "../app/settings/settings.module.css";
+import { ThreadMemoryCard } from "../app/settings/thread-memory-card";
 import {
   apiUrl,
   createAdminUser,
@@ -232,7 +233,7 @@ function getBrowserOrigin() {
   return typeof window === "undefined" ? "Resolving…" : window.location.origin;
 }
 
-export function SettingsDialog({ open, username, onClose, onSignOut }) {
+export function SettingsDialog({ open, username, activeThreadId, activeThreadName, onClose, onSignOut }) {
   const userRole = useStudioStore((state) => state.userRole);
   const userId = useStudioStore((state) => state.userId);
   const [activeSection, setActiveSection] = useState("general");
@@ -655,6 +656,11 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
 
           {currentSection.id === "system" ? (
             <div className="settings-stack">
+              <ThreadMemoryCard
+                activeThreadId={activeThreadId}
+                activeThreadName={activeThreadName}
+                onUnauthorized={onSignOut}
+              />
               {isAdmin ? <OperatorControls isAdmin={isAdmin} onUnauthorized={onSignOut} /> : null}
 
               <section className="settings-pane">
