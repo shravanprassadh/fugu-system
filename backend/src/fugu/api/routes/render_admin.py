@@ -17,6 +17,7 @@ from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngi
 render_admin_router = APIRouter(prefix="/api/admin/render", tags=["render-administration"])
 _RENDER_CONFIG_PROVIDER = "render_control_plane"
 _RENDER_API_BASE_URL = "https://api.render.com/v1"
+_RENDER_AUTH_STATUS_CODES = {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}
 _RENDER_DATABASE_ENV_KEYS = {
     "MASTER_ROUTER_DB_URL": "master_router_db_url",
     "METADATA_SIDEBAR_DB_URL": "metadata_sidebar_db_url",
@@ -112,6 +113,23 @@ def _render_error_message(response: httpx.Response) -> str:
     return f"Render API returned HTTP {response.status_code}."
 
 
+def _render_admin_error_detail(response: httpx.Response) -> str:
+    render_message = _render_error_message(response)
+    if response.status_code in _RENDER_AUTH_STATUS_CODES:
+        return (
+            "Stored Render API credentials were rejected by Render. "
+            "Click Change in Render control plane and save a current Render API token that can access the configured service. "
+            f"Render API returned HTTP {response.status_code}: {render_message}"
+        )
+    if response.status_code == status.HTTP_404_NOT_FOUND:
+        return (
+            "The configured Render service ID was not found for the stored Render API token. "
+            "Click Change in Render control plane and verify the service ID belongs to the same Render account as the API token. "
+            f"Render API returned HTTP {response.status_code}: {render_message}"
+        )
+    return f"Render API request failed with HTTP {response.status_code}: {render_message}"
+
+
 async def _render_request(
     method: str,
     path: str,
@@ -130,7 +148,7 @@ async def _render_request(
     if response.status_code >= 400:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_render_error_message(response),
+            detail=_render_admin_error_detail(response),
         )
     if not response.content:
         return None
