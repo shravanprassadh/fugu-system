@@ -218,6 +218,22 @@ export function deleteAdminUser(userId, options = {}) {
   return authorizedRequest(`/api/admin/users/${userId}`, { ...options, method: "DELETE" });
 }
 
+export function getThreadMemoryConfig(options) {
+  return authorizedRequest("/api/admin/thread-memory/config", options);
+}
+
+export function saveThreadMemoryConfig(apiKey, options = {}) {
+  return authorizedRequest("/api/admin/thread-memory/config", {
+    ...options,
+    method: "POST",
+    body: { api_key: apiKey },
+  });
+}
+
+export function deleteThreadMemoryConfig(options = {}) {
+  return authorizedRequest("/api/admin/thread-memory/config", { ...options, method: "DELETE" });
+}
+
 export function listProviderCredentials(options) {
   return authorizedRequest("/api/admin/provider-credentials", options);
 }
