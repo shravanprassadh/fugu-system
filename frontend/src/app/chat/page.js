@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ThreadMemoryModal } from "../settings/thread-memory-card";
 import { SettingsDialog } from "../../components/settings-dialog";
 import { StudioSidebar } from "../../components/sidebar";
 import { useStudioStore } from "../../components/store";
@@ -54,6 +55,15 @@ function ArrowDownIcon() {
   );
 }
 
+function MemoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v14l-6-3-6 3V5Z" />
+      <path d="M9 7h6M9 11h4" />
+    </svg>
+  );
+}
+
 const GREETINGS = [
   "What are we running today?",
   "Ready when you are.",
@@ -92,6 +102,7 @@ export default function ChatPage() {
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isThreadMemoryOpen, setIsThreadMemoryOpen] = useState(false);
   const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
@@ -353,6 +364,15 @@ export default function ChatPage() {
               <span>{activeStep}</span>
             </div>
           ) : null}
+          <button
+            type="button"
+            className="button-ghost"
+            onClick={() => setIsThreadMemoryOpen(true)}
+            aria-label="Open thread memory summary"
+          >
+            <MemoryIcon />
+            Memory
+          </button>
         </header>
 
         {isNewChat ? (
@@ -411,6 +431,13 @@ export default function ChatPage() {
         activeThreadName={activeThread?.name || ""}
         onClose={() => setIsSettingsOpen(false)}
         onSignOut={signOut}
+      />
+      <ThreadMemoryModal
+        open={isThreadMemoryOpen}
+        activeThreadId={activeThreadId}
+        activeThreadName={activeThread?.name || ""}
+        onClose={() => setIsThreadMemoryOpen(false)}
+        onUnauthorized={signOut}
       />
     </main>
   );
