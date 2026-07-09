@@ -8,11 +8,11 @@ import {
   getDatabaseConnections,
   getRenderConfig,
   listProviderCredentials,
-  persistDatabaseEnvToRender,
+  persistDatabaseTargetEnvToRender,
   saveRenderConfig,
-  testDatabaseTransferTargets,
+  testCandidateDatabaseConnection,
+  testCurrentDatabaseConnection,
   testRenderConfig,
-  transferDatabases,
   upsertProviderCredential,
 } from "../../lib/api-client";
 import { supportedProviders } from "../../lib/model-options";
@@ -21,16 +21,7 @@ import styles from "./settings.module.css";
 const supportedProviderNames = new Set(supportedProviders.map((provider) => provider.value));
 const emptyProviderForm = { providerName: "openrouter", secret: "" };
 const emptyRenderForm = { serviceId: "", apiToken: "" };
-const emptyDatabaseForm = {
-  masterRouterDbUrl: "",
-  metadataSidebarDbUrl: "",
-  transactionalLogsDbUrl: "",
-  confirmation: "",
-  replaceExisting: false,
-  applyToCurrentProcess: true,
-  persistToRender: true,
-  triggerRenderDeploy: true,
-};
+const emptyDatabaseDraft = { databaseUrl: "", triggerRenderDeploy: true };
 
 function StatusPill({ children, tone = "neutral" }) {
   const className = `${styles.statusPill} ${styles[`statusPill${tone[0].toUpperCase()}${tone.slice(1)}`]}`;
@@ -88,6 +79,14 @@ async function responseErrorMessage(response) {
   return `Request failed with status ${response.status}.`;
 }
 
+function databaseDraftFor(drafts, target) {
+  return drafts[target] || emptyDatabaseDraft;
+}
+
+function isCandidateSaveReady(result, draft) {
+  return result?.kind === "candidate" && result.status === "connected" && result.candidateUrl === draft.databaseUrl;
+}
+
 export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [providerCredentials, setProviderCredentials] = useState([]);
   const [providerForm, setProviderForm] = useState(emptyProviderForm);
@@ -96,9 +95,9 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
   const [renderResult, setRenderResult] = useState(null);
   const [renderEditMode, setRenderEditMode] = useState(false);
   const [databaseConnections, setDatabaseConnections] = useState(null);
-  const [databaseForm, setDatabaseForm] = useState(emptyDatabaseForm);
-  const [databaseResult, setDatabaseResult] = useState(null);
-  const [databaseEditMode, setDatabaseEditMode] = useState(false);
+  const [databaseDrafts, setDatabaseDrafts] = useState({});
+  const [databaseEditTarget, setDatabaseEditTarget] = useState(null);
+  const [databaseResults, setDatabaseResults] = useState({});
   const [status, setStatus] = useState("idle");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -247,54 +246,103 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
     }
   }
 
-  function beginDatabaseEdit() {
-    setDatabaseForm(emptyDatabaseForm);
-    setDatabaseEditMode(true);
+  function beginDatabaseEdit(target) {
+    setNotice("");
+    setError("");
+    setDatabaseEditTarget(target);
+    setDatabaseDrafts((current) => ({
+      ...current,
+      [target]: current[target] || emptyDatabaseDraft,
+    }));
   }
 
-  function cancelDatabaseEdit() {
-    setDatabaseForm(emptyDatabaseForm);
-    setDatabaseEditMode(false);
+  function cancelDatabaseEdit(target) {
+    setError("");
+    setDatabaseEditTarget((current) => (current === target ? null : current));
+    setDatabaseDrafts((current) => {
+      const next = { ...current };
+      delete next[target];
+      return next;
+    });
   }
 
-  async function handleDatabaseTest(event) {
-    event.preventDefault();
+  function updateDatabaseDraft(target, update) {
+    setDatabaseDrafts((current) => ({
+      ...current,
+      [target]: {
+        ...databaseDraftFor(current, target),
+        ...update,
+      },
+    }));
+    setDatabaseResults((current) => {
+      const result = current[target];
+      if (result?.kind !== "candidate") {
+        return current;
+      }
+      return { ...current, [target]: null };
+    });
+  }
+
+  async function handleCurrentDatabaseTest(target, label) {
     setStatus("loading");
     setNotice("");
     setError("");
     try {
-      const result = await testDatabaseTransferTargets(databaseForm);
-      setDatabaseResult(result);
-      setNotice("Candidate database URLs accepted test connections.");
+      const result = await testCurrentDatabaseConnection(target);
+      setDatabaseResults((current) => ({ ...current, [target]: { ...result, kind: "current" } }));
+      setNotice(`${label} current SQL record is ${result.status}.`);
       setStatus("ready");
     } catch (operationError) {
-      handleError(operationError, "Could not test candidate database URLs.");
+      handleError(operationError, `Could not test ${label}.`);
     }
   }
 
-  async function handleDatabaseTransfer() {
+  async function handleCandidateDatabaseTest(target, label) {
+    const draft = databaseDraftFor(databaseDrafts, target);
+    if (!draft.databaseUrl.trim()) {
+      setError(`Paste a replacement ${label} URL before testing.`);
+      setStatus("failed");
+      return;
+    }
     setStatus("loading");
     setNotice("");
     setError("");
     try {
-      const result = await transferDatabases(databaseForm);
-      setDatabaseResult(result);
-      let renderUpdate = null;
-      if (databaseForm.persistToRender) {
-        renderUpdate = await persistDatabaseEnvToRender(databaseForm);
-        setRenderResult(renderUpdate);
-      }
-      setNotice(
-        renderUpdate
-          ? "Database transfer completed, Render env vars were updated, and Render deploy was triggered."
-          : "Database transfer completed. Runtime pools have been updated for this process."
-      );
-      setDatabaseForm(emptyDatabaseForm);
-      setDatabaseEditMode(false);
+      const result = await testCandidateDatabaseConnection(target, draft.databaseUrl.trim());
+      setDatabaseResults((current) => ({
+        ...current,
+        [target]: { ...result, kind: "candidate", candidateUrl: draft.databaseUrl.trim() },
+      }));
+      setNotice(`${label} replacement URL passed its connection test. You can save it now.`);
+      setStatus("ready");
+    } catch (operationError) {
+      handleError(operationError, `Could not test replacement ${label} URL.`);
+    }
+  }
+
+  async function handlePersistDatabaseTarget(target, label) {
+    const draft = databaseDraftFor(databaseDrafts, target);
+    const result = databaseResults[target];
+    if (!isCandidateSaveReady(result, draft)) {
+      setError(`Test the replacement ${label} URL before saving it.`);
+      setStatus("failed");
+      return;
+    }
+    setStatus("loading");
+    setNotice("");
+    setError("");
+    try {
+      const renderUpdate = await persistDatabaseTargetEnvToRender(target, {
+        databaseUrl: draft.databaseUrl.trim(),
+        triggerDeploy: draft.triggerRenderDeploy,
+      });
+      setRenderResult(renderUpdate);
+      setNotice(`${label} SQL record saved to Render${draft.triggerRenderDeploy ? " and redeploy triggered" : ""}.`);
+      cancelDatabaseEdit(target);
       await refreshOperatorState();
       setStatus("ready");
     } catch (operationError) {
-      handleError(operationError, "Could not transfer databases or persist them to Render.");
+      handleError(operationError, `Could not save ${label} SQL record to Render.`);
     }
   }
 
@@ -391,82 +439,81 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
       <section className="settings-card settings-card-wide">
         <div className={styles.cardHeaderRow}>
           <div>
-            <p className="eyebrow">Database transfer</p>
-            <h3>Connection migration and controlled reconnect</h3>
+            <p className="eyebrow">Database records</p>
+            <h3>Runtime SQL connections</h3>
           </div>
           <div className={styles.headerActions}>
             <StatusPill tone={databaseConnections?.configured ? "success" : "neutral"}>{databaseConnections?.configured ? "configured" : "not checked"}</StatusPill>
-            <button type="button" className="button-primary" onClick={databaseEditMode ? cancelDatabaseEdit : beginDatabaseEdit} disabled={status === "loading"}>
-              {databaseEditMode ? "Cancel" : "Change"}
-            </button>
+            <button type="button" className="button-ghost" onClick={refreshOperatorState} disabled={status === "loading"}>Refresh</button>
           </div>
         </div>
         <p className="muted">
-          Current runtime database URLs are shown masked. Full Postgres URLs are write-only and only requested when you choose Change.
+          Each SQL record is managed separately. Test the current record, or change one URL at a time. Replacement URLs are write-only and must pass Test before Save.
         </p>
         <div className="settings-list">
-          {(databaseConnections?.targets || []).map((target) => (
-            <div className="settings-list-item" key={target.target}>
-              <div className="settings-list-main">
-                <div className="settings-list-title-row"><strong>{target.label}</strong><StatusPill tone="success">runtime</StatusPill></div>
-                <p className="muted"><code className={styles.inlineCode}>{target.env_key}</code></p>
-                <p className="muted"><code className={styles.inlineCode}>{target.masked_url}</code></p>
+          {(databaseConnections?.targets || []).map((target) => {
+            const draft = databaseDraftFor(databaseDrafts, target.target);
+            const result = databaseResults[target.target];
+            const isEditing = databaseEditTarget === target.target;
+            const canSave = isCandidateSaveReady(result, draft) && renderConfig?.configured;
+            return (
+              <div className="settings-list-item" key={target.target}>
+                <div className="settings-list-main">
+                  <div className="settings-list-title-row">
+                    <strong>{target.label}</strong>
+                    <StatusPill tone={databaseStatusTone(result?.status || "runtime")}>{result?.status || "runtime"}</StatusPill>
+                  </div>
+                  <p className="muted"><code className={styles.inlineCode}>{target.env_key}</code></p>
+                  <p className="muted"><code className={styles.inlineCode}>{target.masked_url}</code></p>
+                  {result ? (
+                    <p className="muted">
+                      Last test: {result.status} · {formatTimestamp(result.checked_at)} · <code className={styles.inlineCode}>{result.masked_url}</code>
+                    </p>
+                  ) : null}
+                </div>
+                <div className={styles.adminActions}>
+                  <button type="button" className="button-ghost" onClick={() => handleCurrentDatabaseTest(target.target, target.label)} disabled={status === "loading"}>
+                    Test
+                  </button>
+                  <button type="button" className="button-primary" onClick={() => (isEditing ? cancelDatabaseEdit(target.target) : beginDatabaseEdit(target.target))} disabled={status === "loading"}>
+                    {isEditing ? "Cancel" : "Change"}
+                  </button>
+                </div>
+                {isEditing ? (
+                  <form className={styles.databaseTransferForm} onSubmit={(event) => { event.preventDefault(); handleCandidateDatabaseTest(target.target, target.label); }}>
+                    <label>
+                      Replacement {target.label} URL
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={draft.databaseUrl}
+                        onChange={(event) => updateDatabaseDraft(target.target, { databaseUrl: event.target.value })}
+                        placeholder="Paste the replacement Postgres URL"
+                        required
+                      />
+                    </label>
+                    <label className={styles.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={draft.triggerRenderDeploy}
+                        onChange={(event) => updateDatabaseDraft(target.target, { triggerRenderDeploy: event.target.checked })}
+                      />
+                      Trigger Render deploy after save
+                    </label>
+                    <button type="submit" className="button-ghost" disabled={status === "loading" || !draft.databaseUrl.trim()}>
+                      Test replacement
+                    </button>
+                    <button type="button" className="button-primary" onClick={() => handlePersistDatabaseTarget(target.target, target.label)} disabled={status === "loading" || !canSave}>
+                      Save this SQL record
+                    </button>
+                    {!renderConfig?.configured ? <p className="muted">Configure Render control plane before saving database records.</p> : null}
+                    {result?.kind === "candidate" && result.status === "connected" ? <p className="muted">Replacement test passed. Save is now enabled.</p> : null}
+                  </form>
+                ) : null}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        {databaseEditMode ? (
-          <>
-            <form className={styles.databaseTransferForm} onSubmit={handleDatabaseTest}>
-              <label>
-                Master router DB URL
-                <input type="password" autoComplete="off" value={databaseForm.masterRouterDbUrl} onChange={(event) => setDatabaseForm((current) => ({ ...current, masterRouterDbUrl: event.target.value }))} required />
-              </label>
-              <label>
-                Metadata sidebar DB URL
-                <input type="password" autoComplete="off" value={databaseForm.metadataSidebarDbUrl} onChange={(event) => setDatabaseForm((current) => ({ ...current, metadataSidebarDbUrl: event.target.value }))} required />
-              </label>
-              <label>
-                Transactional logs DB URL
-                <input type="password" autoComplete="off" value={databaseForm.transactionalLogsDbUrl} onChange={(event) => setDatabaseForm((current) => ({ ...current, transactionalLogsDbUrl: event.target.value }))} required />
-              </label>
-              <div className={styles.transferToggles}>
-                <label className={styles.checkboxLabel}><input type="checkbox" checked={databaseForm.replaceExisting} onChange={(event) => setDatabaseForm((current) => ({ ...current, replaceExisting: event.target.checked }))} />Replace rows in destination</label>
-                <label className={styles.checkboxLabel}><input type="checkbox" checked={databaseForm.applyToCurrentProcess} onChange={(event) => setDatabaseForm((current) => ({ ...current, applyToCurrentProcess: event.target.checked }))} />Use new pools now</label>
-                <label className={styles.checkboxLabel}><input type="checkbox" checked={databaseForm.persistToRender} onChange={(event) => setDatabaseForm((current) => ({ ...current, persistToRender: event.target.checked }))} />Persist to Render env</label>
-                <label className={styles.checkboxLabel}><input type="checkbox" checked={databaseForm.triggerRenderDeploy} onChange={(event) => setDatabaseForm((current) => ({ ...current, triggerRenderDeploy: event.target.checked }))} disabled={!databaseForm.persistToRender} />Trigger Render deploy</label>
-              </div>
-              <button type="submit" className="button-ghost" disabled={status === "loading"}>Test connections</button>
-            </form>
-            <div className={styles.transferConfirmRow}>
-              <label>
-                Confirmation phrase
-                <input value={databaseForm.confirmation} onChange={(event) => setDatabaseForm((current) => ({ ...current, confirmation: event.target.value }))} placeholder="TRANSFER DATABASES" />
-              </label>
-              <button type="button" className="button-primary" onClick={handleDatabaseTransfer} disabled={status === "loading" || databaseForm.confirmation !== "TRANSFER DATABASES"}>
-                Transfer, persist, and redeploy
-              </button>
-            </div>
-          </>
-        ) : null}
-        {databaseResult ? (
-          <div className="matrix-wrapper" tabIndex="0">
-            <table className="settings-matrix">
-              <thead><tr><th>Target</th><th>Status</th><th>Rows copied</th><th>Masked URL</th></tr></thead>
-              <tbody>
-                {databaseResult.targets.map((target) => (
-                  <tr key={target.target}>
-                    <td>{target.target}</td>
-                    <td><StatusPill tone={databaseStatusTone(target.status)}>{target.status}</StatusPill></td>
-                    <td>{target.row_count ?? "—"}</td>
-                    <td><code className={styles.inlineCode}>{target.masked_url}</code></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="muted">{databaseResult.note}</p>
-          </div>
-        ) : null}
       </section>
 
       <section className="settings-card settings-card-wide">
