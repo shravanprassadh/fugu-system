@@ -92,6 +92,33 @@ const secretRows = [
 const emptyNewUser = { username: "", password: "", role: "user", isActive: true };
 const emptyPasswordResetDraft = { password: "", confirmation: "" };
 
+const createUserOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 60,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(7, 10, 18, 0.52)",
+  padding: "1rem",
+};
+
+const createUserDialogStyle = {
+  width: "min(100%, 34rem)",
+  border: "1px solid color-mix(in srgb, var(--line) 78%, transparent)",
+  borderRadius: "24px",
+  background: "var(--surface)",
+  boxShadow: "0 30px 90px rgba(0, 0, 0, 0.28)",
+  padding: "1.1rem",
+};
+
+const createUserDialogHeaderStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: "1rem",
+  marginBottom: "0.85rem",
+};
+
 function statusTone(status) {
   const normalized = String(status || "").toLowerCase();
   if (["ready", "connected", "alive", "success", "active", "admin", "user"].includes(normalized)) {
@@ -276,6 +303,13 @@ export default function SettingsPage() {
         }
       }
     }
+  }
+
+  function openCreateUser() {
+    setAdminError("");
+    setAdminNotice("");
+    setNewUser(emptyNewUser);
+    setIsCreateUserOpen(true);
   }
 
   function cancelCreateUser() {
@@ -513,7 +547,7 @@ export default function SettingsPage() {
                   <div className="settings-row settings-row-top">
                     <div>
                       <h3>Members</h3>
-                      <p className="muted">Manage existing accounts first. Create a new account only when you explicitly open the form.</p>
+                      <p className="muted">View and maintain existing accounts. New account creation is kept separate from the member list.</p>
                     </div>
                     <div className={styles.headerActions}>
                       <StatusPill status={hasReachedUserLimit ? "limit reached" : adminStatus} />
@@ -522,55 +556,25 @@ export default function SettingsPage() {
                       </button>
                       <button
                         type="button"
-                        className={isCreateUserOpen ? "button-ghost" : "button-primary"}
-                        onClick={() => {
-                          setAdminError("");
-                          setAdminNotice("");
-                          setIsCreateUserOpen((current) => !current);
-                        }}
+                        className="button-primary"
+                        onClick={openCreateUser}
                         disabled={adminStatus === "loading" || hasReachedUserLimit}
                       >
-                        {isCreateUserOpen ? "Close create form" : "New user"}
+                        New user
                       </button>
                     </div>
                   </div>
-                  <p className="muted">Accounts used: {adminUsers.length}/{MAX_USER_ACCOUNTS}.</p>
+                  <p className="muted">{adminUsers.length}/{MAX_USER_ACCOUNTS} accounts used.</p>
                   {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
                   {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
                   {hasReachedUserLimit ? <p className={styles.diagnosticError}>Fugu is limited to {MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.</p> : null}
-
-                  {isCreateUserOpen && !hasReachedUserLimit ? (
-                    <form className={styles.adminForm} onSubmit={handleCreateUser}>
-                      <label>
-                        Username
-                        <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
-                      </label>
-                      <label>
-                        Initial password
-                        <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
-                      </label>
-                      <label>
-                        Role
-                        <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
-                          <option value="user">user</option>
-                          <option value="admin">admin</option>
-                        </select>
-                      </label>
-                      <label className={styles.checkboxLabel}>
-                        <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
-                        Active
-                      </label>
-                      <button type="button" className="button-ghost" onClick={cancelCreateUser} disabled={adminStatus === "loading"}>Cancel</button>
-                      <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create user</button>
-                    </form>
-                  ) : null}
                 </section>
 
                 <section className="settings-pane">
                   <div className="settings-row settings-row-top">
                     <div>
                       <h3>Current members</h3>
-                      <p className="muted">Role, account state, password reset, and deletion controls are grouped per account.</p>
+                      <p className="muted">Each row contains only that account's state and controls.</p>
                     </div>
                   </div>
                   <div className="settings-list">
@@ -714,6 +718,43 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {isCreateUserOpen ? (
+        <div style={createUserOverlayStyle} role="presentation" onClick={cancelCreateUser}>
+          <section style={createUserDialogStyle} role="dialog" aria-modal="true" aria-labelledby="create-user-title" onClick={(event) => event.stopPropagation()}>
+            <div style={createUserDialogHeaderStyle}>
+              <div>
+                <h3 id="create-user-title" style={{ margin: 0 }}>Create user</h3>
+                <p className="muted">Add a new account only when you need one. Limit: {adminUsers.length}/{MAX_USER_ACCOUNTS}.</p>
+              </div>
+              <button type="button" className="button-ghost" onClick={cancelCreateUser} disabled={adminStatus === "loading"}>Close</button>
+            </div>
+            <form className={styles.adminForm} onSubmit={handleCreateUser} style={{ margin: 0 }}>
+              <label>
+                Username
+                <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required autoFocus />
+              </label>
+              <label>
+                Initial password
+                <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
+              </label>
+              <label>
+                Role
+                <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+              <label className={styles.checkboxLabel}>
+                <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
+                Active
+              </label>
+              <button type="button" className="button-ghost" onClick={cancelCreateUser} disabled={adminStatus === "loading"}>Cancel</button>
+              <button type="submit" className="button-primary" disabled={adminStatus === "loading" || hasReachedUserLimit}>Create user</button>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
