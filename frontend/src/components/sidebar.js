@@ -134,6 +134,7 @@ export function StudioSidebar({
   username,
   threads = [],
   threadsError = null,
+  threadsLoading = false,
   activeThreadId,
   isOpen = false,
   onClose = () => {},
@@ -141,10 +142,12 @@ export function StudioSidebar({
   onNewChat,
   onRenameThread,
   onDeleteThread,
+  onRetryThreads,
   onSignOut,
 }) {
   const pathname = usePathname();
   const initial = (username || "?").slice(0, 1).toUpperCase();
+  const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
 
   return (
     <>
@@ -168,9 +171,17 @@ export function StudioSidebar({
         </div>
 
         <nav className="thread-list-wrapper" aria-label="Recent conversations">
-          <p className="sidebar-label">Recents</p>
-          {threadsError ? <p className="sidebar-note">{threadsError}</p> : null}
-          {!threadsError && threads.length === 0 ? (
+          <div className="sidebar-section-header">
+            <p className="sidebar-label">Recents</p>
+            {onRetryThreads ? (
+              <button type="button" className="sidebar-retry" onClick={onRetryThreads} disabled={threadsLoading}>
+                {threadsLoading ? "Loading" : "Refresh"}
+              </button>
+            ) : null}
+          </div>
+          {threadsLoading ? <p className="sidebar-note">Loading conversations…</p> : null}
+          {threadsError ? <p className="sidebar-note sidebar-note-error">{threadsError}</p> : null}
+          {showEmptyState ? (
             <p className="sidebar-note">No conversations yet. Start a new chat to begin.</p>
           ) : null}
           <ul className="thread-list">
