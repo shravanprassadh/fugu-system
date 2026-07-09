@@ -526,7 +526,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
             <button type="button" className="button-ghost" onClick={refreshOperatorState} disabled={status === "loading"}>Refresh operator state</button>
           </div>
         </div>
-        <p className="muted">Each supported provider can have exactly one active key. Delete the existing key before adding a replacement.</p>
+        <p className="muted">Each supported provider can have exactly one active key. Delete the existing key before adding a replacement. The Google Gemini key is also used by thread memory summarisation.</p>
         {addableProviderOptions.length ? (
           <form className={styles.adminForm} onSubmit={handleProviderSubmit}>
             <label>
@@ -541,7 +541,7 @@ export function OperatorControls({ isAdmin, onUnauthorized }) {
             </label>
             <button type="submit" className="button-primary" disabled={status === "loading"}>Add encrypted key</button>
           </form>
-        ) : <p className="muted">Both supported providers already have keys. Delete a key before adding another one.</p>}
+        ) : <p className="muted">All supported providers already have keys. Delete a key before adding another one.</p>}
         <div className="matrix-wrapper" tabIndex="0">
           <table className="settings-matrix">
             <thead><tr><th>Provider</th><th>Status</th><th>Key version</th><th>Last updated</th><th>Action</th></tr></thead>
