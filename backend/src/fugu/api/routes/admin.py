@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, cast
+from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, inspect, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.sql.schema import Table
@@ -17,10 +17,7 @@ from sqlalchemy.sql.schema import Table
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
 from fugu.boot.config import get_settings
 from fugu.database.connection import (
-    DatabaseSessionRegistry,
     DatabaseTarget,
-    get_session_registry,
-    set_runtime_session_registry,
 )
 from fugu.database.models import Base, PipelineStep, ProviderCredential, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository

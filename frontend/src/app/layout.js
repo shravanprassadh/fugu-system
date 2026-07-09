@@ -4,6 +4,7 @@ import "./ui-alignment.css";
 
 import { SessionKeeper } from "../components/session-keeper";
 import { themeInitScript } from "../lib/theme";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata = {
   title: "Fugu Studio",
@@ -20,6 +21,7 @@ export default function RootLayout({ children }) {
       <body>
         <SessionKeeper />
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
