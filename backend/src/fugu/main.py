@@ -19,6 +19,7 @@ from fugu.api.routes import (
     health_router,
     provider_admin_router,
     render_admin_router,
+    thread_memory_admin_router,
     threads_router,
 )
 from fugu.api.routes.health import inspect_database_readiness
@@ -140,6 +141,7 @@ def create_app(
     application.include_router(provider_admin_router)
     application.include_router(render_admin_router)
     application.include_router(database_admin_router)
+    application.include_router(thread_memory_admin_router)
     application.include_router(execution_router)
     application.include_router(threads_router)
     application.include_router(health_router)
