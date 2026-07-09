@@ -30,15 +30,6 @@ function TrashIcon() {
   );
 }
 
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
-    </svg>
-  );
-}
-
 function SignOutIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -148,6 +139,7 @@ export function StudioSidebar({
   const pathname = usePathname();
   const initial = (username || "?").slice(0, 1).toUpperCase();
   const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
+  const isSettings = pathname === "/settings";
 
   return (
     <>
@@ -200,14 +192,6 @@ export function StudioSidebar({
 
         <div className="sidebar-footer">
           <Link
-            href="/settings"
-            className={`sidebar-link${pathname === "/settings" ? " sidebar-link-active" : ""}`}
-            onClick={onClose}
-          >
-            <GearIcon />
-            Settings
-          </Link>
-          <Link
             href="/chat"
             className={`sidebar-link${pathname === "/chat" ? " sidebar-link-active" : ""}`}
             onClick={onClose}
@@ -215,20 +199,22 @@ export function StudioSidebar({
             <ChatIcon />
             Chat
           </Link>
+          {isSettings ? (
+            <button
+              type="button"
+              className="sidebar-link"
+              onClick={onSignOut}
+              style={{ width: "100%", border: 0, background: "transparent", cursor: "pointer" }}
+            >
+              <SignOutIcon />
+              Log out
+            </button>
+          ) : null}
           <div className="sidebar-user">
-            <span className="user-avatar" aria-hidden="true">{initial}</span>
-            <span className="user-name" title={username}>{username}</span>
+            <Link href="/settings" className="user-avatar" aria-label="Open settings" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{initial}</Link>
+            <Link href="/settings" className="user-name" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{username}</Link>
             <span className="sidebar-user-actions">
               <ThemeCycleButton />
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Sign out"
-                title="Sign out"
-                onClick={onSignOut}
-              >
-                <SignOutIcon />
-              </button>
             </span>
           </div>
         </div>
