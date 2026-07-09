@@ -53,7 +53,7 @@ def test_config_ingestion_success() -> None:
     assert config.network_request_timeout == 45.0
     assert config.jwt_issuer == "fugu-kernel-core"
     assert config.jwt_audience == "fugu-studio-client"
-    assert config.access_token_ttl_minutes == 30
+    assert config.access_token_ttl_minutes == 2_880
     assert "db1" in str(config.master_router_db_url)
     assert [str(origin).rstrip("/") for origin in config.allowed_origins] == [
         "http://localhost:3000",
