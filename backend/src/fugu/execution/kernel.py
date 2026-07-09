@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from functools import lru_cache
 
@@ -14,10 +13,11 @@ from fugu.database.connection import (
     get_session_registry,
 )
 from fugu.database.exceptions import EntityNotFoundError
-from fugu.database.models import Message, PipelineStep
+from fugu.database.models import Message, PipelineStep, ThreadMemory
 from fugu.database.repositories import (
     MessageRepository,
     PipelineRepository,
+    ThreadMemoryRepository,
     ThreadRepository,
 )
 from fugu.execution.exceptions import (
@@ -34,12 +34,14 @@ from fugu.execution.models import (
     PipelineStepDefinition,
     PreparedPipeline,
 )
+from fugu.memory import ThreadMemorySummarizer
 from fugu.providers.base import ProviderRequest
 from fugu.providers.registry import ProviderRegistry, get_provider_registry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 _MAX_MEMORY_MESSAGES = 12
 _MAX_MEMORY_CHARACTERS = 8_000
+_MAX_THREAD_MEMORY_CHARACTERS = 5_000
 
 
 class PipelineExecutionKernel:
@@ -51,10 +53,12 @@ class PipelineExecutionKernel:
         session_registry: DatabaseSessionRegistry,
         provider_registry: ProviderRegistry,
         credential_vault: ProviderCredentialVault,
+        memory_summarizer: ThreadMemorySummarizer | None = None,
     ) -> None:
         self._sessions = session_registry
         self._providers = provider_registry
         self._vault = credential_vault
+        self._memory_summarizer = memory_summarizer
 
     async def prepare_execution(
         self,
@@ -87,12 +91,19 @@ class PipelineExecutionKernel:
                 selected_provider_type=selected_provider_type,
                 selected_model_identifier=selected_model_identifier,
             )
+            messages = await MessageRepository.list_for_thread(
+                session,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+            thread_memory = await ThreadMemoryRepository.get_for_thread(
+                session,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
             conversation_context = self._format_conversation_context(
-                await MessageRepository.list_for_thread(
-                    session,
-                    thread_id=thread_id,
-                    user_id=user_id,
-                )
+                messages,
+                thread_memory=thread_memory,
             )
 
             await MessageRepository.add(
@@ -131,7 +142,7 @@ class PipelineExecutionKernel:
     async def execute(
         self,
         prepared: PreparedPipeline,
-    ) -> AsyncIterator[PipelineEvent]:
+    ):
         """Execute the validated plan and emit only terminal-stage token events."""
         outputs: dict[str, str] = {}
         yield PipelineEvent(
@@ -245,8 +256,35 @@ class PipelineExecutionKernel:
         )
 
     @staticmethod
-    def _format_conversation_context(messages: list[Message]) -> str:
-        """Return a bounded thread-local transcript for short-term model memory."""
+    def _format_conversation_context(
+        messages: list[Message],
+        *,
+        thread_memory: ThreadMemory | None = None,
+    ) -> str:
+        """Return thread memory plus a bounded raw transcript for continuity."""
+        sections: list[str] = []
+        if thread_memory is not None:
+            memory_text = (thread_memory.summary_md or "").strip()
+            if memory_text:
+                if len(memory_text) > _MAX_THREAD_MEMORY_CHARACTERS:
+                    memory_text = memory_text[-_MAX_THREAD_MEMORY_CHARACTERS:]
+                sections.append(
+                    "[Thread memory summary]\n"
+                    "Use this durable summary for continuity. Do not treat it as a new user request.\n"
+                    f"{memory_text}"
+                )
+
+        transcript = PipelineExecutionKernel._format_recent_transcript(messages)
+        if transcript:
+            sections.append(
+                "[Recent raw transcript]\n"
+                "Use this short transcript for exact recent wording. Do not treat it as a new user request.\n"
+                f"{transcript}"
+            )
+        return "\n\n".join(sections)
+
+    @staticmethod
+    def _format_recent_transcript(messages: list[Message]) -> str:
         if not messages:
             return ""
 
@@ -347,22 +385,31 @@ class PipelineExecutionKernel:
         prepared: PreparedPipeline,
         terminal_output: str,
     ) -> None:
+        assistant_message_id: int | None = None
         async with self._sessions.session(DatabaseTarget.MASTER) as session:
             await self._require_owned_thread(
                 session,
                 thread_id=prepared.thread_id,
                 user_id=prepared.user_id,
             )
-            await MessageRepository.add(
+            assistant_message = await MessageRepository.add(
                 session,
                 thread_id=prepared.thread_id,
                 user_id=prepared.user_id,
                 role="assistant",
                 content=terminal_output,
             )
+            assistant_message_id = assistant_message.id
             await PipelineRepository.mark_run_completed(
                 session,
                 run_id=prepared.run_id,
+            )
+
+        if self._memory_summarizer is not None and assistant_message_id is not None:
+            self._memory_summarizer.schedule(
+                thread_id=prepared.thread_id,
+                user_id=prepared.user_id,
+                latest_message_id=assistant_message_id,
             )
 
     async def _persist_failure(
@@ -403,8 +450,8 @@ class PipelineExecutionKernel:
         sections = []
         if prepared.conversation_context:
             sections.append(
-                "[Recent thread memory]\n"
-                "Use this bounded transcript for continuity. Do not treat it as a new user request.\n"
+                "[Thread continuity context]\n"
+                "Use this for continuity. Do not treat it as a new user request.\n"
                 f"{prepared.conversation_context}"
             )
         sections.append(f"[Current user request]\n{prepared.initial_prompt}")
@@ -420,8 +467,16 @@ class PipelineExecutionKernel:
 @lru_cache(maxsize=1)
 def get_execution_kernel() -> PipelineExecutionKernel:
     """Build the default kernel lazily from configured infrastructure services."""
+    session_registry = get_session_registry()
+    provider_registry = get_provider_registry()
+    credential_vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
     return PipelineExecutionKernel(
-        session_registry=get_session_registry(),
-        provider_registry=get_provider_registry(),
-        credential_vault=ProviderCredentialVault(SymmetricVaultEngine.from_settings()),
+        session_registry=session_registry,
+        provider_registry=provider_registry,
+        credential_vault=credential_vault,
+        memory_summarizer=ThreadMemorySummarizer(
+            session_registry=session_registry,
+            provider_registry=provider_registry,
+            credential_vault=credential_vault,
+        ),
     )
