@@ -438,6 +438,7 @@ export default function ChatPage() {
         activeThreadName={activeThread?.name || ""}
         onClose={() => setIsThreadMemoryOpen(false)}
         onUnauthorized={signOut}
+        onAfterRegenerate={reloadThreads}
       />
     </main>
   );
