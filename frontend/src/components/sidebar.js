@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { ThemeCycleButton } from "./theme-toggle";
@@ -26,14 +25,6 @@ function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-    </svg>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5Z" />
     </svg>
   );
 }
@@ -128,7 +119,6 @@ export function StudioSidebar({
   onRetryThreads,
   onOpenSettings = null,
 }) {
-  const pathname = usePathname();
   const initial = (username || "?").slice(0, 1).toUpperCase();
   const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
 
@@ -193,7 +183,7 @@ export function StudioSidebar({
               <ThreadListItem
                 key={thread.id}
                 thread={thread}
-                isActive={pathname === "/chat" && thread.id === activeThreadId}
+                isActive={thread.id === activeThreadId}
                 onSelect={onSelectThread}
                 onRename={onRenameThread}
                 onDelete={onDeleteThread}
@@ -203,14 +193,6 @@ export function StudioSidebar({
         </nav>
 
         <div className="sidebar-footer">
-          <Link
-            href="/chat"
-            className={`sidebar-link${pathname === "/chat" ? " sidebar-link-active" : ""}`}
-            onClick={onClose}
-          >
-            <ChatIcon />
-            Chat
-          </Link>
           <div className="sidebar-user">
             {accountAvatar}
             {accountName}
