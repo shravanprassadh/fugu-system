@@ -12,7 +12,7 @@ provider_admin_router = APIRouter(
     prefix="/api/admin/provider-credentials",
     tags=["provider-administration"],
 )
-_SUPPORTED_PROVIDER_NAMES = {"openrouter", "nvidia"}
+_SUPPORTED_PROVIDER_NAMES = {"google", "openrouter", "nvidia"}
 
 
 def _normalized_supported_provider(provider_name: str) -> str:
