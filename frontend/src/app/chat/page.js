@@ -59,6 +59,8 @@ const GREETINGS = [
   "Where should the pipeline start?",
 ];
 
+const THREAD_LIST_ERROR_MESSAGE = "The conversation list could not be loaded. Refresh the list or check the backend connection.";
+
 function isSessionExpired(error) {
   return error?.code === "session_expired" || error?.status === 401;
 }
@@ -84,6 +86,8 @@ export default function ChatPage() {
   const [prompt, setPrompt] = useState("");
   const [lastPrompt, setLastPrompt] = useState("");
   const [workspaceError, setWorkspaceError] = useState("");
+  const [threadListError, setThreadListError] = useState("");
+  const [isThreadListLoading, setIsThreadListLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
@@ -98,6 +102,23 @@ export default function ChatPage() {
     router.replace("/");
   }, [router]);
 
+  const reloadThreads = useCallback(async () => {
+    setIsThreadListLoading(true);
+    setThreadListError("");
+    try {
+      await refreshThreads();
+    } catch (error) {
+      if (isSessionExpired(error)) {
+        expireSession();
+        return;
+      }
+      setThreadListError(THREAD_LIST_ERROR_MESSAGE);
+      setWorkspaceError(THREAD_LIST_ERROR_MESSAGE);
+    } finally {
+      setIsThreadListLoading(false);
+    }
+  }, [expireSession]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/");
@@ -110,14 +131,8 @@ export default function ChatPage() {
     if (!isAuthenticated) {
       return;
     }
-    refreshThreads().catch((error) => {
-      if (isSessionExpired(error)) {
-        expireSession();
-        return;
-      }
-      setWorkspaceError("The conversation list could not be loaded. Check the backend connection and retry.");
-    });
-  }, [isAuthenticated, expireSession]);
+    reloadThreads();
+  }, [isAuthenticated, reloadThreads]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -216,6 +231,7 @@ export default function ChatPage() {
       try {
         const thread = await createThreadFromPrompt(normalized);
         threadId = thread.id;
+        setThreadListError("");
       } catch (error) {
         if (isSessionExpired(error)) {
           expireSession();
@@ -302,6 +318,8 @@ export default function ChatPage() {
       <StudioSidebar
         username={username}
         threads={threads}
+        threadsError={threadListError}
+        threadsLoading={isThreadListLoading}
         activeThreadId={activeThreadId}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -309,6 +327,7 @@ export default function ChatPage() {
         onNewChat={startNewChat}
         onRenameThread={handleRenameThread}
         onDeleteThread={handleDeleteThread}
+        onRetryThreads={reloadThreads}
         onSignOut={signOut}
       />
 
