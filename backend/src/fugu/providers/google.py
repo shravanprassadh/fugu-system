@@ -61,7 +61,6 @@ class GoogleGeminiProvider(ExecutionProvider):
             "input": request.prompt_content,
             "generation_config": {
                 "temperature": 0.2,
-                "thinking_level": "low",
             },
         }
         if request.system_directives.strip():
