@@ -135,28 +135,23 @@ const navItemsStyle = {
 const contentStyle = {
   display: "grid",
   alignContent: "start",
-  gap: "0.8rem",
+  gap: "0.95rem",
   minWidth: 0,
   minHeight: 0,
   height: "100%",
   maxHeight: "100%",
-  overflowY: "scroll",
+  overflowY: "auto",
   scrollbarGutter: "stable",
   padding: "clamp(1rem, 2.2vw, 1.35rem)",
 };
 
 const titleRowStyle = {
-  position: "sticky",
-  top: 0,
-  zIndex: 1,
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: "1rem",
-  margin: "calc(clamp(1rem, 2.2vw, 1.35rem) * -1) calc(clamp(1rem, 2.2vw, 1.35rem) * -1) 0",
   borderBottom: "1px solid color-mix(in srgb, var(--line) 76%, transparent)",
-  background: "color-mix(in srgb, var(--surface) 96%, var(--bg))",
-  padding: "clamp(1rem, 2.2vw, 1.35rem)",
+  paddingBottom: "0.95rem",
 };
 
 const memberActionBarStyle = {
