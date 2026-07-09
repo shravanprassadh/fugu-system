@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from functools import lru_cache
 
@@ -142,7 +143,7 @@ class PipelineExecutionKernel:
     async def execute(
         self,
         prepared: PreparedPipeline,
-    ):
+    ) -> AsyncIterator[PipelineEvent]:
         """Execute the validated plan and emit only terminal-stage token events."""
         outputs: dict[str, str] = {}
         yield PipelineEvent(
