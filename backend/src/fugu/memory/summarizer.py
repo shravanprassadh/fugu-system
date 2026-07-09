@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Iterable
 
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Message
-from fugu.database.repositories import MessageRepository, ThreadMemoryRepository
+from fugu.database.repositories import MessageRepository, ThreadMemoryRepository, ThreadRepository
 from fugu.providers.base import ProviderRequest
 from fugu.providers.google import GoogleGeminiProvider
 from fugu.security.encryption import ProviderCredentialVault
@@ -21,17 +22,20 @@ MEMORY_MODEL_IDENTIFIER = "gemini-2.5-flash-lite"
 MAX_DELTA_MESSAGES = 30
 MAX_TRANSCRIPT_CHARACTERS = 16_000
 MAX_PREVIOUS_MEMORY_CHARACTERS = 8_000
+MAX_THREAD_TITLE_CHARACTERS = 64
 
 MEMORY_SYSTEM_DIRECTIVES = (
     "You are Fugu's thread-memory maintainer.\n"
-    "Your only task is to update a concise markdown memory document for one chat thread.\n"
+    "Your task is to update a concise markdown memory document and suggest a concise thread title.\n"
     "Return markdown only. Do not add commentary outside the document.\n"
     "Never store API keys, passwords, full secrets, private tokens, or sensitive credentials.\n"
+    "The title must be 3-8 words, specific to the conversation, and must not include quotes or markdown.\n"
     "Do preserve durable project state, decisions, files touched, user preferences, constraints, "
     "unresolved tasks, and exact technical identifiers when useful.\n"
     "Remove stale details that no longer affect future work.\n"
     "Use these headings exactly:\n"
     "# Thread Memory\n"
+    "## Thread title\n"
     "## Current goal\n"
     "## Stable facts\n"
     "## Decisions made\n"
@@ -43,7 +47,7 @@ MEMORY_SYSTEM_DIRECTIVES = (
 
 
 class ThreadMemorySummarizer:
-    """Maintain rolling markdown summaries for completed conversation turns."""
+    """Maintain rolling markdown summaries and concise thread titles."""
 
     def __init__(
         self,
@@ -89,15 +93,18 @@ class ThreadMemorySummarizer:
         user_id: int,
         latest_message_id: int,
     ) -> None:
-        """Update the stored markdown memory using the configured Google AI Studio key."""
+        """Update the stored markdown memory and thread title using the configured Google AI Studio key."""
         previous_summary = ""
         transcript = ""
+        current_thread_title = ""
         credential: str | None = None
         try:
             async with self._sessions.session(DatabaseTarget.MASTER) as session:
                 credential = await self._vault.retrieve(session, provider_name=self._credential_provider_name)
                 if credential is None:
                     return
+                thread = await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+                current_thread_title = thread.name
                 memory = await ThreadMemoryRepository.mark_running(
                     session,
                     thread_id=thread_id,
@@ -131,7 +138,11 @@ class ThreadMemorySummarizer:
             provider = GoogleGeminiProvider()
             try:
                 request = ProviderRequest(
-                    prompt_content=self._build_prompt(previous_summary=previous_summary, transcript=transcript),
+                    prompt_content=self._build_prompt(
+                        previous_summary=previous_summary,
+                        transcript=transcript,
+                        current_thread_title=current_thread_title,
+                    ),
                     system_directives=MEMORY_SYSTEM_DIRECTIVES,
                     credential_token=credential,
                     model_identifier=self._model_identifier,
@@ -146,6 +157,7 @@ class ThreadMemorySummarizer:
             if not updated_summary:
                 raise RuntimeError("The memory summarizer returned an empty summary.")
 
+            suggested_title = self._extract_thread_title(updated_summary)
             async with self._sessions.session(DatabaseTarget.MASTER) as session:
                 await ThreadMemoryRepository.mark_completed(
                     session,
@@ -156,6 +168,10 @@ class ThreadMemorySummarizer:
                     summarizer_provider=self._provider_label,
                     summarizer_model=self._model_identifier,
                 )
+                if suggested_title:
+                    thread = await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+                    thread.name = suggested_title
+                    await session.flush()
         except Exception as exc:  # pragma: no cover - defensive background task boundary
             LOGGER.warning("Thread memory refresh failed for thread %s: %s", thread_id, exc)
             try:
@@ -210,12 +226,32 @@ class ThreadMemorySummarizer:
         return value[-limit:]
 
     @staticmethod
-    def _build_prompt(*, previous_summary: str, transcript: str) -> str:
+    def _extract_thread_title(summary_md: str) -> str:
+        match = re.search(
+            r"^##\s+Thread title\s*$\s*(.*?)(?=^##\s+|\Z)",
+            summary_md,
+            flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+        )
+        if match is None:
+            return ""
+        raw_title = match.group(1).strip().splitlines()[0] if match.group(1).strip() else ""
+        title = re.sub(r"^[\-*>#\s]+", "", raw_title).strip().strip('"`*_')
+        title = re.sub(r"\s+", " ", title)
+        if not title:
+            return ""
+        return title[:MAX_THREAD_TITLE_CHARACTERS].rstrip(" -—:,.#")
+
+    @staticmethod
+    def _build_prompt(*, previous_summary: str, transcript: str, current_thread_title: str) -> str:
         previous = previous_summary.strip() or "No prior memory exists for this thread."
+        title = current_thread_title.strip() or "Untitled thread"
         return (
+            "[Current thread title]\n"
+            f"{title}\n\n"
             "[Previous thread memory]\n"
             f"{previous}\n\n"
             "[New transcript since last memory update]\n"
             f"{transcript}\n\n"
-            "Update the full thread memory document now. The returned document replaces the previous memory."
+            "Update the full thread memory document now. The returned document replaces the previous memory. "
+            "Also fill ## Thread title with the best concise page heading for this thread."
         )
