@@ -23,7 +23,12 @@ const settingsSections = [
   {
     id: "general",
     label: "General",
-    description: "Theme, model and client behavior",
+    description: "Theme and client behavior",
+  },
+  {
+    id: "model",
+    label: "Model",
+    description: "Conversation model preference",
   },
   {
     id: "members",
@@ -554,8 +559,6 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
                 </div>
               </section>
 
-              <ModelPreferenceCard />
-
               <section className="settings-pane">
                 <div className="settings-row settings-row-top">
                   <div>
@@ -570,6 +573,12 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
                   <li>Malformed stream frames surface controlled errors</li>
                 </ul>
               </section>
+            </div>
+          ) : null}
+
+          {currentSection.id === "model" ? (
+            <div className="settings-stack">
+              <ModelPreferenceCard />
             </div>
           ) : null}
 
