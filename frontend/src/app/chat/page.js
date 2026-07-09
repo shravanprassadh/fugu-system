@@ -129,9 +129,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      return;
+      return undefined;
     }
-    reloadThreads();
+    const timer = window.setTimeout(() => {
+      reloadThreads();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [isAuthenticated, reloadThreads]);
 
   useEffect(() => {
