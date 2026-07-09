@@ -28,6 +28,7 @@ admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
 
 UserRole = Literal["user", "admin"]
 _MAX_USER_ACCOUNTS = 3
+_CHAT_PROVIDER_NAMES = {"openrouter", "nvidia"}
 
 
 class AdminUserResponse(BaseModel):
@@ -436,8 +437,12 @@ async def list_provider_credentials(
     _: AdminUser,
     session: MasterSession,
 ) -> list[ProviderCredentialResponse]:
-    """List configured provider credentials without returning plaintext secrets."""
-    statement = select(ProviderCredential).order_by(ProviderCredential.provider_name.asc())
+    """List configured chat-provider credentials without returning plaintext secrets."""
+    statement = (
+        select(ProviderCredential)
+        .where(ProviderCredential.provider_name.in_(_CHAT_PROVIDER_NAMES))
+        .order_by(ProviderCredential.provider_name.asc())
+    )
     result = await session.scalars(statement)
     return [ProviderCredentialResponse.from_credential(credential) for credential in result.all()]
 
@@ -448,11 +453,18 @@ async def upsert_provider_credential(
     _: AdminUser,
     session: MasterSession,
 ) -> ProviderCredentialResponse:
-    """Create or rotate a provider API key from the admin console."""
+    """Create or rotate a chat-provider API key from the admin console."""
+    provider_name = payload.provider_name.strip().lower()
+    if provider_name not in _CHAT_PROVIDER_NAMES:
+        supported = ", ".join(sorted(_CHAT_PROVIDER_NAMES))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported chat provider {payload.provider_name!r}. Supported providers: {supported}.",
+        )
     vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
     credential = await vault.store(
         session,
-        provider_name=payload.provider_name,
+        provider_name=provider_name,
         plaintext_secret=payload.secret,
     )
     return ProviderCredentialResponse.from_credential(credential)
@@ -466,3 +478,30 @@ async def list_pipeline_steps(
     """Return pipeline steps in execution order."""
     steps = await PipelineRepository.list_steps(session)
     return [PipelineStepResponse.from_step(step) for step in steps]
+
+
+@admin_router.patch("/pipeline-steps/{step_id}", response_model=PipelineStepResponse)
+async def update_pipeline_step(
+    step_id: int,
+    payload: UpdatePipelineStepPayload,
+    _: AdminUser,
+    session: MasterSession,
+) -> PipelineStepResponse:
+    """Patch one pipeline step without editing deployment files."""
+    step = await session.get(PipelineStep, step_id)
+    if step is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline step not found.")
+    if payload.provider_type is not None:
+        step.provider_type = payload.provider_type.strip().lower()
+    if payload.model_string is not None:
+        step.model_string = payload.model_string.strip()
+    if payload.system_prompt_directives is not None:
+        step.system_prompt_directives = payload.system_prompt_directives
+    if payload.prerequisite_dependencies is not None:
+        step.prerequisite_dependencies = payload.prerequisite_dependencies
+    if payload.is_terminal is not None:
+        if payload.is_terminal:
+            await session.execute(text("UPDATE pipeline_steps SET is_terminal = false WHERE id != :step_id"), {"step_id": step.id})
+        step.is_terminal = payload.is_terminal
+    await session.flush()
+    return PipelineStepResponse.from_step(step)
