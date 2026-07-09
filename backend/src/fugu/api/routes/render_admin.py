@@ -118,13 +118,15 @@ def _render_admin_error_detail(response: httpx.Response) -> str:
     if response.status_code in _RENDER_AUTH_STATUS_CODES:
         return (
             "Stored Render API credentials were rejected by Render. "
-            "Click Change in Render control plane and save a current Render API token that can access the configured service. "
+            "Click Change in Render control plane and save a current Render API token "
+            "that can access the configured service. "
             f"Render API returned HTTP {response.status_code}: {render_message}"
         )
     if response.status_code == status.HTTP_404_NOT_FOUND:
         return (
             "The configured Render service ID was not found for the stored Render API token. "
-            "Click Change in Render control plane and verify the service ID belongs to the same Render account as the API token. "
+            "Click Change in Render control plane and verify the service ID belongs to "
+            "the same Render account as the API token. "
             f"Render API returned HTTP {response.status_code}: {render_message}"
         )
     return f"Render API request failed with HTTP {response.status_code}: {render_message}"
