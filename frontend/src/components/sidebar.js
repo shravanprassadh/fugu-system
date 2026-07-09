@@ -30,14 +30,6 @@ function TrashIcon() {
   );
 }
 
-function SignOutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-    </svg>
-  );
-}
-
 function ChatIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -134,12 +126,10 @@ export function StudioSidebar({
   onRenameThread,
   onDeleteThread,
   onRetryThreads,
-  onSignOut,
 }) {
   const pathname = usePathname();
   const initial = (username || "?").slice(0, 1).toUpperCase();
   const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
-  const isSettings = pathname === "/settings";
 
   return (
     <>
@@ -199,17 +189,6 @@ export function StudioSidebar({
             <ChatIcon />
             Chat
           </Link>
-          {isSettings ? (
-            <button
-              type="button"
-              className="sidebar-link"
-              onClick={onSignOut}
-              style={{ width: "100%", border: 0, background: "transparent", cursor: "pointer" }}
-            >
-              <SignOutIcon />
-              Log out
-            </button>
-          ) : null}
           <div className="sidebar-user">
             <Link href="/settings" className="user-avatar" aria-label="Open settings" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{initial}</Link>
             <Link href="/settings" className="user-name" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{username}</Link>
