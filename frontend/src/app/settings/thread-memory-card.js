@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useStudioStore } from "../../components/store";
 import { SafeMarkdownRenderer } from "../../components/ui/message-renderer";
 import {
   deleteThreadMemoryConfig,
@@ -45,8 +44,6 @@ function formatTimestamp(value) {
 }
 
 export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthorized }) {
-  const userRole = useStudioStore((state) => state.userRole);
-  const isAdmin = userRole === "admin";
   const [memory, setMemory] = useState(null);
   const [memoryStatus, setMemoryStatus] = useState("idle");
   const [memoryNotice, setMemoryNotice] = useState("");
@@ -87,12 +84,6 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
   }, [activeThreadId, handleUnauthorized]);
 
   const loadConfig = useCallback(async () => {
-    if (!isAdmin) {
-      setConfig(null);
-      setConfigStatus("idle");
-      setConfigError("");
-      return;
-    }
     setConfigStatus("loading");
     setConfigError("");
     try {
@@ -107,7 +98,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       setConfigError(operationError.message || "Could not load thread memory key setup.");
       setConfigStatus("failed");
     }
-  }, [handleUnauthorized, isAdmin]);
+  }, [handleUnauthorized]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -198,7 +189,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       <div className={styles.cardHeaderRow}>
         <div>
           <p className="eyebrow">Thread memory</p>
-          <h3>Summary model and current thread memory</h3>
+          <h3>Google AI Studio key and current thread summary</h3>
         </div>
         <div className={styles.headerActions}>
           <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
@@ -211,50 +202,48 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
         </div>
       </div>
 
-      {isAdmin ? (
-        <div className="settings-list" style={{ marginBottom: "0.9rem" }}>
-          <div className="settings-list-item">
-            <div className="settings-list-main">
-              <div className="settings-list-title-row">
-                <strong>Dedicated Google AI Studio key</strong>
-                <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
-                  {configStatus === "saving" ? "saving" : configLabel}
-                </StatusPill>
-              </div>
-              <p className="muted">
-                This key is used only for thread-memory summarisation. It is separate from normal chat providers and does not appear in the Model selector.
-              </p>
-              <dl className="definition-list settings-definition-list">
-                <div><dt>Provider</dt><dd>{config?.provider_name || "google-ai-studio"}</dd></div>
-                <div><dt>Model</dt><dd>{config?.model_identifier || "gemini-3.5-flash"}</dd></div>
-                <div><dt>Key version</dt><dd>{config?.credential_key_version ?? "Not saved yet"}</dd></div>
-                <div><dt>Updated</dt><dd>{formatTimestamp(config?.updated_at)}</dd></div>
-              </dl>
-              {configNotice ? <p className={styles.diagnosticSuccess}>{configNotice}</p> : null}
-              {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
-              <form className={styles.adminForm} onSubmit={handleSaveConfig}>
-                <label>
-                  Google AI Studio API key
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={apiKeyDraft}
-                    onChange={(event) => setApiKeyDraft(event.target.value)}
-                    placeholder={config?.configured ? "Paste a replacement key" : "Paste free Google AI Studio key"}
-                    minLength={8}
-                  />
-                </label>
-                <button type="submit" className="button-primary" disabled={configStatus === "saving" || !apiKeyDraft.trim()}>
-                  {config?.configured ? "Replace memory key" : "Save memory key"}
-                </button>
-                <button type="button" className="button-ghost" onClick={handleDeleteConfig} disabled={configStatus === "saving" || !config?.configured}>
-                  Delete key
-                </button>
-              </form>
+      <div className="settings-list" style={{ marginBottom: "0.9rem" }}>
+        <div className="settings-list-item">
+          <div className="settings-list-main">
+            <div className="settings-list-title-row">
+              <strong>Dedicated Google AI Studio key</strong>
+              <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
+                {configStatus === "saving" ? "saving" : configLabel}
+              </StatusPill>
             </div>
+            <p className="muted">
+              Paste the free Google AI Studio API key here. This key is used only for thread-memory summarisation and is not part of the normal Model selector.
+            </p>
+            <dl className="definition-list settings-definition-list">
+              <div><dt>Provider</dt><dd>{config?.provider_name || "google-ai-studio"}</dd></div>
+              <div><dt>Model</dt><dd>{config?.model_identifier || "gemini-3.5-flash"}</dd></div>
+              <div><dt>Key version</dt><dd>{config?.credential_key_version ?? "Not saved yet"}</dd></div>
+              <div><dt>Updated</dt><dd>{formatTimestamp(config?.updated_at)}</dd></div>
+            </dl>
+            {configNotice ? <p className={styles.diagnosticSuccess}>{configNotice}</p> : null}
+            {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
+            <form className={styles.adminForm} onSubmit={handleSaveConfig}>
+              <label>
+                Google AI Studio API key
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={apiKeyDraft}
+                  onChange={(event) => setApiKeyDraft(event.target.value)}
+                  placeholder={config?.configured ? "Paste a replacement key" : "Paste free Google AI Studio key"}
+                  minLength={8}
+                />
+              </label>
+              <button type="submit" className="button-primary" disabled={configStatus === "saving" || !apiKeyDraft.trim()}>
+                {config?.configured ? "Replace memory key" : "Save memory key"}
+              </button>
+              <button type="button" className="button-ghost" onClick={handleDeleteConfig} disabled={configStatus === "saving" || !config?.configured}>
+                Delete key
+              </button>
+            </form>
           </div>
         </div>
-      ) : null}
+      </div>
 
       {!activeThreadId ? (
         <p className="muted">Open a chat thread to view or generate its stored memory summary.</p>
@@ -263,7 +252,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
           <p className="muted">
             Memory updates automatically after each completed assistant answer when the dedicated Google AI Studio key is saved. Use Regenerate now to build it immediately for this thread.
           </p>
-          {!config?.configured && isAdmin ? <p className={styles.diagnosticError}>Save the dedicated Google AI Studio key before generating memory.</p> : null}
+          {!config?.configured ? <p className={styles.diagnosticError}>Save the dedicated Google AI Studio key before generating memory.</p> : null}
           <dl className="definition-list settings-definition-list">
             <div><dt>Thread</dt><dd>{activeThreadName || `Thread ${activeThreadId}`}</dd></div>
             <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : "Waiting for memory key / first update"}</dd></div>
