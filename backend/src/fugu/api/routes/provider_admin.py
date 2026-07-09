@@ -12,7 +12,7 @@ provider_admin_router = APIRouter(
     prefix="/api/admin/provider-credentials",
     tags=["provider-administration"],
 )
-_SUPPORTED_PROVIDER_NAMES = {"google", "openrouter", "nvidia"}
+_SUPPORTED_PROVIDER_NAMES = {"openrouter", "nvidia"}
 
 
 def _normalized_supported_provider(provider_name: str) -> str:
@@ -36,7 +36,7 @@ async def delete_provider_credential(
     _: AdminUser,
     session: MasterSession,
 ) -> Response:
-    """Delete one configured provider credential so a new key can be added later."""
+    """Delete one configured chat provider credential so a new key can be added later."""
     normalized = _normalized_supported_provider(provider_name)
     result = await session.scalars(select(ProviderCredential).where(ProviderCredential.provider_name == normalized))
     credential = result.first()
