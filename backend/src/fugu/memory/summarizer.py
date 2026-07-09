@@ -113,6 +113,15 @@ class ThreadMemorySummarizer:
                     after_message_id=memory.last_summarized_message_id,
                 )
                 if not delta_messages:
+                    await ThreadMemoryRepository.mark_completed(
+                        session,
+                        thread_id=thread_id,
+                        user_id=user_id,
+                        summary_md=memory.summary_md,
+                        last_summarized_message_id=latest_message_id,
+                        summarizer_provider=self._provider_name,
+                        summarizer_model=self._model_identifier,
+                    )
                     return
                 transcript = self._format_transcript(delta_messages)
 
