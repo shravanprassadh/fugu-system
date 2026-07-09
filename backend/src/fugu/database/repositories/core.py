@@ -15,6 +15,7 @@ from fugu.database.models import (
     PipelineStepRun,
     ProviderCredential,
     Thread,
+    ThreadMemory,
     User,
 )
 
@@ -125,6 +126,116 @@ class MessageRepository:
         statement = select(Message).where(Message.thread_id == thread_id).order_by(Message.created_at.asc())
         result = await session.scalars(statement)
         return list(result.all())
+
+
+class ThreadMemoryRepository:
+    """Persistence operations for thread-local rolling markdown memory."""
+
+    @staticmethod
+    async def get_for_thread(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        user_id: int,
+    ) -> ThreadMemory | None:
+        await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+        statement = select(ThreadMemory).where(ThreadMemory.thread_id == thread_id)
+        result = await session.scalars(statement)
+        return result.one_or_none()
+
+    @staticmethod
+    async def get_or_create(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        user_id: int,
+        summarizer_provider: str,
+        summarizer_model: str,
+    ) -> ThreadMemory:
+        await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+        memory = await ThreadMemoryRepository.get_for_thread(session, thread_id=thread_id, user_id=user_id)
+        if memory is None:
+            memory = ThreadMemory(
+                thread_id=thread_id,
+                summarizer_provider=summarizer_provider,
+                summarizer_model=summarizer_model,
+            )
+            session.add(memory)
+        else:
+            memory.summarizer_provider = summarizer_provider
+            memory.summarizer_model = summarizer_model
+        await session.flush()
+        return memory
+
+    @staticmethod
+    async def mark_running(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        user_id: int,
+        summarizer_provider: str,
+        summarizer_model: str,
+    ) -> ThreadMemory:
+        memory = await ThreadMemoryRepository.get_or_create(
+            session,
+            thread_id=thread_id,
+            user_id=user_id,
+            summarizer_provider=summarizer_provider,
+            summarizer_model=summarizer_model,
+        )
+        memory.status = "running"
+        memory.error_message = None
+        await session.flush()
+        return memory
+
+    @staticmethod
+    async def mark_completed(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        user_id: int,
+        summary_md: str,
+        last_summarized_message_id: int,
+        summarizer_provider: str,
+        summarizer_model: str,
+    ) -> ThreadMemory:
+        memory = await ThreadMemoryRepository.get_or_create(
+            session,
+            thread_id=thread_id,
+            user_id=user_id,
+            summarizer_provider=summarizer_provider,
+            summarizer_model=summarizer_model,
+        )
+        memory.summary_md = summary_md
+        memory.key_facts_md = ""
+        memory.open_tasks_md = ""
+        memory.last_summarized_message_id = last_summarized_message_id
+        memory.status = "completed"
+        memory.error_message = None
+        await session.flush()
+        return memory
+
+    @staticmethod
+    async def mark_failed(
+        session: AsyncSession,
+        *,
+        thread_id: int,
+        user_id: int,
+        error_message: str,
+        summarizer_provider: str,
+        summarizer_model: str,
+    ) -> ThreadMemory:
+        memory = await ThreadMemoryRepository.get_or_create(
+            session,
+            thread_id=thread_id,
+            user_id=user_id,
+            summarizer_provider=summarizer_provider,
+            summarizer_model=summarizer_model,
+        )
+        memory.status = "failed"
+        memory.error_message = error_message[:4_000]
+        await session.flush()
+        return memory
 
 
 class ProviderCredentialRepository:
