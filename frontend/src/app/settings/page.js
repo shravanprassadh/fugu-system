@@ -145,6 +145,7 @@ export default function SettingsPage() {
   const [adminError, setAdminError] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
   const [newUser, setNewUser] = useState(emptyNewUser);
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
   const [activePasswordResetUserId, setActivePasswordResetUserId] = useState(null);
   const [passwordDrafts, setPasswordDrafts] = useState({});
 
@@ -277,6 +278,12 @@ export default function SettingsPage() {
     }
   }
 
+  function cancelCreateUser() {
+    setNewUser(emptyNewUser);
+    setIsCreateUserOpen(false);
+    setAdminError("");
+  }
+
   async function handleCreateUser(event) {
     event.preventDefault();
     if (hasReachedUserLimit) {
@@ -290,6 +297,7 @@ export default function SettingsPage() {
     try {
       await createAdminUser(newUser);
       setNewUser(emptyNewUser);
+      setIsCreateUserOpen(false);
       setAdminNotice(`Created ${newUser.username.trim()}.`);
       await loadAdminUsers();
     } catch (error) {
@@ -504,45 +512,76 @@ export default function SettingsPage() {
                 <section className="settings-pane">
                   <div className="settings-row settings-row-top">
                     <div>
-                      <h3>User management</h3>
-                      <p className="muted">Create users, change roles, reset passwords, and remove accounts. Limit: {adminUsers.length}/{MAX_USER_ACCOUNTS} accounts.</p>
+                      <h3>Members</h3>
+                      <p className="muted">Manage existing accounts first. Create a new account only when you explicitly open the form.</p>
                     </div>
                     <div className={styles.headerActions}>
                       <StatusPill status={hasReachedUserLimit ? "limit reached" : adminStatus} />
                       <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
                         {adminStatus === "loading" ? "Loading…" : "Refresh"}
                       </button>
+                      <button
+                        type="button"
+                        className={isCreateUserOpen ? "button-ghost" : "button-primary"}
+                        onClick={() => {
+                          setAdminError("");
+                          setAdminNotice("");
+                          setIsCreateUserOpen((current) => !current);
+                        }}
+                        disabled={adminStatus === "loading" || hasReachedUserLimit}
+                      >
+                        {isCreateUserOpen ? "Close create form" : "New user"}
+                      </button>
                     </div>
                   </div>
+                  <p className="muted">Accounts used: {adminUsers.length}/{MAX_USER_ACCOUNTS}.</p>
                   {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
                   {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
                   {hasReachedUserLimit ? <p className={styles.diagnosticError}>Fugu is limited to {MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.</p> : null}
-                  <form className={styles.adminForm} onSubmit={handleCreateUser}>
-                    <label>
-                      Username
-                      <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required disabled={hasReachedUserLimit} />
-                    </label>
-                    <label>
-                      Initial password
-                      <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required disabled={hasReachedUserLimit} />
-                    </label>
-                    <label>
-                      Role
-                      <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))} disabled={hasReachedUserLimit}>
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </label>
-                    <label className={styles.checkboxLabel}>
-                      <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} disabled={hasReachedUserLimit} />
-                      Active
-                    </label>
-                    <button type="submit" className="button-primary" disabled={adminStatus === "loading" || hasReachedUserLimit}>Create</button>
-                  </form>
+
+                  {isCreateUserOpen && !hasReachedUserLimit ? (
+                    <form className={styles.adminForm} onSubmit={handleCreateUser}>
+                      <label>
+                        Username
+                        <input value={newUser.username} minLength={3} maxLength={255} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} required />
+                      </label>
+                      <label>
+                        Initial password
+                        <input type="password" autoComplete="new-password" value={newUser.password} minLength={8} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} required />
+                      </label>
+                      <label>
+                        Role
+                        <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}>
+                          <option value="user">user</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      </label>
+                      <label className={styles.checkboxLabel}>
+                        <input type="checkbox" checked={newUser.isActive} onChange={(event) => setNewUser((current) => ({ ...current, isActive: event.target.checked }))} />
+                        Active
+                      </label>
+                      <button type="button" className="button-ghost" onClick={cancelCreateUser} disabled={adminStatus === "loading"}>Cancel</button>
+                      <button type="submit" className="button-primary" disabled={adminStatus === "loading"}>Create user</button>
+                    </form>
+                  ) : null}
                 </section>
 
                 <section className="settings-pane">
+                  <div className="settings-row settings-row-top">
+                    <div>
+                      <h3>Current members</h3>
+                      <p className="muted">Role, account state, password reset, and deletion controls are grouped per account.</p>
+                    </div>
+                  </div>
                   <div className="settings-list">
+                    {adminUsers.length === 0 && adminStatus !== "loading" ? (
+                      <div className="settings-list-item">
+                        <div className="settings-list-main">
+                          <strong>No members loaded</strong>
+                          <p className="muted">Refresh the member list to load current accounts.</p>
+                        </div>
+                      </div>
+                    ) : null}
                     {adminUsers.map((account) => {
                       const isSelf = account.id === userId;
                       const isResettingPassword = activePasswordResetUserId === account.id;
@@ -553,6 +592,7 @@ export default function SettingsPage() {
                           <div className="settings-list-main">
                             <div className="settings-list-title-row">
                               <strong>{account.username}</strong>
+                              {isSelf ? <span className="settings-meta-pill">you</span> : null}
                               <StatusPill status={account.role} />
                               <StatusPill status={account.is_active ? "active" : "inactive"} />
                             </div>
