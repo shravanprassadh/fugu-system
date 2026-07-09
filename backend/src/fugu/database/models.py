@@ -132,14 +132,14 @@ class ThreadMemory(Base):
     summarizer_provider: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        default="google",
-        server_default="google",
+        default="google-ai-studio",
+        server_default="google-ai-studio",
     )
     summarizer_model: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        default="gemini-3.5-flash",
-        server_default="gemini-3.5-flash",
+        default="gemini-2.5-flash-lite",
+        server_default="gemini-2.5-flash-lite",
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="idle", server_default="idle")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
