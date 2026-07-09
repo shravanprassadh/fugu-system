@@ -57,6 +57,7 @@ export async function loadProfile(sessionCredential, fetchImpl = fetch) {
   if (!response.ok) {
     throw new ApiRequestError(await parseError(response), response.status);
   }
+  studioStore.getState().touchSession();
   return response.json();
 }
 
@@ -112,6 +113,9 @@ function requireSessionCredential(store) {
   if (!sessionCredential) {
     throw new ApiRequestError("An authenticated session is required.", 401);
   }
+  if (!store.getState().enforceSessionFreshness()) {
+    throw new ApiRequestError("Session expired after 48 hours of inactivity.", 401);
+  }
   return sessionCredential;
 }
 
@@ -152,6 +156,7 @@ async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch
   if (!response.ok) {
     throw new ApiRequestError(await parseError(response), response.status);
   }
+  store.getState().touchSession();
   if (response.status === 204) {
     return null;
   }
