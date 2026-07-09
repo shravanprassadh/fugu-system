@@ -159,6 +159,18 @@ const titleRowStyle = {
   padding: "clamp(1rem, 2.2vw, 1.35rem)",
 };
 
+const memberActionBarStyle = {
+  position: "sticky",
+  bottom: "calc(clamp(1rem, 2.2vw, 1.35rem) * -1)",
+  zIndex: 1,
+  display: "flex",
+  justifyContent: "flex-end",
+  margin: "0 calc(clamp(1rem, 2.2vw, 1.35rem) * -1) calc(clamp(1rem, 2.2vw, 1.35rem) * -1)",
+  borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)",
+  background: "linear-gradient(180deg, color-mix(in srgb, var(--surface) 68%, transparent), color-mix(in srgb, var(--surface) 96%, var(--bg)) 36%)",
+  padding: "0.9rem clamp(1rem, 2.2vw, 1.35rem) clamp(1rem, 2.2vw, 1.35rem)",
+};
+
 const createUserOverlayStyle = {
   position: "fixed",
   inset: 0,
@@ -564,100 +576,90 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
           ) : null}
 
           {currentSection.id === "members" ? (
-            <div className="settings-stack">
-              <section className="settings-pane">
-                <div className="settings-row settings-row-top">
-                  <div>
-                    <h3>Members</h3>
-                    <p className="muted">View and maintain existing accounts. New account creation is kept separate from the member list.</p>
-                  </div>
-                  <div className={styles.headerActions}>
-                    <StatusPill status={hasReachedUserLimit ? "limit reached" : adminStatus} />
-                    <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
-                      {adminStatus === "loading" ? "Loading…" : "Refresh"}
-                    </button>
-                    <button
-                      type="button"
-                      className="button-primary"
-                      onClick={openCreateUser}
-                      disabled={adminStatus === "loading" || hasReachedUserLimit}
-                    >
-                      New user
-                    </button>
-                  </div>
+            <section className="settings-pane">
+              <div className="settings-row settings-row-top">
+                <div>
+                  <h3>Members</h3>
+                  <p className="muted">View and maintain existing accounts. {adminUsers.length}/{MAX_USER_ACCOUNTS} accounts used.</p>
                 </div>
-                <p className="muted">{adminUsers.length}/{MAX_USER_ACCOUNTS} accounts used.</p>
-                {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
-                {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
-                {hasReachedUserLimit ? <p className={styles.diagnosticError}>Fugu is limited to {MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.</p> : null}
-              </section>
-
-              <section className="settings-pane">
-                <div className="settings-row settings-row-top">
-                  <div>
-                    <h3>Current members</h3>
-                    <p className="muted">Each row contains only that account's state and controls.</p>
-                  </div>
+                <div className={styles.headerActions}>
+                  <StatusPill status={hasReachedUserLimit ? "limit reached" : adminStatus} />
+                  <button type="button" className="button-ghost" onClick={loadAdminUsers} disabled={adminStatus === "loading"}>
+                    {adminStatus === "loading" ? "Loading…" : "Refresh"}
+                  </button>
                 </div>
-                <div className="settings-list">
-                  {adminUsers.length === 0 && adminStatus !== "loading" ? (
-                    <div className="settings-list-item">
-                      <div className="settings-list-main">
-                        <strong>No members loaded</strong>
-                        <p className="muted">Refresh the member list to load current accounts.</p>
-                      </div>
+              </div>
+              {adminError ? <p className={styles.diagnosticError}>{adminError}</p> : null}
+              {adminNotice ? <p className={styles.diagnosticSuccess}>{adminNotice}</p> : null}
+              {hasReachedUserLimit ? <p className={styles.diagnosticError}>Fugu is limited to {MAX_USER_ACCOUNTS} user accounts. Delete an existing user before creating another one.</p> : null}
+              <div className="settings-list">
+                {adminUsers.length === 0 && adminStatus !== "loading" ? (
+                  <div className="settings-list-item">
+                    <div className="settings-list-main">
+                      <strong>No members loaded</strong>
+                      <p className="muted">Refresh the member list to load current accounts.</p>
                     </div>
-                  ) : null}
-                  {adminUsers.map((account) => {
-                    const isSelf = account.id === userId;
-                    const isResettingPassword = activePasswordResetUserId === account.id;
-                    const passwordDraft = passwordDrafts[account.id] || emptyPasswordResetDraft;
-                    const canSavePassword = passwordDraft.password.length >= 8 && passwordDraft.password === passwordDraft.confirmation;
-                    return (
-                      <article className={`settings-list-item ${styles.memberListItem}`} key={account.id}>
-                        <div className="settings-list-main">
-                          <div className="settings-list-title-row">
-                            <strong>{account.username}</strong>
-                            {isSelf ? <span className="settings-meta-pill">you</span> : null}
-                            <StatusPill status={account.role} />
-                            <StatusPill status={account.is_active ? "active" : "inactive"} />
+                  </div>
+                ) : null}
+                {adminUsers.map((account) => {
+                  const isSelf = account.id === userId;
+                  const isResettingPassword = activePasswordResetUserId === account.id;
+                  const passwordDraft = passwordDrafts[account.id] || emptyPasswordResetDraft;
+                  const canSavePassword = passwordDraft.password.length >= 8 && passwordDraft.password === passwordDraft.confirmation;
+                  return (
+                    <article className={`settings-list-item ${styles.memberListItem}`} key={account.id}>
+                      <div className="settings-list-main">
+                        <div className="settings-list-title-row">
+                          <strong>{account.username}</strong>
+                          {isSelf ? <span className="settings-meta-pill">you</span> : null}
+                          <StatusPill status={account.role} />
+                          <StatusPill status={account.is_active ? "active" : "inactive"} />
+                        </div>
+                        <p className="muted">ID {account.id} · token v{account.token_version} · {account.thread_count} threads</p>
+                      </div>
+                      <div className={styles.adminActions}>
+                        <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}>
+                          {account.role === "admin" ? "Make user" : "Make admin"}
+                        </button>
+                        <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
+                          {account.is_active ? "Deactivate" : "Reactivate"}
+                        </button>
+                        <button type="button" className="button-ghost" disabled={adminStatus === "loading"} onClick={() => (isResettingPassword ? cancelPasswordReset(account) : beginPasswordReset(account))}>
+                          {isResettingPassword ? "Cancel reset" : "Reset password"}
+                        </button>
+                        <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
+                      </div>
+                      {isResettingPassword ? (
+                        <form className={styles.passwordResetPanel} onSubmit={(event) => { event.preventDefault(); handleResetPassword(account); }}>
+                          <label>
+                            New password
+                            <input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={passwordDraft.password} onChange={(event) => updatePasswordDraft(account, "password", event.target.value)} required />
+                          </label>
+                          <label>
+                            Confirm password
+                            <input type="password" autoComplete="new-password" minLength={8} placeholder="Repeat new password" value={passwordDraft.confirmation} onChange={(event) => updatePasswordDraft(account, "confirmation", event.target.value)} required />
+                          </label>
+                          <div className={styles.passwordResetActions}>
+                            <button type="button" className="button-ghost" onClick={() => cancelPasswordReset(account)} disabled={adminStatus === "loading"}>Cancel</button>
+                            <button type="submit" className="button-primary" disabled={adminStatus === "loading" || !canSavePassword}>Save password</button>
                           </div>
-                          <p className="muted">ID {account.id} · token v{account.token_version} · {account.thread_count} threads</p>
-                        </div>
-                        <div className={styles.adminActions}>
-                          <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { role: account.role === "admin" ? "user" : "admin" })}>
-                            {account.role === "admin" ? "Make user" : "Make admin"}
-                          </button>
-                          <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
-                            {account.is_active ? "Deactivate" : "Reactivate"}
-                          </button>
-                          <button type="button" className="button-ghost" disabled={adminStatus === "loading"} onClick={() => (isResettingPassword ? cancelPasswordReset(account) : beginPasswordReset(account))}>
-                            {isResettingPassword ? "Cancel reset" : "Reset password"}
-                          </button>
-                          <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
-                        </div>
-                        {isResettingPassword ? (
-                          <form className={styles.passwordResetPanel} onSubmit={(event) => { event.preventDefault(); handleResetPassword(account); }}>
-                            <label>
-                              New password
-                              <input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={passwordDraft.password} onChange={(event) => updatePasswordDraft(account, "password", event.target.value)} required />
-                            </label>
-                            <label>
-                              Confirm password
-                              <input type="password" autoComplete="new-password" minLength={8} placeholder="Repeat new password" value={passwordDraft.confirmation} onChange={(event) => updatePasswordDraft(account, "confirmation", event.target.value)} required />
-                            </label>
-                            <div className={styles.passwordResetActions}>
-                              <button type="button" className="button-ghost" onClick={() => cancelPasswordReset(account)} disabled={adminStatus === "loading"}>Cancel</button>
-                              <button type="submit" className="button-primary" disabled={adminStatus === "loading" || !canSavePassword}>Save password</button>
-                            </div>
-                          </form>
-                        ) : null}
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            </div>
+                        </form>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+              <div style={memberActionBarStyle}>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={openCreateUser}
+                  disabled={adminStatus === "loading" || hasReachedUserLimit}
+                >
+                  New user
+                </button>
+              </div>
+            </section>
           ) : null}
 
           {currentSection.id === "ai" ? <OperatorControls isAdmin={isAdmin} onUnauthorized={onSignOut} /> : null}
