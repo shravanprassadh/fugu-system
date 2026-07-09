@@ -1,27 +1,18 @@
-# fmt: off
 """Administrative API routes for Fugu operators."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal, cast
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.sql.schema import Table
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
-from fugu.boot.config import get_settings
-from fugu.database.connection import (
-    DatabaseTarget,
-)
-from fugu.database.models import Base, PipelineStep, ProviderCredential, Thread, User
+from fugu.database.models import PipelineStep, ProviderCredential, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository
-from fugu.database.urls import sqlalchemy_asyncpg_url
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
@@ -139,42 +130,6 @@ class UpdatePipelineStepPayload(BaseModel):
     is_terminal: bool | None = None
 
 
-class DatabaseConnectionPayload(BaseModel):
-    """Write-only database URLs used by the transfer workflow."""
-
-    master_router_db_url: str = Field(min_length=20, max_length=4_096)
-    metadata_sidebar_db_url: str = Field(min_length=20, max_length=4_096)
-    transactional_logs_db_url: str = Field(min_length=20, max_length=4_096)
-
-
-class DatabaseTransferPayload(DatabaseConnectionPayload):
-    """Guarded database transfer request."""
-
-    confirmation: str
-    replace_existing: bool = False
-    apply_to_current_process: bool = True
-
-
-class DatabaseTargetStatus(BaseModel):
-    """Sanitized database target status."""
-
-    target: str
-    masked_url: str
-    status: Literal["connected", "failed", "copied", "active"]
-    row_count: int | None = None
-    error: str | None = None
-
-
-class DatabaseTransferResponse(BaseModel):
-    """Result of a database connection test or guarded transfer."""
-
-    status: Literal["ready", "transferred"]
-    targets: list[DatabaseTargetStatus]
-    active_until_restart: bool = False
-    render_env_update_required: bool = False
-    note: str
-
-
 async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
     user = await UserRepository.get_by_id(session, user_id)
     if user is None:
@@ -220,97 +175,6 @@ async def _prevent_last_admin_loss(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one active administrator must remain.",
         )
-
-
-def _database_url_map(payload: DatabaseConnectionPayload) -> dict[DatabaseTarget, str]:
-    return {
-        DatabaseTarget.MASTER: payload.master_router_db_url,
-        DatabaseTarget.METADATA: payload.metadata_sidebar_db_url,
-        DatabaseTarget.LOGS: payload.transactional_logs_db_url,
-    }
-
-
-def _masked_database_url(url: str) -> str:
-    parsed = urlsplit(url)
-    username = "****" if parsed.username else ""
-    password = ":********" if parsed.password else ""
-    credentials = f"{username}{password}@" if username or password else ""
-    host = parsed.hostname or "unknown-host"
-    port = f":{parsed.port}" if parsed.port else ""
-    database = parsed.path or ""
-    query = f"?{parsed.query}" if parsed.query else ""
-    return f"{parsed.scheme}://{credentials}{host}{port}{database}{query}"
-
-
-def _temporary_engine(url: str) -> AsyncEngine:
-    settings = get_settings()
-    return create_async_engine(
-        sqlalchemy_asyncpg_url(url),
-        pool_size=1,
-        max_overflow=0,
-        pool_pre_ping=True,
-        pool_timeout=settings.network_request_timeout,
-    )
-
-
-async def _dispose_engines(engines: dict[DatabaseTarget, AsyncEngine]) -> None:
-    for engine in engines.values():
-        await engine.dispose()
-
-
-async def _test_target_url(target: DatabaseTarget, url: str) -> DatabaseTargetStatus:
-    engine = _temporary_engine(url)
-    try:
-        async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1"))
-        return DatabaseTargetStatus(
-            target=target.value,
-            masked_url=_masked_database_url(url),
-            status="connected",
-        )
-    except SQLAlchemyError as exc:
-        return DatabaseTargetStatus(
-            target=target.value,
-            masked_url=_masked_database_url(url),
-            status="failed",
-            error=str(exc),
-        )
-    finally:
-        await engine.dispose()
-
-
-async def _test_target_urls(urls: dict[DatabaseTarget, str]) -> list[DatabaseTargetStatus]:
-    return [await _test_target_url(target, url) for target, url in urls.items()]
-
-
-async def _source_database_has_rows(source_engine: AsyncEngine) -> bool:
-    async with source_engine.connect() as connection:
-        for table in Base.metadata.sorted_tables:
-            result = await connection.execute(select(func.count()).select_from(table))
-            if int(result.scalar_one() or 0) > 0:
-                return True
-    return False
-
-
-async def _copy_table_rows(
-    *,
-    source_engine: AsyncEngine,
-    destination_engine: AsyncEngine,
-    table: Table,
-    replace_existing: bool,
-) -> int:
-    copied_rows = 0
-    async with destination_engine.begin() as destination_connection:
-        if replace_existing:
-            await destination_connection.execute(table.delete())
-        async with source_engine.connect() as source_connection:
-            async with source_connection.begin():
-                result = await source_connection.execute(select(table))
-                rows = [dict(row) for row in result.mappings().all()]
-            if rows:
-                await destination_connection.execute(table.insert(), rows)
-                copied_rows += len(rows)
-    return copied_rows
 
 
 @admin_router.get("/users", response_model=list[AdminUserResponse])
@@ -390,7 +254,10 @@ async def update_user(
         target_user.is_active = payload.is_active
     target_user.token_version += 1
     await session.flush()
-    return AdminUserResponse.from_user(target_user, thread_count=await _thread_count(session, target_user.id))
+    return AdminUserResponse.from_user(
+        target_user,
+        thread_count=await _thread_count(session, target_user.id),
+    )
 
 
 @admin_router.post(
@@ -440,7 +307,7 @@ async def list_provider_credentials(
     """List configured chat-provider credentials without returning plaintext secrets."""
     statement = (
         select(ProviderCredential)
-        .where(ProviderCredential.provider_name.in_(_CHAT_PROVIDER_NAMES))
+        .where(ProviderCredential.provider_name.in_(sorted(_CHAT_PROVIDER_NAMES)))
         .order_by(ProviderCredential.provider_name.asc())
     )
     result = await session.scalars(statement)
@@ -459,7 +326,10 @@ async def upsert_provider_credential(
         supported = ", ".join(sorted(_CHAT_PROVIDER_NAMES))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported chat provider {payload.provider_name!r}. Supported providers: {supported}.",
+            detail=(
+                f"Unsupported chat provider {payload.provider_name!r}. "
+                f"Supported providers: {supported}."
+            ),
         )
     vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
     credential = await vault.store(
@@ -490,7 +360,10 @@ async def update_pipeline_step(
     """Patch one pipeline step without editing deployment files."""
     step = await session.get(PipelineStep, step_id)
     if step is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pipeline step not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pipeline step not found.",
+        )
     if payload.provider_type is not None:
         step.provider_type = payload.provider_type.strip().lower()
     if payload.model_string is not None:
@@ -501,7 +374,10 @@ async def update_pipeline_step(
         step.prerequisite_dependencies = payload.prerequisite_dependencies
     if payload.is_terminal is not None:
         if payload.is_terminal:
-            await session.execute(text("UPDATE pipeline_steps SET is_terminal = false WHERE id != :step_id"), {"step_id": step.id})
+            await session.execute(
+                text("UPDATE pipeline_steps SET is_terminal = false WHERE id != :step_id"),
+                {"step_id": step.id},
+            )
         step.is_terminal = payload.is_terminal
     await session.flush()
     return PipelineStepResponse.from_step(step)
