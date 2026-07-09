@@ -1,7 +1,6 @@
 export const supportedProviders = [
   { value: "openrouter", label: "OpenRouter" },
   { value: "nvidia", label: "NVIDIA" },
-  { value: "google", label: "Google Gemini" },
 ];
 
 export const nvidiaChatModelIds = [
@@ -92,7 +91,6 @@ export const nvidiaChatModelIds = [
 export const supportedModelsByProvider = {
   openrouter: [{ value: "openrouter/free", label: "OpenRouter free tier" }],
   nvidia: nvidiaChatModelIds.map((modelId) => ({ value: modelId, label: modelId })),
-  google: [{ value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }],
 };
 
 export const defaultModelPreference = {
