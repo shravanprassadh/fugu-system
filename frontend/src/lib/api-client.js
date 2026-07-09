@@ -115,6 +115,20 @@ function requireSessionCredential(store) {
   return sessionCredential;
 }
 
+function isRenderControlPlanePath(path) {
+  return path.startsWith("/api/admin/render/");
+}
+
+function renderControlPlaneUnauthorizedMessage(message) {
+  if (message && !message.startsWith("Request failed with status")) {
+    return message;
+  }
+  return (
+    "Render control plane rejected the stored credentials. Click Change, re-save the Render service ID " +
+    "and a current Render API token from the same Render account, then run Test again."
+  );
+}
+
 async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch, store = studioStore } = {}) {
   const sessionCredential = requireSessionCredential(store);
   const headers = { Authorization: `Bearer ${sessionCredential}` };
@@ -128,8 +142,12 @@ async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch
     cache: "no-store",
   });
   if (response.status === 401) {
+    const message = await parseError(response);
+    if (isRenderControlPlanePath(path)) {
+      throw new ApiRequestError(renderControlPlaneUnauthorizedMessage(message), 401);
+    }
     store.getState().clearSession();
-    throw new ApiRequestError("The session has expired or was rejected.", 401);
+    throw new ApiRequestError(message || "The session has expired or was rejected.", 401);
   }
   if (!response.ok) {
     throw new ApiRequestError(await parseError(response), response.status);
