@@ -10,12 +10,13 @@ from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Message
 from fugu.database.repositories import MessageRepository, ThreadMemoryRepository
 from fugu.providers.base import ProviderRequest
-from fugu.providers.registry import ProviderRegistry
+from fugu.providers.google import GoogleGeminiProvider
 from fugu.security.encryption import ProviderCredentialVault
 
 LOGGER = logging.getLogger(__name__)
 
-MEMORY_PROVIDER_NAME = "google"
+MEMORY_CREDENTIAL_PROVIDER_NAME = "thread_memory_google_ai_studio"
+MEMORY_PROVIDER_LABEL = "google-ai-studio"
 MEMORY_MODEL_IDENTIFIER = "gemini-3.5-flash"
 MAX_DELTA_MESSAGES = 30
 MAX_TRANSCRIPT_CHARACTERS = 16_000
@@ -48,15 +49,15 @@ class ThreadMemorySummarizer:
         self,
         *,
         session_registry: DatabaseSessionRegistry,
-        provider_registry: ProviderRegistry,
         credential_vault: ProviderCredentialVault,
-        provider_name: str = MEMORY_PROVIDER_NAME,
+        credential_provider_name: str = MEMORY_CREDENTIAL_PROVIDER_NAME,
+        provider_label: str = MEMORY_PROVIDER_LABEL,
         model_identifier: str = MEMORY_MODEL_IDENTIFIER,
     ) -> None:
         self._sessions = session_registry
-        self._providers = provider_registry
         self._vault = credential_vault
-        self._provider_name = provider_name
+        self._credential_provider_name = credential_provider_name
+        self._provider_label = provider_label
         self._model_identifier = model_identifier
 
     def schedule(
@@ -88,20 +89,20 @@ class ThreadMemorySummarizer:
         user_id: int,
         latest_message_id: int,
     ) -> None:
-        """Update the stored markdown memory using the configured utility model."""
+        """Update the stored markdown memory using the configured Google AI Studio key."""
         previous_summary = ""
         transcript = ""
         credential: str | None = None
         try:
             async with self._sessions.session(DatabaseTarget.MASTER) as session:
-                credential = await self._vault.retrieve(session, provider_name=self._provider_name)
+                credential = await self._vault.retrieve(session, provider_name=self._credential_provider_name)
                 if credential is None:
                     return
                 memory = await ThreadMemoryRepository.mark_running(
                     session,
                     thread_id=thread_id,
                     user_id=user_id,
-                    summarizer_provider=self._provider_name,
+                    summarizer_provider=self._provider_label,
                     summarizer_model=self._model_identifier,
                 )
                 previous_summary = self._trim(memory.summary_md or "", MAX_PREVIOUS_MEMORY_CHARACTERS)
@@ -121,13 +122,13 @@ class ThreadMemorySummarizer:
                         user_id=user_id,
                         summary_md=memory.summary_md,
                         last_summarized_message_id=latest_message_id,
-                        summarizer_provider=self._provider_name,
+                        summarizer_provider=self._provider_label,
                         summarizer_model=self._model_identifier,
                     )
                     return
                 transcript = self._format_transcript(delta_messages)
 
-            provider = self._providers.resolve(self._provider_name)
+            provider = GoogleGeminiProvider()
             try:
                 request = ProviderRequest(
                     prompt_content=self._build_prompt(previous_summary=previous_summary, transcript=transcript),
@@ -152,7 +153,7 @@ class ThreadMemorySummarizer:
                     user_id=user_id,
                     summary_md=updated_summary,
                     last_summarized_message_id=latest_message_id,
-                    summarizer_provider=self._provider_name,
+                    summarizer_provider=self._provider_label,
                     summarizer_model=self._model_identifier,
                 )
         except Exception as exc:  # pragma: no cover - defensive background task boundary
@@ -164,7 +165,7 @@ class ThreadMemorySummarizer:
                         thread_id=thread_id,
                         user_id=user_id,
                         error_message=str(exc),
-                        summarizer_provider=self._provider_name,
+                        summarizer_provider=self._provider_label,
                         summarizer_model=self._model_identifier,
                     )
             except Exception:
