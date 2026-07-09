@@ -57,7 +57,7 @@ export function LoginGate() {
         <p className="auth-mark" aria-hidden="true">河豚</p>
         <h1 id="auth-title" className="auth-title">Fugu Studio</h1>
         <p className="auth-copy">
-          Sign in to your workspace. Session credentials stay in memory and are discarded when this tab closes.
+          Sign in to your workspace. This browser stays signed in until you sign out or remain inactive for 48 hours.
         </p>
         {configurationProblem ? (
           <p className="form-error config-error" role="alert">{configurationProblem}</p>
