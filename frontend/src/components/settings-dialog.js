@@ -91,11 +91,15 @@ const overlayStyle = {
   placeItems: "center",
   background: "rgba(7, 10, 18, 0.52)",
   padding: "clamp(0.75rem, 2vw, 1.5rem)",
+  overflow: "hidden",
 };
 
 const dialogStyle = {
-  width: "min(100%, 1040px)",
-  maxHeight: "min(820px, calc(100dvh - 2rem))",
+  width: "min(1040px, calc(100vw - 2rem))",
+  height: "min(780px, calc(100dvh - 2rem))",
+  maxWidth: "1040px",
+  maxHeight: "calc(100dvh - 2rem)",
+  minHeight: 0,
   display: "grid",
   gridTemplateColumns: "230px minmax(0, 1fr)",
   border: "1px solid color-mix(in srgb, var(--line) 82%, transparent)",
@@ -107,12 +111,25 @@ const dialogStyle = {
 
 const navStyle = {
   display: "grid",
-  alignContent: "start",
+  gridTemplateRows: "minmax(0, 1fr) auto",
+  alignContent: "stretch",
   gap: "0.18rem",
-  minHeight: "32rem",
+  minHeight: 0,
+  height: "100%",
+  maxHeight: "100%",
   borderRight: "1px solid color-mix(in srgb, var(--line) 78%, transparent)",
   background: "color-mix(in srgb, var(--bg) 38%, var(--surface))",
   padding: "0.75rem",
+  overflow: "hidden",
+};
+
+const navItemsStyle = {
+  display: "grid",
+  alignContent: "start",
+  gap: "0.18rem",
+  minHeight: 0,
+  overflowY: "auto",
+  scrollbarGutter: "stable",
 };
 
 const contentStyle = {
@@ -120,15 +137,26 @@ const contentStyle = {
   alignContent: "start",
   gap: "0.8rem",
   minWidth: 0,
-  overflowY: "auto",
+  minHeight: 0,
+  height: "100%",
+  maxHeight: "100%",
+  overflowY: "scroll",
+  scrollbarGutter: "stable",
   padding: "clamp(1rem, 2.2vw, 1.35rem)",
 };
 
 const titleRowStyle = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: "1rem",
+  margin: "calc(clamp(1rem, 2.2vw, 1.35rem) * -1) calc(clamp(1rem, 2.2vw, 1.35rem) * -1) 0",
+  borderBottom: "1px solid color-mix(in srgb, var(--line) 76%, transparent)",
+  background: "color-mix(in srgb, var(--surface) 96%, var(--bg))",
+  padding: "clamp(1rem, 2.2vw, 1.35rem)",
 };
 
 const createUserOverlayStyle = {
@@ -139,10 +167,13 @@ const createUserOverlayStyle = {
   placeItems: "center",
   background: "rgba(7, 10, 18, 0.52)",
   padding: "1rem",
+  overflow: "hidden",
 };
 
 const createUserDialogStyle = {
   width: "min(100%, 34rem)",
+  maxHeight: "calc(100dvh - 2rem)",
+  overflowY: "auto",
   border: "1px solid color-mix(in srgb, var(--line) 78%, transparent)",
   borderRadius: "24px",
   background: "var(--surface)",
@@ -466,18 +497,20 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
         onMouseDown={(event) => event.stopPropagation()}
       >
         <aside className="settings-nav" style={navStyle} aria-label="Settings sections">
-          {visibleSections.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              className={`settings-nav-item ${currentSection.id === section.id ? "settings-nav-item-active" : ""}`}
-              onClick={() => setActiveSection(section.id)}
-            >
-              <span className="settings-nav-label">{section.label}</span>
-              <span className="settings-nav-description">{section.description}</span>
-            </button>
-          ))}
-          <div style={{ marginTop: "auto", paddingTop: "0.75rem" }}>
+          <div style={navItemsStyle}>
+            {visibleSections.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                className={`settings-nav-item ${currentSection.id === section.id ? "settings-nav-item-active" : ""}`}
+                onClick={() => setActiveSection(section.id)}
+              >
+                <span className="settings-nav-label">{section.label}</span>
+                <span className="settings-nav-description">{section.description}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)", paddingTop: "0.75rem" }}>
             <button
               type="button"
               className="settings-nav-item"
