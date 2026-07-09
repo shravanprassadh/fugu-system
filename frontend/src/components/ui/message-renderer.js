@@ -2,8 +2,12 @@
 
 import { createElement, Fragment, useState } from "react";
 
-export function SafePlaintextRenderer({ rawContentText = "" }) {
-  const lines = String(rawContentText).split("\n");
+function normalizeRenderableContent(rawContentText, content) {
+  return rawContentText ?? content ?? "";
+}
+
+export function SafePlaintextRenderer({ rawContentText, content }) {
+  const lines = String(normalizeRenderableContent(rawContentText, content)).split("\n");
   return createElement(
     "div",
     { className: "message-text" },
@@ -131,8 +135,8 @@ function flushList(blocks, listState, keyPrefix) {
   listState.items = [];
 }
 
-export function SafeMarkdownRenderer({ rawContentText = "" }) {
-  const lines = String(rawContentText).split("\n");
+export function SafeMarkdownRenderer({ rawContentText, content }) {
+  const lines = String(normalizeRenderableContent(rawContentText, content)).split("\n");
   const blocks = [];
   const pendingParagraph = [];
   const listState = { ordered: false, items: [] };
