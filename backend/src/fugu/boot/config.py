@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
@@ -16,7 +17,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from pydantic_settings.exceptions import SettingsError
 
 from fugu.database.urls import sqlalchemy_asyncpg_url
 
@@ -93,7 +95,7 @@ class InfrastructureConfig(BaseSettings):
         le=86_400,
         validation_alias="CORS_PREFLIGHT_MAX_AGE_SECONDS",
     )
-    allowed_origins: list[AnyHttpUrl] = Field(
+    allowed_origins: Annotated[list[AnyHttpUrl], NoDecode] = Field(
         min_length=1,
         validation_alias="ALLOWED_ORIGINS",
     )
@@ -121,9 +123,21 @@ class InfrastructureConfig(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value: Any) -> Any:
-        """Convert a comma-separated environment value into validated HTTP origins."""
+        """Convert JSON-list or comma-separated environment values into HTTP origins."""
         if isinstance(value, str):
-            origins = [origin.strip() for origin in value.split(",") if origin.strip()]
+            normalized_value = value.strip()
+            if not normalized_value:
+                raise ValueError("ALLOWED_ORIGINS must contain at least one HTTP origin.")
+            if normalized_value.startswith("["):
+                try:
+                    decoded_value = json.loads(normalized_value)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("ALLOWED_ORIGINS JSON list is malformed.") from exc
+                if not isinstance(decoded_value, list):
+                    raise ValueError("ALLOWED_ORIGINS JSON value must be a list of HTTP origins.")
+                origins = [str(origin).strip() for origin in decoded_value if str(origin).strip()]
+            else:
+                origins = [origin.strip() for origin in normalized_value.split(",") if origin.strip()]
             if not origins:
                 raise ValueError("ALLOWED_ORIGINS must contain at least one HTTP origin.")
             return origins
@@ -195,7 +209,7 @@ def get_settings() -> InfrastructureConfig:
     """Load settings once and raise a startup-safe typed error on invalid configuration."""
     try:
         return InfrastructureConfig()
-    except ValidationError as exc:
+    except (SettingsError, ValidationError) as exc:
         raise ConfigurationError(
             "Platform initialization aborted because required configuration is missing or malformed."
         ) from exc
