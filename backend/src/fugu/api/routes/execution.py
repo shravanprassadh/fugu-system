@@ -19,7 +19,7 @@ from fugu.execution.exceptions import (
 from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
-_SUPPORTED_PROVIDER_TYPES = {"openrouter", "nvidia"}
+_SUPPORTED_PROVIDER_TYPES = {"google", "openrouter", "nvidia"}
 
 
 class PipelineExecutionPayload(BaseModel):
