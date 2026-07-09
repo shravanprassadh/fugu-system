@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { SettingsDialog } from "../../components/settings-dialog";
 import { StudioSidebar } from "../../components/sidebar";
 import { useStudioStore } from "../../components/store";
 import {
@@ -90,6 +91,7 @@ export default function ChatPage() {
   const [isThreadListLoading, setIsThreadListLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [greeting] = useState(() => GREETINGS[Math.floor(Math.random() * GREETINGS.length)]);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
@@ -331,7 +333,7 @@ export default function ChatPage() {
         onRenameThread={handleRenameThread}
         onDeleteThread={handleDeleteThread}
         onRetryThreads={reloadThreads}
-        onSignOut={signOut}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <section className="conversation-panel" aria-label="Conversation">
@@ -402,6 +404,7 @@ export default function ChatPage() {
           </>
         )}
       </section>
+      <SettingsDialog open={isSettingsOpen} username={username} onClose={() => setIsSettingsOpen(false)} onSignOut={signOut} />
     </main>
   );
 }
