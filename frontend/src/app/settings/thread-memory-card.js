@@ -8,6 +8,7 @@ import {
   deleteThreadMemoryConfig,
   fetchThreadMemory,
   getThreadMemoryConfig,
+  regenerateThreadMemory,
   saveThreadMemoryConfig,
 } from "../../lib/api-client";
 import styles from "./settings.module.css";
@@ -18,10 +19,10 @@ function StatusPill({ children, tone = "neutral" }) {
 }
 
 function statusTone(status) {
-  if (["completed", "ready", "active", "configured"].includes(status)) {
+  if (["completed", "ready", "active", "configured", "generated"].includes(status)) {
     return "success";
   }
-  if (["running", "queued", "loading", "saving"].includes(status)) {
+  if (["running", "queued", "loading", "saving", "generating"].includes(status)) {
     return "loading";
   }
   if (["failed", "error"].includes(status)) {
@@ -48,6 +49,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
   const isAdmin = userRole === "admin";
   const [memory, setMemory] = useState(null);
   const [memoryStatus, setMemoryStatus] = useState("idle");
+  const [memoryNotice, setMemoryNotice] = useState("");
   const [memoryError, setMemoryError] = useState("");
   const [config, setConfig] = useState(null);
   const [configStatus, setConfigStatus] = useState("idle");
@@ -63,10 +65,12 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     if (!activeThreadId) {
       setMemory(null);
       setMemoryStatus("idle");
+      setMemoryNotice("");
       setMemoryError("");
       return;
     }
     setMemoryStatus("loading");
+    setMemoryNotice("");
     setMemoryError("");
     try {
       const payload = await fetchThreadMemory(activeThreadId);
@@ -128,7 +132,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       const payload = await saveThreadMemoryConfig(apiKey);
       setConfig(payload);
       setApiKeyDraft("");
-      setConfigNotice("Thread memory Google AI Studio key saved. Future completed answers will update memory automatically.");
+      setConfigNotice("Thread memory Google AI Studio key saved. You can generate this thread's memory now.");
       setConfigStatus("ready");
     } catch (operationError) {
       if (operationError?.status === 401) {
@@ -162,9 +166,32 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     }
   }
 
-  const visibleMemoryStatus = memoryStatus === "loading" ? "loading" : memory?.status || "not selected";
+  async function handleRegenerateMemory() {
+    if (!activeThreadId) {
+      return;
+    }
+    setMemoryStatus("generating");
+    setMemoryNotice("");
+    setMemoryError("");
+    try {
+      const payload = await regenerateThreadMemory(activeThreadId);
+      setMemory(payload);
+      setMemoryNotice("Thread memory generated and saved for the active thread.");
+      setMemoryStatus("ready");
+    } catch (operationError) {
+      if (operationError?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      setMemoryError(operationError.message || "Could not regenerate thread memory.");
+      setMemoryStatus("failed");
+    }
+  }
+
+  const visibleMemoryStatus = ["loading", "generating"].includes(memoryStatus) ? memoryStatus : memory?.status || "not selected";
   const summary = memory?.summary_md?.trim() || "";
   const configLabel = config?.configured ? "configured" : "not configured";
+  const canGenerateMemory = Boolean(activeThreadId && config?.configured && !["loading", "generating"].includes(memoryStatus));
 
   return (
     <section className="settings-card settings-card-wide">
@@ -175,8 +202,11 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
         </div>
         <div className={styles.headerActions}>
           <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
-          <button type="button" className="button-ghost" onClick={loadMemory} disabled={!activeThreadId || memoryStatus === "loading"}>
+          <button type="button" className="button-ghost" onClick={loadMemory} disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}>
             {memoryStatus === "loading" ? "Loading…" : "Refresh"}
+          </button>
+          <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
+            {memoryStatus === "generating" ? "Generating…" : "Regenerate now"}
           </button>
         </div>
       </div>
@@ -227,18 +257,20 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       ) : null}
 
       {!activeThreadId ? (
-        <p className="muted">Open a chat thread to view its stored memory summary.</p>
+        <p className="muted">Open a chat thread to view or generate its stored memory summary.</p>
       ) : (
         <>
           <p className="muted">
-            Memory updates automatically after each completed assistant answer when the dedicated Google AI Studio key is saved. Raw messages remain stored separately.
+            Memory updates automatically after each completed assistant answer when the dedicated Google AI Studio key is saved. Use Regenerate now to build it immediately for this thread.
           </p>
+          {!config?.configured && isAdmin ? <p className={styles.diagnosticError}>Save the dedicated Google AI Studio key before generating memory.</p> : null}
           <dl className="definition-list settings-definition-list">
             <div><dt>Thread</dt><dd>{activeThreadName || `Thread ${activeThreadId}`}</dd></div>
             <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : "Waiting for memory key / first update"}</dd></div>
             <div><dt>Last summarized message</dt><dd>{memory?.last_summarized_message_id ?? "Not summarized yet"}</dd></div>
             <div><dt>Updated</dt><dd>{formatTimestamp(memory?.updated_at)}</dd></div>
           </dl>
+          {memoryNotice ? <p className={styles.diagnosticSuccess}>{memoryNotice}</p> : null}
           {memoryError ? <p className={styles.diagnosticError}>{memoryError}</p> : null}
           {memory?.error_message ? <p className={styles.diagnosticError}>{memory.error_message}</p> : null}
           <div className="settings-list">
@@ -253,7 +285,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
                     <SafeMarkdownRenderer content={summary} />
                   </div>
                 ) : (
-                  <p className="muted">No memory summary exists yet. Save the dedicated Google AI Studio key, then continue the conversation to generate one.</p>
+                  <p className="muted">No memory summary exists yet. Save the dedicated Google AI Studio key, then click Regenerate now or continue the conversation.</p>
                 )}
               </div>
             </div>
