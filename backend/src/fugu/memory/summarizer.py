@@ -26,28 +26,31 @@ MAX_THREAD_TITLE_CHARACTERS = 64
 
 MEMORY_SYSTEM_DIRECTIVES = (
     "You are Fugu's thread-memory maintainer.\n"
-    "Your task is to update a concise markdown memory document and suggest a concise thread title.\n"
+    "Your output is consumed by future AI agents, not just humans. Write it as an operational handoff.\n"
     "Return markdown only. Do not add commentary outside the document.\n"
     "Never store API keys, passwords, full secrets, private tokens, or sensitive credentials.\n"
+    "Do not write vague narrative. Use dense bullets with exact names, paths, IDs, URLs, branch names, commit SHAs, "
+    "status messages, blockers, and user decisions when available.\n"
+    "Preserve user preferences and constraints that affect future actions. Preserve mistakes already made and fixes applied.\n"
+    "Remove stale details only when they are clearly superseded. If uncertain, keep the fact and mark it as uncertain.\n"
     "The title must be 3-8 words, specific to the conversation, and must not include quotes or markdown.\n"
-    "Do preserve durable project state, decisions, files touched, user preferences, constraints, "
-    "unresolved tasks, and exact technical identifiers when useful.\n"
-    "Remove stale details that no longer affect future work.\n"
+    "Each section except ## Thread title should use short bullets. Prefer 'key: value' bullets when possible.\n"
     "Use these headings exactly:\n"
     "# Thread Memory\n"
     "## Thread title\n"
-    "## Current goal\n"
-    "## Stable facts\n"
-    "## Decisions made\n"
-    "## Files / modules touched\n"
+    "## AI handoff brief\n"
+    "## User intent and preferences\n"
     "## Current implementation state\n"
-    "## Open tasks\n"
+    "## Exact technical references\n"
+    "## Decisions and constraints\n"
+    "## Known failures and blockers\n"
+    "## Open tasks / next actions\n"
     "## Last summarized range\n"
 )
 
 
 class ThreadMemorySummarizer:
-    """Maintain rolling markdown summaries and concise thread titles."""
+    """Maintain rolling AI handoff summaries and concise thread titles."""
 
     def __init__(
         self,
@@ -248,10 +251,13 @@ class ThreadMemorySummarizer:
         return (
             "[Current thread title]\n"
             f"{title}\n\n"
-            "[Previous thread memory]\n"
+            "[Previous AI handoff memory]\n"
             f"{previous}\n\n"
             "[New transcript since last memory update]\n"
             f"{transcript}\n\n"
-            "Update the full thread memory document now. The returned document replaces the previous memory. "
-            "Also fill ## Thread title with the best concise page heading for this thread."
+            "Rewrite the full memory as a future-agent handoff. The returned document replaces the previous memory. "
+            "Prioritize details that let a future AI continue work without rereading the thread: exact current goal, "
+            "what changed, where code lives, commits, file paths, APIs, UI routes, deployment state, blockers, "
+            "mistakes to avoid, user preferences, and next action. Also fill ## Thread title with the best concise page heading. "
+            "Avoid conversational recap unless it directly affects future work."
         )
