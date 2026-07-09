@@ -37,15 +37,9 @@ const settingsSections = [
     adminOnly: true,
   },
   {
-    id: "ai",
-    label: "AI operations",
-    description: "API keys, pipeline, databases and deployment",
-    adminOnly: true,
-  },
-  {
     id: "system",
     label: "System",
-    description: "Health, routing and deployment variables",
+    description: "AI operations, health, routing and deployment",
   },
 ];
 
@@ -339,7 +333,7 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
   }, [open, refreshDiagnostics, isAdmin, loadAdminUsers]);
 
   useEffect(() => {
-    if (!open || isAdmin || !["members", "ai"].includes(activeSection)) {
+    if (!open || isAdmin || activeSection !== "members") {
       return undefined;
     }
     const timer = window.setTimeout(() => {
@@ -659,10 +653,10 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
             </section>
           ) : null}
 
-          {currentSection.id === "ai" ? <OperatorControls isAdmin={isAdmin} onUnauthorized={onSignOut} /> : null}
-
           {currentSection.id === "system" ? (
             <div className="settings-stack">
+              {isAdmin ? <OperatorControls isAdmin={isAdmin} onUnauthorized={onSignOut} /> : null}
+
               <section className="settings-pane">
                 <div className="settings-row settings-row-top">
                   <div>
