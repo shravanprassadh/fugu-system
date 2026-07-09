@@ -88,6 +88,7 @@ const secretRows = [
 ];
 
 const emptyNewUser = { username: "", password: "", role: "user", isActive: true };
+const emptyPasswordResetDraft = { password: "", confirmation: "" };
 
 function statusTone(status) {
   const normalized = String(status || "").toLowerCase();
@@ -142,6 +143,7 @@ export default function SettingsPage() {
   const [adminError, setAdminError] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
   const [newUser, setNewUser] = useState(emptyNewUser);
+  const [activePasswordResetUserId, setActivePasswordResetUserId] = useState(null);
   const [passwordDrafts, setPasswordDrafts] = useState({});
 
   const expireSession = useCallback(() => router.replace("/"), [router]);
@@ -308,10 +310,46 @@ export default function SettingsPage() {
     }
   }
 
+  function beginPasswordReset(targetUser) {
+    setAdminError("");
+    setAdminNotice("");
+    setActivePasswordResetUserId(targetUser.id);
+    setPasswordDrafts((current) => ({
+      ...current,
+      [targetUser.id]: current[targetUser.id] ?? emptyPasswordResetDraft,
+    }));
+  }
+
+  function cancelPasswordReset(targetUser) {
+    setAdminError("");
+    setActivePasswordResetUserId((current) => (current === targetUser.id ? null : current));
+    setPasswordDrafts((current) => {
+      const next = { ...current };
+      delete next[targetUser.id];
+      return next;
+    });
+  }
+
+  function updatePasswordDraft(targetUser, field, value) {
+    setPasswordDrafts((current) => ({
+      ...current,
+      [targetUser.id]: {
+        ...(current[targetUser.id] ?? emptyPasswordResetDraft),
+        [field]: value,
+      },
+    }));
+  }
+
   async function handleResetPassword(targetUser) {
-    const password = passwordDrafts[targetUser.id] || "";
+    const draft = passwordDrafts[targetUser.id] || emptyPasswordResetDraft;
+    const password = draft.password || "";
+    const confirmation = draft.confirmation || "";
     if (password.length < 8) {
       setAdminError("Passwords must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmation) {
+      setAdminError("Password confirmation does not match.");
       return;
     }
     setAdminError("");
@@ -319,7 +357,12 @@ export default function SettingsPage() {
     setAdminStatus("loading");
     try {
       await resetAdminUserPassword(targetUser.id, password);
-      setPasswordDrafts((current) => ({ ...current, [targetUser.id]: "" }));
+      setPasswordDrafts((current) => {
+        const next = { ...current };
+        delete next[targetUser.id];
+        return next;
+      });
+      setActivePasswordResetUserId(null);
       setAdminNotice(`Reset password for ${targetUser.username}.`);
       await loadAdminUsers();
     } catch (error) {
@@ -493,8 +536,11 @@ export default function SettingsPage() {
                   <div className="settings-list">
                     {adminUsers.map((account) => {
                       const isSelf = account.id === userId;
+                      const isResettingPassword = activePasswordResetUserId === account.id;
+                      const passwordDraft = passwordDrafts[account.id] || emptyPasswordResetDraft;
+                      const canSavePassword = passwordDraft.password.length >= 8 && passwordDraft.password === passwordDraft.confirmation;
                       return (
-                        <article className="settings-list-item" key={account.id}>
+                        <article className={`settings-list-item ${styles.memberListItem}`} key={account.id}>
                           <div className="settings-list-main">
                             <div className="settings-list-title-row">
                               <strong>{account.username}</strong>
@@ -510,15 +556,27 @@ export default function SettingsPage() {
                             <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleUpdateUser(account, { isActive: !account.is_active })}>
                               {account.is_active ? "Deactivate" : "Reactivate"}
                             </button>
-                            <details className={styles.passwordReset}>
-                              <summary>Reset password</summary>
-                              <div className={styles.passwordResetFields}>
-                                <input type="password" autoComplete="new-password" minLength={8} placeholder="New password" value={passwordDrafts[account.id] || ""} onChange={(event) => setPasswordDrafts((current) => ({ ...current, [account.id]: event.target.value }))} />
-                                <button type="button" className="button-primary" onClick={() => handleResetPassword(account)} disabled={adminStatus === "loading"}>Save</button>
-                              </div>
-                            </details>
+                            <button type="button" className="button-ghost" disabled={adminStatus === "loading"} onClick={() => (isResettingPassword ? cancelPasswordReset(account) : beginPasswordReset(account))}>
+                              {isResettingPassword ? "Cancel reset" : "Reset password"}
+                            </button>
                             <button type="button" className="button-ghost" disabled={isSelf || adminStatus === "loading"} onClick={() => handleDeleteUser(account)}>Delete</button>
                           </div>
+                          {isResettingPassword ? (
+                            <form className={styles.passwordResetPanel} onSubmit={(event) => { event.preventDefault(); handleResetPassword(account); }}>
+                              <label>
+                                New password
+                                <input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={passwordDraft.password} onChange={(event) => updatePasswordDraft(account, "password", event.target.value)} required />
+                              </label>
+                              <label>
+                                Confirm password
+                                <input type="password" autoComplete="new-password" minLength={8} placeholder="Repeat new password" value={passwordDraft.confirmation} onChange={(event) => updatePasswordDraft(account, "confirmation", event.target.value)} required />
+                              </label>
+                              <div className={styles.passwordResetActions}>
+                                <button type="button" className="button-ghost" onClick={() => cancelPasswordReset(account)} disabled={adminStatus === "loading"}>Cancel</button>
+                                <button type="submit" className="button-primary" disabled={adminStatus === "loading" || !canSavePassword}>Save password</button>
+                              </div>
+                            </form>
+                          ) : null}
                         </article>
                       );
                     })}
