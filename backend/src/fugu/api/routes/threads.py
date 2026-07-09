@@ -8,8 +8,11 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from fugu.api.dependencies import CurrentUser, MasterSession, OwnedThread
+from fugu.database.connection import get_session_registry
 from fugu.database.models import Message, Thread, ThreadMemory
 from fugu.database.repositories import MessageRepository, ThreadMemoryRepository, ThreadRepository
+from fugu.memory import ThreadMemorySummarizer
+from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 threads_router = APIRouter(prefix="/api/threads", tags=["threads"])
 
@@ -112,6 +115,20 @@ def _normalized_thread_name(raw_name: str) -> str:
     return normalized[:MAX_THREAD_NAME_LENGTH]
 
 
+async def _memory_response_for_thread(
+    *,
+    session: MasterSession,
+    thread_id: int,
+    user_id: int,
+) -> ThreadMemoryResponse:
+    memory = await ThreadMemoryRepository.get_for_thread(
+        session,
+        thread_id=thread_id,
+        user_id=user_id,
+    )
+    return ThreadMemoryResponse.from_memory(thread_id=thread_id, memory=memory)
+
+
 @threads_router.get("", response_model=list[ThreadResponse])
 async def list_threads(
     current_user: CurrentUser,
@@ -157,12 +174,37 @@ async def get_thread_memory(
     session: MasterSession,
 ) -> ThreadMemoryResponse:
     """Return the stored rolling memory for one owned thread without raw secrets."""
-    memory = await ThreadMemoryRepository.get_for_thread(
+    return await _memory_response_for_thread(session=session, thread_id=thread.id, user_id=thread.user_id)
+
+
+@threads_router.post("/{thread_id}/memory/regenerate", response_model=ThreadMemoryResponse)
+async def regenerate_thread_memory(
+    thread: OwnedThread,
+    session: MasterSession,
+) -> ThreadMemoryResponse:
+    """Immediately rebuild one owned thread's rolling memory with the dedicated summarizer key."""
+    messages = await MessageRepository.list_for_thread(
         session,
         thread_id=thread.id,
         user_id=thread.user_id,
     )
-    return ThreadMemoryResponse.from_memory(thread_id=thread.id, memory=memory)
+    if not messages:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This thread has no messages to summarize yet.",
+        )
+
+    latest_message_id = messages[-1].id
+    summarizer = ThreadMemorySummarizer(
+        session_registry=get_session_registry(),
+        credential_vault=ProviderCredentialVault(SymmetricVaultEngine.from_settings()),
+    )
+    await summarizer.refresh(
+        thread_id=thread.id,
+        user_id=thread.user_id,
+        latest_message_id=latest_message_id,
+    )
+    return await _memory_response_for_thread(session=session, thread_id=thread.id, user_id=thread.user_id)
 
 
 @threads_router.patch("/{thread_id}", response_model=ThreadResponse)
