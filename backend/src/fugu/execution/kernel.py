@@ -477,7 +477,6 @@ def get_execution_kernel() -> PipelineExecutionKernel:
         credential_vault=credential_vault,
         memory_summarizer=ThreadMemorySummarizer(
             session_registry=session_registry,
-            provider_registry=provider_registry,
             credential_vault=credential_vault,
         ),
     )
