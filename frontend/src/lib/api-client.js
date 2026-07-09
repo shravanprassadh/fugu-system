@@ -257,6 +257,21 @@ export function getDatabaseConnections(options) {
   return authorizedRequest("/api/admin/database/connections", options);
 }
 
+export function testCurrentDatabaseConnection(target, options = {}) {
+  return authorizedRequest(`/api/admin/database/connections/${encodeURIComponent(target)}/test`, {
+    ...options,
+    method: "POST",
+  });
+}
+
+export function testCandidateDatabaseConnection(target, databaseUrl, options = {}) {
+  return authorizedRequest(`/api/admin/database/connections/${encodeURIComponent(target)}/candidate/test`, {
+    ...options,
+    method: "POST",
+    body: { database_url: databaseUrl },
+  });
+}
+
 export function testDatabaseTransferTargets(form, options = {}) {
   return authorizedRequest("/api/admin/database-transfer/test", {
     ...options,
@@ -308,6 +323,17 @@ export function persistDatabaseEnvToRender(form, options = {}) {
     body: {
       ...databasePayloadFromForm(form),
       trigger_deploy: form.triggerRenderDeploy,
+    },
+  });
+}
+
+export function persistDatabaseTargetEnvToRender(target, { databaseUrl, triggerDeploy = true }, options = {}) {
+  return authorizedRequest(`/api/admin/render/database-env/${encodeURIComponent(target)}`, {
+    ...options,
+    method: "POST",
+    body: {
+      database_url: databaseUrl,
+      trigger_deploy: triggerDeploy,
     },
   });
 }
