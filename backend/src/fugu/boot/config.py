@@ -44,9 +44,9 @@ class InfrastructureConfig(BaseSettings):
     jwt_issuer: str = Field("fugu-kernel-core", validation_alias="JWT_ISSUER")
     jwt_audience: str = Field("fugu-studio-client", validation_alias="JWT_AUDIENCE")
     access_token_ttl_minutes: int = Field(
-        30,
+        2_880,
         ge=5,
-        le=1_440,
+        le=10_080,
         validation_alias="ACCESS_TOKEN_TTL_MINUTES",
     )
 
