@@ -12,6 +12,8 @@ import {
 } from "../../lib/api-client";
 import styles from "./settings.module.css";
 
+const MEMORY_MODEL_FALLBACK = "gemini-2.5-flash-lite";
+
 const keyModalOverlayStyle = {
   position: "fixed",
   inset: 0,
@@ -214,7 +216,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     setConfigError("");
     try {
       await deleteThreadMemoryConfig();
-      setConfig({ configured: false, provider_name: "google-ai-studio", model_identifier: "gemini-3.5-flash" });
+      setConfig({ configured: false, provider_name: "google-ai-studio", model_identifier: MEMORY_MODEL_FALLBACK });
       setConfigNotice("Thread memory key deleted. Existing summaries stay stored.");
       setConfigStatus("ready");
       setApiKeyDraft("");
@@ -302,7 +304,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
             </div>
             <dl className="definition-list settings-definition-list">
               <div><dt>Provider</dt><dd>{config?.provider_name || "google-ai-studio"}</dd></div>
-              <div><dt>Model</dt><dd>{config?.model_identifier || "gemini-3.5-flash"}</dd></div>
+              <div><dt>Model</dt><dd>{config?.model_identifier || MEMORY_MODEL_FALLBACK}</dd></div>
               <div><dt>Key version</dt><dd>{config?.credential_key_version ?? "Not saved yet"}</dd></div>
               <div><dt>Updated</dt><dd>{formatTimestamp(config?.updated_at)}</dd></div>
             </dl>
