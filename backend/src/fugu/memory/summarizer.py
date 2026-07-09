@@ -17,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 MEMORY_CREDENTIAL_PROVIDER_NAME = "thread_memory_google_ai_studio"
 MEMORY_PROVIDER_LABEL = "google-ai-studio"
-MEMORY_MODEL_IDENTIFIER = "gemini-3.5-flash"
+MEMORY_MODEL_IDENTIFIER = "gemini-2.5-flash-lite"
 MAX_DELTA_MESSAGES = 30
 MAX_TRANSCRIPT_CHARACTERS = 16_000
 MAX_PREVIOUS_MEMORY_CHARACTERS = 8_000
