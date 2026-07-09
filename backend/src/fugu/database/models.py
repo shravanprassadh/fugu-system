@@ -49,7 +49,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     threads: Mapped[list[Thread]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     __table_args__ = (
@@ -70,13 +72,20 @@ class Thread(Base):
 
     user: Mapped[User] = relationship(back_populates="threads")
     messages: Mapped[list[Message]] = relationship(
-        back_populates="thread", cascade="all, delete-orphan", passive_deletes=True
+        back_populates="thread",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     memory: Mapped[ThreadMemory | None] = relationship(
-        back_populates="thread", cascade="all, delete-orphan", passive_deletes=True, uselist=False
+        back_populates="thread",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
     )
     pipeline_runs: Mapped[list[PipelineRun]] = relationship(
-        back_populates="thread", cascade="all, delete-orphan", passive_deletes=True
+        back_populates="thread",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     __table_args__ = (Index("ix_threads_user_created", "user_id", "created_at"),)
@@ -108,29 +117,47 @@ class ThreadMemory(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     thread_id: Mapped[int] = mapped_column(
-        ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
     )
     summary_md: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     key_facts_md: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     open_tasks_md: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     last_summarized_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
     )
-    summarizer_provider: Mapped[str] = mapped_column(String(100), nullable=False, default="google", server_default="google")
+    summarizer_provider: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="google",
+        server_default="google",
+    )
     summarizer_model: Mapped[str] = mapped_column(
-        String(255), nullable=False, default="gemini-3.5-flash", server_default="gemini-3.5-flash"
+        String(255),
+        nullable=False,
+        default="gemini-3.5-flash",
+        server_default="gemini-3.5-flash",
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="idle", server_default="idle")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     thread: Mapped[Thread] = relationship(back_populates="memory")
 
     __table_args__ = (
-        CheckConstraint("status IN ('idle', 'running', 'completed', 'failed')", name="thread_memory_status"),
+        CheckConstraint(
+            "status IN ('idle', 'running', 'completed', 'failed')",
+            name="thread_memory_status",
+        ),
         Index("ix_thread_memories_thread_updated", "thread_id", "updated_at"),
     )
 
