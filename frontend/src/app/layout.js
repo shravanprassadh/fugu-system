@@ -2,6 +2,7 @@ import "./globals.css";
 import "./settings-mobile.css";
 import "./ui-alignment.css";
 
+import { SessionKeeper } from "../components/session-keeper";
 import { themeInitScript } from "../lib/theme";
 
 export const metadata = {
@@ -16,7 +17,10 @@ export default function RootLayout({ children }) {
         {/* Applies the saved theme before first paint to avoid a flash. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <SessionKeeper />
+        {children}
+      </body>
     </html>
   );
 }
