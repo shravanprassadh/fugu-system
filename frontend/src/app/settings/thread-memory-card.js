@@ -39,6 +39,21 @@ const keyModalHeaderStyle = {
   marginBottom: "0.85rem",
 };
 
+const sectionTitleRowStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: "1rem",
+};
+
+const actionRowStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  flexWrap: "wrap",
+  gap: "0.55rem",
+};
+
 function StatusPill({ children, tone = "neutral" }) {
   const className = `${styles.statusPill} ${styles[`statusPill${tone[0].toUpperCase()}${tone.slice(1)}`]}`;
   return <span className={className}>{children}</span>;
@@ -177,7 +192,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       const payload = await saveThreadMemoryConfig(apiKey);
       setConfig(payload);
       setApiKeyDraft("");
-      setConfigNotice("Thread memory Google AI Studio key saved.");
+      setConfigNotice("Thread memory key saved.");
       setConfigStatus("ready");
       setIsKeyModalOpen(false);
     } catch (operationError) {
@@ -191,7 +206,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
   }
 
   async function handleDeleteConfig() {
-    if (!window.confirm("Delete the dedicated Google AI Studio key for thread memory? Thread summaries will stop updating until a new key is saved.")) {
+    if (!window.confirm("Delete the dedicated Google AI Studio key for thread memory?")) {
       return;
     }
     setConfigStatus("saving");
@@ -200,7 +215,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     try {
       await deleteThreadMemoryConfig();
       setConfig({ configured: false, provider_name: "google-ai-studio", model_identifier: "gemini-3.5-flash" });
-      setConfigNotice("Thread memory key deleted. Existing summaries stay stored, but new answers will not update memory.");
+      setConfigNotice("Thread memory key deleted. Existing summaries stay stored.");
       setConfigStatus("ready");
       setApiKeyDraft("");
       setIsKeyModalOpen(false);
@@ -224,7 +239,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     try {
       const payload = await regenerateThreadMemory(activeThreadId);
       setMemory(payload);
-      setMemoryNotice("Thread memory generated and saved for the active thread.");
+      setMemoryNotice("Thread memory generated and saved.");
       setMemoryStatus("ready");
     } catch (operationError) {
       if (operationError?.status === 401) {
@@ -251,36 +266,40 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       <div className={styles.cardHeaderRow}>
         <div>
           <p className="eyebrow">Thread memory</p>
-          <h3>Google AI Studio key and current thread summary</h3>
+          <h3>Memory setup</h3>
+          <p className="muted">Configure the separate summarizer key and manage the active thread summary.</p>
         </div>
-        <div className={styles.headerActions}>
-          <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
-          <button
-            type="button"
-            className="button-ghost"
-            onClick={loadMemory}
-            disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}
-          >
-            {memoryStatus === "loading" ? "Loading…" : "Refresh"}
-          </button>
-          <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
-            {memoryStatus === "generating" ? "Generating…" : "Regenerate now"}
-          </button>
-        </div>
+        <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
       </div>
 
-      <div className="settings-list" style={{ marginBottom: "0.9rem" }}>
+      <div className="settings-list" style={{ display: "grid", gap: "0.9rem" }}>
         <div className="settings-list-item">
           <div className="settings-list-main">
-            <div className="settings-list-title-row">
-              <strong>Dedicated Google AI Studio key</strong>
-              <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
-                {configStatus === "saving" ? "saving" : configLabel}
-              </StatusPill>
+            <div style={sectionTitleRowStyle}>
+              <div>
+                <p className="eyebrow">Setup</p>
+                <div className="settings-list-title-row">
+                  <strong>Google AI Studio memory key</strong>
+                  <StatusPill tone={statusTone(configStatus === "saving" ? "saving" : configLabel)}>
+                    {configStatus === "saving" ? "saving" : configLabel}
+                  </StatusPill>
+                </div>
+                <p className="muted">Stored separately from OpenRouter/NVIDIA chat keys. Used only for summarising threads.</p>
+              </div>
+              <div style={actionRowStyle}>
+                <button type="button" className="button-primary" onClick={openKeyModal} disabled={configStatus === "saving"}>
+                  {keyActionLabel}
+                </button>
+                <button
+                  type="button"
+                  className="button-ghost"
+                  onClick={handleDeleteConfig}
+                  disabled={configStatus === "saving" || !config?.configured}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <p className="muted">
-              The key is used only for thread-memory summarisation and is separate from normal chat models.
-            </p>
             <dl className="definition-list settings-definition-list">
               <div><dt>Provider</dt><dd>{config?.provider_name || "google-ai-studio"}</dd></div>
               <div><dt>Model</dt><dd>{config?.model_identifier || "gemini-3.5-flash"}</dd></div>
@@ -289,59 +308,57 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
             </dl>
             {configNotice ? <p className={styles.diagnosticSuccess}>{configNotice}</p> : null}
             {configError && !isKeyModalOpen ? <p className={styles.diagnosticError}>{configError}</p> : null}
-            <div className={styles.headerActions} style={{ justifyContent: "flex-start", marginTop: "0.85rem" }}>
-              <button type="button" className="button-primary" onClick={openKeyModal} disabled={configStatus === "saving"}>
-                {keyActionLabel}
-              </button>
-              <button
-                type="button"
-                className="button-ghost"
-                onClick={handleDeleteConfig}
-                disabled={configStatus === "saving" || !config?.configured}
-              >
-                Delete key
-              </button>
+          </div>
+        </div>
+
+        <div className="settings-list-item">
+          <div className="settings-list-main">
+            <div style={sectionTitleRowStyle}>
+              <div>
+                <p className="eyebrow">Active thread</p>
+                <div className="settings-list-title-row">
+                  <strong>{activeThreadId ? activeThreadName || `Thread ${activeThreadId}` : "No thread selected"}</strong>
+                  <StatusPill tone={memory?.has_memory ? "success" : "neutral"}>{memory?.has_memory ? "summary saved" : "no summary"}</StatusPill>
+                </div>
+                <p className="muted">Refresh reads the stored summary. Regenerate rebuilds it now using the memory key.</p>
+              </div>
+              <div style={actionRowStyle}>
+                <button
+                  type="button"
+                  className="button-ghost"
+                  onClick={loadMemory}
+                  disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}
+                >
+                  {memoryStatus === "loading" ? "Loading…" : "Refresh"}
+                </button>
+                <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
+                  {memoryStatus === "generating" ? "Generating…" : "Regenerate"}
+                </button>
+              </div>
             </div>
+
+            {!activeThreadId ? <p className="muted">Open a chat thread to view or generate memory.</p> : null}
+            {activeThreadId && !config?.configured ? <p className={styles.diagnosticError}>Add the Google AI Studio memory key before regenerating.</p> : null}
+            {memoryNotice ? <p className={styles.diagnosticSuccess}>{memoryNotice}</p> : null}
+            {memoryError ? <p className={styles.diagnosticError}>{memoryError}</p> : null}
+            {memory?.error_message ? <p className={styles.diagnosticError}>{memory.error_message}</p> : null}
+
+            <dl className="definition-list settings-definition-list">
+              <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : "Waiting for first update"}</dd></div>
+              <div><dt>Last summarized message</dt><dd>{memory?.last_summarized_message_id ?? "Not summarized yet"}</dd></div>
+              <div><dt>Updated</dt><dd>{formatTimestamp(memory?.updated_at)}</dd></div>
+            </dl>
+
+            {summary ? (
+              <div className="message message-assistant" style={{ marginTop: "0.85rem" }}>
+                <SafeMarkdownRenderer content={summary} />
+              </div>
+            ) : (
+              <p className="muted">No stored summary yet. Add the key, then regenerate or continue the conversation.</p>
+            )}
           </div>
         </div>
       </div>
-
-      {!activeThreadId ? (
-        <p className="muted">Open a chat thread to view or generate its stored memory summary.</p>
-      ) : (
-        <>
-          <p className="muted">
-            Memory updates automatically after each completed assistant answer when the dedicated Google AI Studio key is saved. Use Regenerate now to build it immediately for this thread.
-          </p>
-          {!config?.configured ? <p className={styles.diagnosticError}>Save the dedicated Google AI Studio key before generating memory.</p> : null}
-          <dl className="definition-list settings-definition-list">
-            <div><dt>Thread</dt><dd>{activeThreadName || `Thread ${activeThreadId}`}</dd></div>
-            <div><dt>Summarizer</dt><dd>{memory?.summarizer_provider && memory?.summarizer_model ? `${memory.summarizer_provider} · ${memory.summarizer_model}` : "Waiting for memory key / first update"}</dd></div>
-            <div><dt>Last summarized message</dt><dd>{memory?.last_summarized_message_id ?? "Not summarized yet"}</dd></div>
-            <div><dt>Updated</dt><dd>{formatTimestamp(memory?.updated_at)}</dd></div>
-          </dl>
-          {memoryNotice ? <p className={styles.diagnosticSuccess}>{memoryNotice}</p> : null}
-          {memoryError ? <p className={styles.diagnosticError}>{memoryError}</p> : null}
-          {memory?.error_message ? <p className={styles.diagnosticError}>{memory.error_message}</p> : null}
-          <div className="settings-list">
-            <div className="settings-list-item">
-              <div className="settings-list-main">
-                <div className="settings-list-title-row">
-                  <strong>Stored summary</strong>
-                  <StatusPill tone={memory?.has_memory ? "success" : "neutral"}>{memory?.has_memory ? "available" : "empty"}</StatusPill>
-                </div>
-                {summary ? (
-                  <div className="message message-assistant" style={{ marginTop: "0.85rem" }}>
-                    <SafeMarkdownRenderer content={summary} />
-                  </div>
-                ) : (
-                  <p className="muted">No memory summary exists yet. Save the dedicated Google AI Studio key, then click Regenerate now or continue the conversation.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
 
       {isKeyModalOpen ? (
         <div style={keyModalOverlayStyle} role="presentation" onMouseDown={closeKeyModal}>
@@ -361,9 +378,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
                 Close
               </button>
             </div>
-            <p className="muted">
-              Paste the free Google AI Studio API key. After saving, this modal closes and the key is stored encrypted in the backend.
-            </p>
+            <p className="muted">Paste the free Google AI Studio API key. The key is encrypted on save.</p>
             {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
             <form className={styles.adminForm} onSubmit={handleSaveConfig}>
               <label>
