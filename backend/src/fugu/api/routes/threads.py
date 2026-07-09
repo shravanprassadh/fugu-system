@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from fugu.api.dependencies import CurrentUser, MasterSession, OwnedThread
-from fugu.database.models import Message, Thread
-from fugu.database.repositories import MessageRepository, ThreadRepository
+from fugu.database.models import Message, Thread, ThreadMemory
+from fugu.database.repositories import MessageRepository, ThreadMemoryRepository, ThreadRepository
 
 threads_router = APIRouter(prefix="/api/threads", tags=["threads"])
 
@@ -49,6 +49,55 @@ class MessageResponse(BaseModel):
             role=message.role,
             content=message.content,
             created_at=message.created_at,
+        )
+
+
+class ThreadMemoryResponse(BaseModel):
+    """Current stored markdown memory for one owned thread."""
+
+    thread_id: int
+    has_memory: bool
+    status: str
+    summary_md: str
+    key_facts_md: str
+    open_tasks_md: str
+    last_summarized_message_id: int | None
+    summarizer_provider: str | None
+    summarizer_model: str | None
+    error_message: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+    @classmethod
+    def from_memory(cls, *, thread_id: int, memory: ThreadMemory | None) -> ThreadMemoryResponse:
+        if memory is None:
+            return cls(
+                thread_id=thread_id,
+                has_memory=False,
+                status="not created",
+                summary_md="",
+                key_facts_md="",
+                open_tasks_md="",
+                last_summarized_message_id=None,
+                summarizer_provider=None,
+                summarizer_model=None,
+                error_message=None,
+                created_at=None,
+                updated_at=None,
+            )
+        return cls(
+            thread_id=memory.thread_id,
+            has_memory=True,
+            status=memory.status,
+            summary_md=memory.summary_md,
+            key_facts_md=memory.key_facts_md,
+            open_tasks_md=memory.open_tasks_md,
+            last_summarized_message_id=memory.last_summarized_message_id,
+            summarizer_provider=memory.summarizer_provider,
+            summarizer_model=memory.summarizer_model,
+            error_message=memory.error_message,
+            created_at=memory.created_at,
+            updated_at=memory.updated_at,
         )
 
 
@@ -100,6 +149,20 @@ async def list_thread_messages(
         user_id=thread.user_id,
     )
     return [MessageResponse.from_message(message) for message in messages]
+
+
+@threads_router.get("/{thread_id}/memory", response_model=ThreadMemoryResponse)
+async def get_thread_memory(
+    thread: OwnedThread,
+    session: MasterSession,
+) -> ThreadMemoryResponse:
+    """Return the stored rolling memory for one owned thread without raw secrets."""
+    memory = await ThreadMemoryRepository.get_for_thread(
+        session,
+        thread_id=thread.id,
+        user_id=thread.user_id,
+    )
+    return ThreadMemoryResponse.from_memory(thread_id=thread.id, memory=memory)
 
 
 @threads_router.patch("/{thread_id}", response_model=ThreadResponse)
