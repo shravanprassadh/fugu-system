@@ -175,6 +175,10 @@ export function fetchThreadMessages(threadId, options) {
   return authorizedRequest(`/api/threads/${threadId}/messages`, options);
 }
 
+export function fetchThreadMemory(threadId, options) {
+  return authorizedRequest(`/api/threads/${threadId}/memory`, options);
+}
+
 export function renameThread(threadId, name, options = {}) {
   return authorizedRequest(`/api/threads/${threadId}`, { ...options, method: "PATCH", body: { name } });
 }
