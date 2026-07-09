@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./settings-mobile.css";
+import "./ui-alignment.css";
 
 import { themeInitScript } from "../lib/theme";
 
