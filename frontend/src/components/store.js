@@ -3,12 +3,10 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 
-const initialState = {
-  sessionCredential: null,
-  username: null,
-  userRole: null,
-  userId: null,
-  isAuthenticated: false,
+export const SESSION_IDLE_TIMEOUT_MS = 48 * 60 * 60 * 1_000;
+export const SESSION_STORAGE_KEY = "fugu:session:v1";
+
+const transientState = {
   threads: [],
   activeThreadId: null,
   messages: [],
@@ -19,23 +17,149 @@ const initialState = {
   activeRequestId: null,
 };
 
+const unauthenticatedState = {
+  sessionCredential: null,
+  username: null,
+  userRole: null,
+  userId: null,
+  isAuthenticated: false,
+  sessionLastActiveAt: null,
+  ...transientState,
+};
+
+function nowTimestamp() {
+  return Date.now();
+}
+
+function hasBrowserStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function isSessionFresh(lastActiveAt, now = nowTimestamp()) {
+  return Number.isFinite(lastActiveAt) && now - lastActiveAt <= SESSION_IDLE_TIMEOUT_MS;
+}
+
+function readStoredSession() {
+  if (!hasBrowserStorage()) {
+    return null;
+  }
+  try {
+    const rawSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!rawSession) {
+      return null;
+    }
+    const parsedSession = JSON.parse(rawSession);
+    if (!parsedSession?.sessionCredential || !parsedSession?.username) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+    const sessionLastActiveAt = Number(parsedSession.sessionLastActiveAt);
+    if (!isSessionFresh(sessionLastActiveAt)) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+    return {
+      sessionCredential: parsedSession.sessionCredential,
+      username: parsedSession.username,
+      userRole: parsedSession.userRole ?? null,
+      userId: parsedSession.userId ?? null,
+      isAuthenticated: true,
+      sessionLastActiveAt,
+    };
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+function persistSession({ sessionCredential, username, userRole, userId, sessionLastActiveAt }) {
+  if (!hasBrowserStorage() || !sessionCredential || !username || !sessionLastActiveAt) {
+    return;
+  }
+  window.localStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify({
+      sessionCredential,
+      username,
+      userRole: userRole ?? null,
+      userId: userId ?? null,
+      sessionLastActiveAt,
+    }),
+  );
+}
+
+function clearStoredSession() {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+function initialState() {
+  const storedSession = readStoredSession();
+  if (!storedSession) {
+    return { ...unauthenticatedState };
+  }
+  return {
+    ...unauthenticatedState,
+    ...storedSession,
+    ...transientState,
+  };
+}
+
 export function createStudioStore() {
-  return createStore((set) => ({
-    ...initialState,
+  return createStore((set, get) => ({
+    ...initialState(),
     setSession: ({ sessionCredential, username, userRole = null, userId = null }) => {
       if (!sessionCredential || !username) {
         throw new Error("Session data is incomplete.");
       }
-      set({
+      const sessionLastActiveAt = nowTimestamp();
+      const sessionState = {
         sessionCredential,
         username,
         userRole,
         userId,
         isAuthenticated: true,
+        sessionLastActiveAt,
         streamError: null,
-      });
+      };
+      persistSession(sessionState);
+      set(sessionState);
     },
-    clearSession: () => set({ ...initialState }),
+    touchSession: () => {
+      const current = get();
+      if (!current.isAuthenticated || !current.sessionCredential || !current.username) {
+        return false;
+      }
+      const sessionLastActiveAt = nowTimestamp();
+      const sessionState = {
+        sessionCredential: current.sessionCredential,
+        username: current.username,
+        userRole: current.userRole,
+        userId: current.userId,
+        sessionLastActiveAt,
+      };
+      persistSession(sessionState);
+      set({ sessionLastActiveAt });
+      return true;
+    },
+    enforceSessionFreshness: () => {
+      const current = get();
+      if (!current.isAuthenticated) {
+        return true;
+      }
+      if (isSessionFresh(Number(current.sessionLastActiveAt))) {
+        return true;
+      }
+      clearStoredSession();
+      set({ ...unauthenticatedState });
+      return false;
+    },
+    clearSession: () => {
+      clearStoredSession();
+      set({ ...unauthenticatedState });
+    },
     setThreads: (threads) => set({ threads: [...threads] }),
     upsertThread: (thread) =>
       set((state) => {
