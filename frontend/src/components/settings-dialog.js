@@ -95,6 +95,7 @@ const overlayStyle = {
 };
 
 const dialogStyle = {
+  position: "relative",
   width: "min(1040px, calc(100vw - 2rem))",
   height: "min(780px, calc(100dvh - 2rem))",
   maxWidth: "1040px",
@@ -155,15 +156,16 @@ const titleRowStyle = {
 };
 
 const memberActionBarStyle = {
-  position: "sticky",
-  bottom: "calc(clamp(1rem, 2.2vw, 1.35rem) * -1)",
-  zIndex: 1,
+  position: "absolute",
+  right: "1.25rem",
+  bottom: "1.25rem",
+  zIndex: 4,
   display: "flex",
   justifyContent: "flex-end",
-  margin: "0 calc(clamp(1rem, 2.2vw, 1.35rem) * -1) calc(clamp(1rem, 2.2vw, 1.35rem) * -1)",
-  borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)",
-  background: "linear-gradient(180deg, color-mix(in srgb, var(--surface) 68%, transparent), color-mix(in srgb, var(--surface) 96%, var(--bg)) 36%)",
-  padding: "0.9rem clamp(1rem, 2.2vw, 1.35rem) clamp(1rem, 2.2vw, 1.35rem)",
+  margin: 0,
+  borderTop: 0,
+  background: "transparent",
+  padding: 0,
 };
 
 const createUserOverlayStyle = {
@@ -493,6 +495,7 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
   const apiConfigurationProblem = getApiConfigurationProblem();
   const readinessStatus = diagnostics.payload?.status || diagnostics.status;
   const connectionStatuses = diagnostics.payload?.connections || {};
+  const contentPaneStyle = currentSection.id === "members" ? { ...contentStyle, paddingBottom: "5.5rem" } : contentStyle;
 
   return (
     <div style={overlayStyle} role="presentation" onMouseDown={onClose}>
@@ -530,7 +533,7 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
           </div>
         </aside>
 
-        <div className="settings-content" style={contentStyle}>
+        <div className="settings-content" style={contentPaneStyle}>
           <div className="settings-section-heading" style={titleRowStyle}>
             <div>
               <p className="eyebrow">{currentSection.label}</p>
@@ -644,16 +647,6 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
                   );
                 })}
               </div>
-              <div style={memberActionBarStyle}>
-                <button
-                  type="button"
-                  className="button-primary"
-                  onClick={openCreateUser}
-                  disabled={adminStatus === "loading" || hasReachedUserLimit}
-                >
-                  New user
-                </button>
-              </div>
             </section>
           ) : null}
 
@@ -735,6 +728,18 @@ export function SettingsDialog({ open, username, onClose, onSignOut }) {
             </div>
           ) : null}
         </div>
+        {currentSection.id === "members" ? (
+          <div style={memberActionBarStyle}>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={openCreateUser}
+              disabled={adminStatus === "loading" || hasReachedUserLimit}
+            >
+              New user
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {isCreateUserOpen ? (
