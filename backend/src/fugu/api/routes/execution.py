@@ -19,7 +19,7 @@ from fugu.execution.exceptions import (
 from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
-_SUPPORTED_PROVIDER_TYPES = {"google", "openrouter", "nvidia"}
+_SUPPORTED_PROVIDER_TYPES = {"openrouter", "nvidia"}
 
 
 class PipelineExecutionPayload(BaseModel):
@@ -31,7 +31,7 @@ class PipelineExecutionPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_model_override(self) -> PipelineExecutionPayload:
-        """Ensure optional user model overrides remain inside supported providers."""
+        """Ensure optional user model overrides remain inside supported chat providers."""
         if self.provider_type is None and self.model_identifier is None:
             return self
         if not self.provider_type or not self.model_identifier:
