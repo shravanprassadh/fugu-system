@@ -126,10 +126,32 @@ export function StudioSidebar({
   onRenameThread,
   onDeleteThread,
   onRetryThreads,
+  onOpenSettings = null,
 }) {
   const pathname = usePathname();
   const initial = (username || "?").slice(0, 1).toUpperCase();
   const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
+
+  function openSettings(event) {
+    if (!onOpenSettings) {
+      return;
+    }
+    event.preventDefault();
+    onClose();
+    onOpenSettings();
+  }
+
+  const accountAvatar = onOpenSettings ? (
+    <button type="button" className="user-avatar" aria-label="Open settings" title="Open settings" onClick={openSettings} style={{ border: 0, cursor: "pointer" }}>{initial}</button>
+  ) : (
+    <Link href="/settings" className="user-avatar" aria-label="Open settings" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{initial}</Link>
+  );
+
+  const accountName = onOpenSettings ? (
+    <button type="button" className="user-name" title="Open settings" onClick={openSettings} style={{ border: 0, background: "transparent", cursor: "pointer", textAlign: "left" }}>{username}</button>
+  ) : (
+    <Link href="/settings" className="user-name" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{username}</Link>
+  );
 
   return (
     <>
@@ -190,8 +212,8 @@ export function StudioSidebar({
             Chat
           </Link>
           <div className="sidebar-user">
-            <Link href="/settings" className="user-avatar" aria-label="Open settings" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{initial}</Link>
-            <Link href="/settings" className="user-name" title="Open settings" onClick={onClose} style={{ textDecoration: "none" }}>{username}</Link>
+            {accountAvatar}
+            {accountName}
             <span className="sidebar-user-actions">
               <ThemeCycleButton />
             </span>
