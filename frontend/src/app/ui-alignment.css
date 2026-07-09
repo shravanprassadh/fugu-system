@@ -1,0 +1,145 @@
+/*
+ * Narrow UI alignment overrides.
+ * Keep the global stylesheet stable; this file only restores the missing tail
+ * rules and keeps Settings visually aligned with the Chat workspace shell.
+ */
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0 0.65rem 0.35rem;
+}
+
+.sidebar-section-header .sidebar-label {
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-retry {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.18rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.sidebar-retry:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.sidebar-retry:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sidebar-note-error {
+  color: var(--danger);
+}
+
+.settings-panel {
+  background: var(--bg) !important;
+}
+
+.settings-panel .workspace-header {
+  border-bottom: 1px solid var(--line) !important;
+  background: var(--bg) !important;
+  backdrop-filter: none !important;
+}
+
+.settings-shell {
+  width: min(100%, 1080px) !important;
+  gap: clamp(1rem, 2vw, 1.5rem) !important;
+}
+
+.settings-nav {
+  border-color: var(--line) !important;
+  background: var(--sidebar-bg) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.settings-nav-item-active {
+  background: var(--accent-soft) !important;
+  box-shadow: none !important;
+}
+
+.settings-pane,
+.settings-content .settings-card {
+  border-color: var(--line) !important;
+  background: var(--surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.settings-list-item {
+  border-color: var(--line) !important;
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg)) !important;
+}
+
+.settings-list-item:has(> form) {
+  flex-wrap: wrap;
+}
+
+.settings-list-item > form {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.settings-list-item > form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.settings-list-item > form > div {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .segmented-option {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .settings-list-item > form {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-list-item > form > div,
+  .settings-list-item > form button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.config-error {
+  margin-top: 1.25rem;
+  text-align: left;
+  line-height: 1.55;
+}
