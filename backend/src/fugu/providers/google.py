@@ -131,8 +131,11 @@ class GoogleGeminiProvider(ExecutionProvider):
         for step in payload.get("steps", []):
             if not isinstance(step, dict):
                 continue
-            for part in step.get("output", []) or step.get("content", []) or []:
-                if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str):
+            parts = step.get("output", []) or step.get("content", []) or []
+            for part in parts:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text" and isinstance(part.get("text"), str):
                     text_blocks.append(part["text"])
         if text_blocks:
             return "".join(text_blocks)
