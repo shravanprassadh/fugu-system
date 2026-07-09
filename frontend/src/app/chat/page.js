@@ -404,7 +404,14 @@ export default function ChatPage() {
           </>
         )}
       </section>
-      <SettingsDialog open={isSettingsOpen} username={username} onClose={() => setIsSettingsOpen(false)} onSignOut={signOut} />
+      <SettingsDialog
+        open={isSettingsOpen}
+        username={username}
+        activeThreadId={activeThreadId}
+        activeThreadName={activeThread?.name || ""}
+        onClose={() => setIsSettingsOpen(false)}
+        onSignOut={signOut}
+      />
     </main>
   );
 }
