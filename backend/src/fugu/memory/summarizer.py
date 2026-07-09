@@ -21,22 +21,24 @@ MAX_DELTA_MESSAGES = 30
 MAX_TRANSCRIPT_CHARACTERS = 16_000
 MAX_PREVIOUS_MEMORY_CHARACTERS = 8_000
 
-MEMORY_SYSTEM_DIRECTIVES = """You are Fugu's thread-memory maintainer.
-Your only task is to update a concise markdown memory document for one chat thread.
-Return markdown only. Do not add commentary outside the document.
-Never store API keys, passwords, full secrets, private tokens, or sensitive credentials.
-Do preserve durable project state, decisions, files touched, user preferences, constraints, unresolved tasks, and exact technical identifiers when useful.
-Remove stale details that no longer affect future work.
-Use these headings exactly:
-# Thread Memory
-## Current goal
-## Stable facts
-## Decisions made
-## Files / modules touched
-## Current implementation state
-## Open tasks
-## Last summarized range
-"""
+MEMORY_SYSTEM_DIRECTIVES = (
+    "You are Fugu's thread-memory maintainer.\n"
+    "Your only task is to update a concise markdown memory document for one chat thread.\n"
+    "Return markdown only. Do not add commentary outside the document.\n"
+    "Never store API keys, passwords, full secrets, private tokens, or sensitive credentials.\n"
+    "Do preserve durable project state, decisions, files touched, user preferences, constraints, "
+    "unresolved tasks, and exact technical identifiers when useful.\n"
+    "Remove stale details that no longer affect future work.\n"
+    "Use these headings exactly:\n"
+    "# Thread Memory\n"
+    "## Current goal\n"
+    "## Stable facts\n"
+    "## Decisions made\n"
+    "## Files / modules touched\n"
+    "## Current implementation state\n"
+    "## Open tasks\n"
+    "## Last summarized range\n"
+)
 
 
 class ThreadMemorySummarizer:
@@ -89,7 +91,7 @@ class ThreadMemorySummarizer:
         """Update the stored markdown memory using the configured utility model."""
         previous_summary = ""
         transcript = ""
-        credential = None
+        credential: str | None = None
         try:
             async with self._sessions.session(DatabaseTarget.MASTER) as session:
                 credential = await self._vault.retrieve(session, provider_name=self._provider_name)
