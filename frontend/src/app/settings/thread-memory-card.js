@@ -12,6 +12,33 @@ import {
 } from "../../lib/api-client";
 import styles from "./settings.module.css";
 
+const keyModalOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 90,
+  display: "grid",
+  placeItems: "center",
+  background: "rgba(7, 10, 18, 0.52)",
+  padding: "1rem",
+};
+
+const keyModalDialogStyle = {
+  width: "min(100%, 34rem)",
+  border: "1px solid color-mix(in srgb, var(--line) 78%, transparent)",
+  borderRadius: "24px",
+  background: "var(--surface)",
+  boxShadow: "0 30px 90px rgba(0, 0, 0, 0.28)",
+  padding: "1.1rem",
+};
+
+const keyModalHeaderStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: "1rem",
+  marginBottom: "0.85rem",
+};
+
 function StatusPill({ children, tone = "neutral" }) {
   const className = `${styles.statusPill} ${styles[`statusPill${tone[0].toUpperCase()}${tone.slice(1)}`]}`;
   return <span className={className}>{children}</span>;
@@ -53,6 +80,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
   const [configNotice, setConfigNotice] = useState("");
   const [configError, setConfigError] = useState("");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
 
   const handleUnauthorized = useCallback(() => {
     onUnauthorized();
@@ -108,6 +136,32 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     return () => window.clearTimeout(timer);
   }, [loadConfig, loadMemory]);
 
+  useEffect(() => {
+    if (!isKeyModalOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        closeKeyModal();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isKeyModalOpen]);
+
+  function openKeyModal() {
+    setApiKeyDraft("");
+    setConfigError("");
+    setConfigNotice("");
+    setIsKeyModalOpen(true);
+  }
+
+  function closeKeyModal() {
+    setApiKeyDraft("");
+    setConfigError("");
+    setIsKeyModalOpen(false);
+  }
+
   async function handleSaveConfig(event) {
     event.preventDefault();
     const apiKey = apiKeyDraft.trim();
@@ -123,8 +177,9 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       const payload = await saveThreadMemoryConfig(apiKey);
       setConfig(payload);
       setApiKeyDraft("");
-      setConfigNotice("Thread memory Google AI Studio key saved. You can generate this thread's memory now.");
+      setConfigNotice("Thread memory Google AI Studio key saved.");
       setConfigStatus("ready");
+      setIsKeyModalOpen(false);
     } catch (operationError) {
       if (operationError?.status === 401) {
         handleUnauthorized();
@@ -147,6 +202,8 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
       setConfig({ configured: false, provider_name: "google-ai-studio", model_identifier: "gemini-3.5-flash" });
       setConfigNotice("Thread memory key deleted. Existing summaries stay stored, but new answers will not update memory.");
       setConfigStatus("ready");
+      setApiKeyDraft("");
+      setIsKeyModalOpen(false);
     } catch (operationError) {
       if (operationError?.status === 401) {
         handleUnauthorized();
@@ -179,10 +236,15 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
     }
   }
 
-  const visibleMemoryStatus = ["loading", "generating"].includes(memoryStatus) ? memoryStatus : memory?.status || "not selected";
+  const visibleMemoryStatus = ["loading", "generating"].includes(memoryStatus)
+    ? memoryStatus
+    : memory?.status || "not selected";
   const summary = memory?.summary_md?.trim() || "";
   const configLabel = config?.configured ? "configured" : "not configured";
-  const canGenerateMemory = Boolean(activeThreadId && config?.configured && !["loading", "generating"].includes(memoryStatus));
+  const keyActionLabel = config?.configured ? "Change key" : "Add key";
+  const canGenerateMemory = Boolean(
+    activeThreadId && config?.configured && !["loading", "generating"].includes(memoryStatus),
+  );
 
   return (
     <section className="settings-card settings-card-wide">
@@ -193,7 +255,12 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
         </div>
         <div className={styles.headerActions}>
           <StatusPill tone={statusTone(visibleMemoryStatus)}>{visibleMemoryStatus}</StatusPill>
-          <button type="button" className="button-ghost" onClick={loadMemory} disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}>
+          <button
+            type="button"
+            className="button-ghost"
+            onClick={loadMemory}
+            disabled={!activeThreadId || memoryStatus === "loading" || memoryStatus === "generating"}
+          >
             {memoryStatus === "loading" ? "Loading…" : "Refresh"}
           </button>
           <button type="button" className="button-primary" onClick={handleRegenerateMemory} disabled={!canGenerateMemory}>
@@ -212,7 +279,7 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
               </StatusPill>
             </div>
             <p className="muted">
-              Paste the free Google AI Studio API key here. This key is used only for thread-memory summarisation and is not part of the normal Model selector.
+              The key is used only for thread-memory summarisation and is separate from normal chat models.
             </p>
             <dl className="definition-list settings-definition-list">
               <div><dt>Provider</dt><dd>{config?.provider_name || "google-ai-studio"}</dd></div>
@@ -221,26 +288,20 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
               <div><dt>Updated</dt><dd>{formatTimestamp(config?.updated_at)}</dd></div>
             </dl>
             {configNotice ? <p className={styles.diagnosticSuccess}>{configNotice}</p> : null}
-            {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
-            <form className={styles.adminForm} onSubmit={handleSaveConfig}>
-              <label>
-                Google AI Studio API key
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={apiKeyDraft}
-                  onChange={(event) => setApiKeyDraft(event.target.value)}
-                  placeholder={config?.configured ? "Paste a replacement key" : "Paste free Google AI Studio key"}
-                  minLength={8}
-                />
-              </label>
-              <button type="submit" className="button-primary" disabled={configStatus === "saving" || !apiKeyDraft.trim()}>
-                {config?.configured ? "Replace memory key" : "Save memory key"}
+            {configError && !isKeyModalOpen ? <p className={styles.diagnosticError}>{configError}</p> : null}
+            <div className={styles.headerActions} style={{ justifyContent: "flex-start", marginTop: "0.85rem" }}>
+              <button type="button" className="button-primary" onClick={openKeyModal} disabled={configStatus === "saving"}>
+                {keyActionLabel}
               </button>
-              <button type="button" className="button-ghost" onClick={handleDeleteConfig} disabled={configStatus === "saving" || !config?.configured}>
+              <button
+                type="button"
+                className="button-ghost"
+                onClick={handleDeleteConfig}
+                disabled={configStatus === "saving" || !config?.configured}
+              >
                 Delete key
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </div>
@@ -281,6 +342,52 @@ export function ThreadMemoryCard({ activeThreadId, activeThreadName, onUnauthori
           </div>
         </>
       )}
+
+      {isKeyModalOpen ? (
+        <div style={keyModalOverlayStyle} role="presentation" onMouseDown={closeKeyModal}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="thread-memory-key-title"
+            style={keyModalDialogStyle}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div style={keyModalHeaderStyle}>
+              <div>
+                <p className="eyebrow">Thread memory key</p>
+                <h3 id="thread-memory-key-title">{config?.configured ? "Change Google AI Studio key" : "Add Google AI Studio key"}</h3>
+              </div>
+              <button type="button" className="button-ghost" onClick={closeKeyModal}>
+                Close
+              </button>
+            </div>
+            <p className="muted">
+              Paste the free Google AI Studio API key. After saving, this modal closes and the key is stored encrypted in the backend.
+            </p>
+            {configError ? <p className={styles.diagnosticError}>{configError}</p> : null}
+            <form className={styles.adminForm} onSubmit={handleSaveConfig}>
+              <label>
+                Google AI Studio API key
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={apiKeyDraft}
+                  onChange={(event) => setApiKeyDraft(event.target.value)}
+                  placeholder={config?.configured ? "Paste a replacement key" : "Paste free Google AI Studio key"}
+                  minLength={8}
+                  autoFocus
+                />
+              </label>
+              <button type="submit" className="button-primary" disabled={configStatus === "saving" || !apiKeyDraft.trim()}>
+                {configStatus === "saving" ? "Saving…" : config?.configured ? "Save replacement key" : "Save key"}
+              </button>
+              <button type="button" className="button-ghost" onClick={closeKeyModal} disabled={configStatus === "saving"}>
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
