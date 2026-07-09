@@ -469,7 +469,6 @@ export default function SettingsPage() {
         }}
         onRenameThread={handleRenameThread}
         onDeleteThread={handleDeleteThread}
-        onSignOut={signOut}
       />
       <section className="settings-panel" aria-labelledby="settings-title">
         <header className="workspace-header">
@@ -502,6 +501,17 @@ export default function SettingsPage() {
                 <span className="settings-nav-description">{section.description}</span>
               </button>
             ))}
+            <div style={{ marginTop: "auto", paddingTop: "0.75rem" }}>
+              <button
+                type="button"
+                className="settings-nav-item"
+                onClick={signOut}
+                style={{ width: "100%", color: "var(--danger)" }}
+              >
+                <span className="settings-nav-label">Log out</span>
+                <span className="settings-nav-description">End current session</span>
+              </button>
+            </div>
           </aside>
 
           <div className="settings-content">
