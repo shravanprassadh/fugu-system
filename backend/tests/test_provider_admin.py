@@ -57,9 +57,7 @@ async def provider_admin_client(
             provider_name=provider_name,
             valid=valid,
             message=(
-                "Credential validation succeeded."
-                if valid
-                else "The provider rejected the candidate credential."
+                "Credential validation succeeded." if valid else "The provider rejected the candidate credential."
             ),
         )
 
