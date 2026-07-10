@@ -261,6 +261,57 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  browser-smoke-validation:
+    name: Browser End-to-End Smoke Tests
+    runs-on: ubuntu-latest
+    needs: frontend-validation
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Initialize Node.js runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20.19.4"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install application dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production frontend for browser tests
+        env:
+          NEXT_PUBLIC_FUGU_API_BASE_URL: ""
+        run: npm run build
+
+      - name: Install pinned Playwright runner
+        env:
+          PLAYWRIGHT_VERSION: "1.55.0"
+        run: npm install --no-save --no-package-lock --ignore-scripts "@playwright/test@${PLAYWRIGHT_VERSION}"
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Run core product smoke journey
+        run: npm run test:e2e
+
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-smoke-diagnostics
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
   production-validation:
     name: Production Container & Runtime Validation
     runs-on: ubuntu-latest
@@ -297,6 +348,7 @@ jobs:
       - secret-scan
       - backend-validation
       - frontend-validation
+      - browser-smoke-validation
       - production-validation
     steps:
       - name: Enforce all validation outcomes
@@ -304,15 +356,18 @@ jobs:
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
           BACKEND_RESULT: ${{ needs.backend-validation.result }}
           FRONTEND_RESULT: ${{ needs.frontend-validation.result }}
+          BROWSER_SMOKE_RESULT: ${{ needs.browser-smoke-validation.result }}
           PRODUCTION_RESULT: ${{ needs.production-validation.result }}
         run: |
           set -euo pipefail
-          printf 'secret-scan=%s\nbackend-validation=%s\nfrontend-validation=%s\nproduction-validation=%s\n' \
+          printf 'secret-scan=%s\nbackend-validation=%s\nfrontend-validation=%s\nbrowser-smoke-validation=%s\nproduction-validation=%s\n' \
             "$SECRET_SCAN_RESULT" \
             "$BACKEND_RESULT" \
             "$FRONTEND_RESULT" \
+            "$BROWSER_SMOKE_RESULT" \
             "$PRODUCTION_RESULT"
           test "$SECRET_SCAN_RESULT" = "success"
           test "$BACKEND_RESULT" = "success"
           test "$FRONTEND_RESULT" = "success"
+          test "$BROWSER_SMOKE_RESULT" = "success"
           test "$PRODUCTION_RESULT" = "success"
