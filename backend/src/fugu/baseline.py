@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from alembic.config import Config
-from alembic.script import ScriptDirectory
+from alembic.script import Script, ScriptDirectory
 from fugu.database.connection import DatabaseTarget
 from fugu.database.models import Base
 from fugu.main import create_app
@@ -47,11 +47,11 @@ def _alembic_chain(backend_root: Path) -> tuple[str, list[str]]:
 
     head = heads[0]
     reverse_chain: list[str] = []
-    current = scripts.get_revision(head)
+    current: Script | None = scripts.get_revision(head)
     while current is not None:
         reverse_chain.append(current.revision)
         parent = current.down_revision
-        if isinstance(parent, tuple):
+        if isinstance(parent, (tuple, list)):
             raise BaselineDriftError(
                 f"Alembic revision {current.revision!r} has multiple parents; the baseline requires a linear chain."
             )
@@ -76,7 +76,10 @@ def collect_repository_baseline(*, backend_root: Path = _DEFAULT_BACKEND_ROOT) -
 
 def load_recorded_baseline(*, contract_path: Path = _DEFAULT_CONTRACT_PATH) -> dict[str, Any]:
     """Load the committed baseline contract."""
-    return json.loads(contract_path.read_text(encoding="utf-8"))
+    payload = json.loads(contract_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise BaselineDriftError(f"Recorded baseline {contract_path} must contain a JSON object.")
+    return cast(dict[str, Any], payload)
 
 
 def verify_repository_baseline(
