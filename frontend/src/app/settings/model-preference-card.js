@@ -90,6 +90,11 @@ export function ModelPreferenceCard() {
       )
     : models;
 
+  function persistPreference(candidate) {
+    const normalized = normalizePreferenceAgainstCatalogue(candidate, providers);
+    setPreference(saveModelPreference(normalized));
+  }
+
   function updateProvider(providerIdentifier) {
     const provider = providers.find((item) => item.identifier === providerIdentifier);
     const model = provider?.models.find((item) => item.availability_status === "available");
@@ -97,24 +102,27 @@ export function ModelPreferenceCard() {
       return;
     }
     setQuery("");
-    setPreference(
-      saveModelPreference({
-        providerType: provider.identifier,
-        modelIdentifier: model.identifier,
-      }),
-    );
+    persistPreference({
+      providerType: provider.identifier,
+      modelIdentifier: model.identifier,
+    });
   }
 
   function updateModel(modelIdentifier) {
     if (!selectedProvider) {
       return;
     }
-    setPreference(
-      saveModelPreference({
-        providerType: selectedProvider.identifier,
-        modelIdentifier,
-      }),
-    );
+    persistPreference({
+      providerType: selectedProvider.identifier,
+      modelIdentifier,
+    });
+  }
+
+  function updateParameter(field, value) {
+    persistPreference({
+      ...preference,
+      [field]: value,
+    });
   }
 
   return (
@@ -124,7 +132,7 @@ export function ModelPreferenceCard() {
           <div>
             <h3>Model</h3>
             <p className="muted">
-              Provider and model capabilities come from the backend catalogue. Unsupported combinations are never offered.
+              Provider, model and parameter constraints come from the backend catalogue. Unsupported combinations are never offered.
             </p>
           </div>
           <button type="button" className="button-ghost" onClick={loadCatalogue} disabled={status === "loading"}>
@@ -176,6 +184,61 @@ export function ModelPreferenceCard() {
               ))}
               <span className="model-family-pill">{formatNumber(selectedModel.context_size)} context</span>
               <span className="model-family-pill">{formatNumber(selectedModel.output_limit)} output</span>
+            </div>
+
+            <div className={styles.adminForm} aria-label="Model parameters">
+              {selectedModel.temperature ? (
+                <label>
+                  Temperature
+                  <input
+                    type="number"
+                    min={selectedModel.temperature.minimum}
+                    max={selectedModel.temperature.maximum}
+                    step="0.1"
+                    value={preference.temperature ?? selectedModel.temperature.default}
+                    onChange={(event) => updateParameter("temperature", event.target.value)}
+                  />
+                  <small className="muted">
+                    Allowed range: {selectedModel.temperature.minimum} to {selectedModel.temperature.maximum}
+                  </small>
+                </label>
+              ) : null}
+
+              {selectedModel.supported_parameters.includes("max_output_tokens") ? (
+                <label>
+                  Maximum output tokens
+                  <input
+                    type="number"
+                    min="1"
+                    max={selectedModel.output_limit}
+                    step="1"
+                    value={preference.maxOutputTokens ?? selectedModel.output_limit}
+                    onChange={(event) => updateParameter("maxOutputTokens", event.target.value)}
+                  />
+                  <small className="muted">Maximum supported: {formatNumber(selectedModel.output_limit)}</small>
+                </label>
+              ) : null}
+
+              {selectedModel.supported_parameters.includes("thinking_budget") &&
+              selectedModel.thinking_budget_minimum !== null &&
+              selectedModel.thinking_budget_maximum !== null ? (
+                <label>
+                  Thinking budget
+                  <input
+                    type="number"
+                    min={selectedModel.thinking_budget_minimum}
+                    max={selectedModel.thinking_budget_maximum}
+                    step="1"
+                    value={preference.thinkingBudget ?? selectedModel.thinking_budget_minimum}
+                    onChange={(event) => updateParameter("thinkingBudget", event.target.value)}
+                  />
+                  <small className="muted">
+                    Allowed range: {formatNumber(selectedModel.thinking_budget_minimum)} to {formatNumber(selectedModel.thinking_budget_maximum)}
+                  </small>
+                </label>
+              ) : (
+                <p className="muted">Thinking budget is not supported by this model and will not be sent.</p>
+              )}
             </div>
 
             {models.length > 1 ? (
