@@ -14,7 +14,6 @@ class PipelineStepDefinition:
     """Detached immutable representation of one configured pipeline stage."""
 
     name: str
-    display_name: str
     sequence_order_position: int
     provider_type: str
     model_identifier: str
@@ -28,6 +27,7 @@ class PipelineStepDefinition:
     retry_count: int = 0
     fallback_provider_type: str | None = None
     fallback_model_identifier: str | None = None
+    display_name: str = ""
 
     @classmethod
     def from_record(cls, step: PipelineStep | PipelineVersionStage) -> PipelineStepDefinition:
