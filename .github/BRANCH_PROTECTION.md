@@ -2,12 +2,13 @@
 
 The workflow in `.github/workflows/ci.yml` reports objective validation status only. Repository merge enforcement must be configured separately in GitHub branch protection or repository rulesets.
 
-## Protected branches
+## Protected branch
 
 Apply the ruleset to:
 
 - `main`
-- `feature/modular-kernel-core` while the long-lived rebuild pull request remains active
+
+Feature branches are temporary and must not receive separate long-lived protection rules.
 
 ## Required status check
 
@@ -20,6 +21,7 @@ The aggregate gate fails unless all of these jobs complete successfully:
 - `Security & Secret Auditing`
 - `Backend Lint, Type Check, Tests & Audit`
 - `Frontend Lint, Tests, Build & Audit`
+- `Production Container & Runtime Validation`
 
 ## Required repository settings
 
@@ -33,7 +35,7 @@ Enable:
 - Block force pushes
 - Block branch deletion
 
-Keep deployment checks separate from this CI contract. Deployment policy is introduced under Milestone 9.
+Keep deployment checks separate from this CI contract until deployment validation is added to the required gate.
 
 ## Security thresholds
 
