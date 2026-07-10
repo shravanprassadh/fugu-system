@@ -68,7 +68,7 @@ class PipelineVersionValidator:
                         code="empty_pipeline",
                         message="A pipeline must contain at least one stage.",
                     ),
-                )
+                ),
             )
 
         self._validate_identifiers_and_positions(stages, issues)
