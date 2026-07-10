@@ -37,7 +37,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("validated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint("version_number > 0", name=op.f("ck_pipeline_versions_pipeline_version_positive_number")),
+        sa.CheckConstraint(
+            "version_number > 0",
+            name=op.f("ck_pipeline_versions_pipeline_version_positive_number"),
+        ),
         sa.CheckConstraint(
             "state IN ('draft', 'published', 'superseded')",
             name=op.f("ck_pipeline_versions_pipeline_version_state"),
@@ -93,7 +96,10 @@ def upgrade() -> None:
         sa.Column("output_policy", sa.JSON(), nullable=False),
         sa.Column("required_capabilities", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("position > 0", name=op.f("ck_pipeline_version_stages_pipeline_version_stage_positive_position")),
+        sa.CheckConstraint(
+            "position > 0",
+            name=op.f("ck_pipeline_version_stages_pipeline_version_stage_positive_position"),
+        ),
         sa.CheckConstraint(
             "timeout_seconds > 0",
             name=op.f("ck_pipeline_version_stages_pipeline_version_stage_positive_timeout"),
@@ -206,7 +212,11 @@ def upgrade() -> None:
         sa.column("required_capabilities", sa.JSON()),
     )
 
-    rows = list(connection.execute(sa.select(legacy_steps).order_by(legacy_steps.c.sequence_order_position)).mappings())
+    rows = list(
+        connection.execute(
+            sa.select(legacy_steps).order_by(legacy_steps.c.sequence_order_position)
+        ).mappings()
+    )
     if rows:
         creator_id = connection.scalar(
             sa.text("SELECT id FROM users ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, id LIMIT 1")
@@ -225,24 +235,35 @@ def upgrade() -> None:
             )
         )
         version_id = int(result.inserted_primary_key[0])
+
+        identifier_by_name: dict[str, str] = {}
         seen_identifiers: set[str] = set()
         for row in rows:
-            identifier = _stable_identifier(str(row["step_name"]), int(row["id"]))
+            legacy_name = str(row["step_name"])
+            identifier = _stable_identifier(legacy_name, int(row["id"]))
             if identifier in seen_identifiers:
                 identifier = f"{identifier[:90]}-{row['id']}"
             seen_identifiers.add(identifier)
+            identifier_by_name[legacy_name] = identifier
+
+        for row in rows:
+            legacy_name = str(row["step_name"])
+            prerequisites = [
+                identifier_by_name.get(str(dependency), str(dependency)[:100])
+                for dependency in list(row["prerequisite_dependencies"] or [])
+            ]
             connection.execute(
                 stage_table.insert().values(
                     pipeline_version_id=version_id,
-                    stable_identifier=identifier,
-                    name=str(row["step_name"]),
+                    stable_identifier=identifier_by_name[legacy_name],
+                    name=legacy_name,
                     description="Migrated from the legacy pipeline definition.",
                     enabled=True,
                     position=int(row["sequence_order_position"]),
                     provider_type=str(row["provider_type"]),
                     model_string=str(row["model_string"]),
                     system_prompt_directives=str(row["system_prompt_directives"] or ""),
-                    prerequisite_dependencies=list(row["prerequisite_dependencies"] or []),
+                    prerequisite_dependencies=prerequisites,
                     is_terminal=bool(row["is_terminal"]),
                     temperature=None,
                     thinking_budget=None,
