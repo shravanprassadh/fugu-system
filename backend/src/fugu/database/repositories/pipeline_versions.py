@@ -94,15 +94,29 @@ class PipelineVersionRepository:
         return stage
 
     @staticmethod
+    async def list_versions(session: AsyncSession) -> list[PipelineVersion]:
+        statement = (
+            select(PipelineVersion)
+            .options(selectinload(PipelineVersion.stages))
+            .order_by(PipelineVersion.version_number.desc())
+        )
+        result = await session.scalars(statement)
+        return list(result.unique().all())
+
+    @staticmethod
     async def get(
         session: AsyncSession,
         pipeline_version_id: int,
+        *,
+        for_update: bool = False,
     ) -> PipelineVersion | None:
         statement = (
             select(PipelineVersion)
             .options(selectinload(PipelineVersion.stages))
             .where(PipelineVersion.id == pipeline_version_id)
         )
+        if for_update:
+            statement = statement.with_for_update()
         result = await session.scalars(statement)
         return result.one_or_none()
 
@@ -110,14 +124,24 @@ class PipelineVersionRepository:
     async def require(
         session: AsyncSession,
         pipeline_version_id: int,
+        *,
+        for_update: bool = False,
     ) -> PipelineVersion:
-        version = await PipelineVersionRepository.get(session, pipeline_version_id)
+        version = await PipelineVersionRepository.get(
+            session,
+            pipeline_version_id,
+            for_update=for_update,
+        )
         if version is None:
             raise EntityNotFoundError(f"Pipeline version {pipeline_version_id} does not exist.")
         return version
 
     @staticmethod
-    async def get_current_published(session: AsyncSession) -> PipelineVersion | None:
+    async def get_current_published(
+        session: AsyncSession,
+        *,
+        for_update: bool = False,
+    ) -> PipelineVersion | None:
         statement = (
             select(PipelineVersion)
             .options(selectinload(PipelineVersion.stages))
@@ -128,6 +152,8 @@ class PipelineVersionRepository:
             .order_by(PipelineVersion.version_number.desc())
             .limit(1)
         )
+        if for_update:
+            statement = statement.with_for_update()
         result = await session.scalars(statement)
         return result.one_or_none()
 
