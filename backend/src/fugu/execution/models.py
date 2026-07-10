@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from fugu.database.models import PipelineStep
+from fugu.database.models import PipelineStep, PipelineVersionStage
 
 
 @dataclass(frozen=True, slots=True)
 class PipelineStepDefinition:
-    """Detached immutable representation of one configured pipeline step."""
+    """Detached immutable representation of one configured pipeline stage."""
 
     name: str
     sequence_order_position: int
@@ -23,14 +23,38 @@ class PipelineStepDefinition:
     temperature: float | None = None
     max_output_tokens: int | None = None
     thinking_budget: int | None = None
+    timeout_seconds: int = 45
+    retry_count: int = 0
+    fallback_provider_type: str | None = None
+    fallback_model_identifier: str | None = None
+    display_name: str = ""
 
     @classmethod
-    def from_record(cls, step: PipelineStep) -> PipelineStepDefinition:
+    def from_record(cls, step: PipelineStep | PipelineVersionStage) -> PipelineStepDefinition:
         prerequisites = step.prerequisite_dependencies
         if not isinstance(prerequisites, list) or not all(isinstance(item, str) for item in prerequisites):
-            raise TypeError(f"Pipeline step {step.step_name!r} has malformed prerequisite data.")
+            raise TypeError("Pipeline stage has malformed prerequisite data.")
+        if isinstance(step, PipelineVersionStage):
+            return cls(
+                name=step.stable_identifier,
+                display_name=step.name,
+                sequence_order_position=step.position,
+                provider_type=step.provider_type,
+                model_identifier=step.model_string,
+                system_directives=step.system_prompt_directives,
+                prerequisites=tuple(item.strip() for item in prerequisites if item.strip()),
+                is_terminal=step.is_terminal,
+                temperature=step.temperature,
+                max_output_tokens=step.token_limit,
+                thinking_budget=step.thinking_budget,
+                timeout_seconds=step.timeout_seconds,
+                retry_count=step.retry_count,
+                fallback_provider_type=step.fallback_provider_type,
+                fallback_model_identifier=step.fallback_model_string,
+            )
         return cls(
             name=step.step_name,
+            display_name=step.step_name,
             sequence_order_position=step.sequence_order_position,
             provider_type=step.provider_type,
             model_identifier=step.model_string,
@@ -45,6 +69,8 @@ class PreparedPipeline:
     """Validated and persisted execution plan safe to use outside a DB session."""
 
     run_id: int
+    pipeline_version_id: int
+    pipeline_version_number: int
     thread_id: int
     user_id: int
     initial_prompt: str

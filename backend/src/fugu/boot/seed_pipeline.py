@@ -1,18 +1,8 @@
-"""Operator CLI for seeding pipeline definitions and provider credentials.
+"""Operator CLI for bootstrapping a published pipeline and provider credentials.
 
-A fresh database contains no ``pipeline_steps`` rows and no
-``provider_credentials`` rows, so authenticated execution fails until both are
-bootstrapped. This module provides two console commands:
-
-``fugu-seed-pipeline``
-    Seed the default three-stage pipeline (input analysis → reasoning branch →
-    terminal synthesis) for one provider and model.
-
-``fugu-set-provider-credential``
-    Encrypt and store (or rotate) one provider API credential through the same
-    vault used at runtime. The secret is read from the
-    ``FUGU_PROVIDER_SECRET`` environment variable or an interactive prompt —
-    never from shell arguments, which leak into process listings.
+The website becomes the canonical pipeline-control surface in Phase 3. This command
+remains only for fresh-environment bootstrap and creates the same immutable
+versioned records consumed by runtime execution.
 """
 
 from __future__ import annotations
@@ -22,6 +12,7 @@ import asyncio
 import os
 import sys
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from getpass import getpass
 from typing import TypeVar
 
@@ -30,8 +21,8 @@ from fugu.database.connection import (
     DatabaseTarget,
     get_session_registry,
 )
-from fugu.database.models import PipelineStep, ProviderCredential
-from fugu.database.repositories import PipelineRepository
+from fugu.database.models import PipelineVersionStage, ProviderCredential
+from fugu.database.repositories import PipelineVersionRepository
 from fugu.execution.graph import PipelineDependencyGraphResolver
 from fugu.providers.registry import get_provider_registry
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
@@ -65,40 +56,75 @@ def validate_model_string(model: str) -> str:
     return normalized
 
 
-def build_default_steps(*, provider_type: str, model: str) -> list[PipelineStep]:
-    """Build the default three-stage DAG with exactly one terminal sink."""
+def build_default_steps(*, provider_type: str, model: str) -> list[PipelineVersionStage]:
+    """Build the default Reader → Reasoner → Verifier → Consolidator DAG."""
+    shared = {
+        "pipeline_version_id": 0,
+        "enabled": True,
+        "provider_type": provider_type,
+        "model_string": model,
+        "temperature": None,
+        "thinking_budget": None,
+        "token_limit": None,
+        "timeout_seconds": 45,
+        "retry_count": 0,
+        "fallback_provider_type": None,
+        "fallback_model_string": None,
+        "input_policy": {},
+        "output_policy": {},
+        "required_capabilities": ["text_generation"],
+    }
     return [
-        PipelineStep(
-            sequence_order_position=1,
-            step_name="input_analysis",
-            provider_type=provider_type,
-            model_string=model,
+        PipelineVersionStage(
+            **shared,
+            stable_identifier="reader",
+            name="Reader",
+            description="Understands the request and prepares structured context for downstream stages.",
+            position=1,
             system_prompt_directives=(
-                "Analyze the user's request. Restate the task, constraints, and expected output precisely."
+                "Read the user's request carefully. Identify the objective, constraints, supplied evidence, "
+                "unknowns, and the exact output required. Produce a precise structured handoff."
             ),
             prerequisite_dependencies=[],
             is_terminal=False,
         ),
-        PipelineStep(
-            sequence_order_position=2,
-            step_name="reasoning_branch",
-            provider_type=provider_type,
-            model_string=model,
+        PipelineVersionStage(
+            **shared,
+            stable_identifier="reasoner",
+            name="Reasoner",
+            description="Performs the main analysis and develops a defensible solution.",
+            position=2,
             system_prompt_directives=(
-                "Reason step by step about how to satisfy the analyzed task. Surface risks and assumptions."
+                "Use the Reader handoff to perform the main analysis. State assumptions, resolve trade-offs, "
+                "and develop the strongest answer supported by the available context."
             ),
-            prerequisite_dependencies=["input_analysis"],
+            prerequisite_dependencies=["reader"],
             is_terminal=False,
         ),
-        PipelineStep(
-            sequence_order_position=3,
-            step_name="terminal_synthesis",
-            provider_type=provider_type,
-            model_string=model,
+        PipelineVersionStage(
+            **shared,
+            stable_identifier="verifier",
+            name="Verifier",
+            description="Checks accuracy, omissions, contradictions, and unsupported claims.",
+            position=3,
             system_prompt_directives=(
-                "Synthesize one final, self-contained answer for the user from the prior stage outputs."
+                "Audit the Reader and Reasoner outputs. Identify factual risks, missing requirements, internal "
+                "contradictions, and unsupported claims. Return concrete corrections for the final stage."
             ),
-            prerequisite_dependencies=["input_analysis", "reasoning_branch"],
+            prerequisite_dependencies=["reader", "reasoner"],
+            is_terminal=False,
+        ),
+        PipelineVersionStage(
+            **shared,
+            stable_identifier="consolidator",
+            name="Consolidator",
+            description="Produces the final response shown to the user.",
+            position=4,
+            system_prompt_directives=(
+                "Produce one clear, self-contained final answer using the prior stage outputs. Apply the "
+                "Verifier corrections, remove internal process commentary, and satisfy the user's requested format."
+            ),
+            prerequisite_dependencies=["reader", "reasoner", "verifier"],
             is_terminal=True,
         ),
     ]
@@ -110,26 +136,39 @@ async def seed_pipeline_steps(
     provider_type: str,
     model: str,
     replace: bool = False,
-) -> list[PipelineStep]:
-    """Persist the default pipeline after validating it resolves as an executable DAG."""
+) -> list[PipelineVersionStage]:
+    """Publish the default pipeline as a new immutable version."""
     validated_provider = validate_provider_type(provider_type)
     validated_model = validate_model_string(model)
-    steps = build_default_steps(provider_type=validated_provider, model=validated_model)
-    # Prove the seeded definition is executable before touching the database.
-    PipelineDependencyGraphResolver(steps).resolve_ordered_steps()
+    stages = build_default_steps(provider_type=validated_provider, model=validated_model)
+    PipelineDependencyGraphResolver(stages).resolve_ordered_steps()
 
     async with registry.session(DatabaseTarget.MASTER) as session:
-        existing = await PipelineRepository.list_steps(session)
-        if existing and not replace:
+        current = await PipelineVersionRepository.get_current_published(session)
+        if current is not None and not replace:
             raise PipelineBootstrapError(
-                f"{len(existing)} pipeline step(s) already exist. Re-run with --replace to overwrite them."
+                f"Published pipeline version {current.version_number} already exists. "
+                "Re-run with --replace to supersede it."
             )
-        for step in existing:
-            await session.delete(step)
+        if current is not None:
+            current.state = "superseded"
+
+        version = await PipelineVersionRepository.create(
+            session,
+            created_by_user_id=None,
+            change_description="Bootstrap the default four-stage pipeline",
+            state="published",
+        )
+        now = datetime.now(timezone.utc)
+        version.validation_status = "valid"
+        version.validation_issues = []
+        version.validated_at = now
+        version.published_at = now
+        for stage in stages:
+            stage.pipeline_version_id = version.id
+        session.add_all(stages)
         await session.flush()
-        session.add_all(steps)
-        await session.flush()
-        return steps
+        return stages
 
 
 async def store_provider_secret(
@@ -179,14 +218,14 @@ def build_seed_argument_parser() -> argparse.ArgumentParser:
     """Build the pipeline-seeding command-line contract."""
     parser = argparse.ArgumentParser(
         prog="fugu-seed-pipeline",
-        description="Seed the default three-stage pipeline definition for one provider and model.",
+        description="Publish the default four-stage pipeline definition for one provider and model.",
     )
     parser.add_argument("--provider", required=True, help="Registered provider adapter, e.g. openrouter.")
     parser.add_argument("--model", required=True, help="Model identifier passed to the provider on every stage.")
     parser.add_argument(
         "--replace",
         action="store_true",
-        help="Overwrite existing pipeline steps instead of refusing when any exist.",
+        help="Supersede the current published version with a new default version.",
     )
     return parser
 
@@ -208,7 +247,7 @@ def seed_pipeline_main() -> int:
     """Execute the pipeline-definition bootstrap command."""
     arguments = build_seed_argument_parser().parse_args()
     try:
-        steps = asyncio.run(
+        stages = asyncio.run(
             _run_with_registry(
                 lambda registry: seed_pipeline_steps(
                     registry,
@@ -222,8 +261,8 @@ def seed_pipeline_main() -> int:
         print(f"Pipeline seeding failed: {exc}", file=sys.stderr)
         return 1
 
-    names = " → ".join(step.step_name for step in steps)
-    print(f"Seeded {len(steps)} pipeline steps: {names}.")
+    names = " → ".join(stage.name for stage in stages)
+    print(f"Published {len(stages)} pipeline stages: {names}.")
     return 0
 
 

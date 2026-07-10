@@ -14,10 +14,11 @@ from fugu.database.connection import (
     get_session_registry,
 )
 from fugu.database.exceptions import EntityNotFoundError
-from fugu.database.models import Message, PipelineStep, ThreadMemory
+from fugu.database.models import Message, ThreadMemory
 from fugu.database.repositories import (
     MessageRepository,
     PipelineRepository,
+    PipelineVersionRepository,
     ThreadMemoryRepository,
     ThreadRepository,
 )
@@ -73,7 +74,7 @@ class PipelineExecutionKernel:
         selected_max_output_tokens: int | None = None,
         selected_thinking_budget: int | None = None,
     ) -> PreparedPipeline:
-        """Validate ownership and DAG structure, then persist the run before network I/O."""
+        """Bind one run to the current valid published pipeline before network I/O."""
         normalized_prompt = initial_prompt.strip()
         if not normalized_prompt:
             raise PipelineValidationError("The initial pipeline prompt cannot be empty.")
@@ -84,11 +85,13 @@ class PipelineExecutionKernel:
                 thread_id=thread_id,
                 user_id=user_id,
             )
-            raw_steps = await self._ensure_single_terminal_step(
-                session,
-                await PipelineRepository.list_steps(session),
-            )
-            resolver = PipelineDependencyGraphResolver(raw_steps)
+            try:
+                pipeline_version = await PipelineVersionRepository.require_current_published(session)
+            except EntityNotFoundError as exc:
+                raise PipelineValidationError(str(exc)) from exc
+
+            enabled_stages = [stage for stage in pipeline_version.stages if stage.enabled]
+            resolver = PipelineDependencyGraphResolver(enabled_stages)
             ordered_steps = self._apply_terminal_model_override(
                 ordered_steps=resolver.resolve_ordered_steps(),
                 terminal_step_name=resolver.terminal_step_name,
@@ -125,6 +128,9 @@ class PipelineExecutionKernel:
                 thread_id=thread_id,
                 status="running",
             )
+            pipeline_run.pipeline_version_id = pipeline_version.id
+            await session.flush()
+
             step_run_ids: dict[str, int] = {}
             for step in ordered_steps:
                 step_run = await PipelineRepository.add_step_run(
@@ -137,6 +143,8 @@ class PipelineExecutionKernel:
 
             return PreparedPipeline(
                 run_id=pipeline_run.id,
+                pipeline_version_id=pipeline_version.id,
+                pipeline_version_number=pipeline_version.version_number,
                 thread_id=thread_id,
                 user_id=user_id,
                 initial_prompt=normalized_prompt,
@@ -226,22 +234,6 @@ class PipelineExecutionKernel:
             run_id=prepared.run_id,
             step_name=prepared.terminal_step_name,
         )
-
-    @staticmethod
-    async def _ensure_single_terminal_step(
-        session: AsyncSession,
-        steps: list[PipelineStep],
-    ) -> list[PipelineStep]:
-        """Repair terminal-step drift by selecting the latest configured step as the sole terminal."""
-        terminal_steps = [step for step in steps if step.is_terminal]
-        if len(terminal_steps) == 1 or not steps:
-            return steps
-
-        selected_terminal = max(terminal_steps or steps, key=lambda step: step.sequence_order_position)
-        for step in steps:
-            step.is_terminal = step.id == selected_terminal.id
-        await session.flush()
-        return steps
 
     @staticmethod
     def _apply_terminal_model_override(

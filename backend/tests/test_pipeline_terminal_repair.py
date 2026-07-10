@@ -1,18 +1,17 @@
-"""Regression tests for automatic terminal-step repair before execution."""
+"""Regression tests for immutable published terminal-stage topology."""
 
 from __future__ import annotations
 
 import pytest
 
-from fugu.database.connection import DatabaseTarget
-from fugu.database.repositories import PipelineRepository
+from fugu.execution.exceptions import TerminalStepConfigurationError
 from tests.test_execution import ExecutionContext, _seed_steps, _step
 
 pytest_plugins = ("tests.test_execution",)
 
 
 @pytest.mark.asyncio
-async def test_kernel_repairs_multiple_terminal_steps_before_graph_validation(
+async def test_kernel_rejects_multiple_terminal_stages_without_repairing_configuration(
     execution_context: ExecutionContext,
 ) -> None:
     await _seed_steps(
@@ -23,21 +22,16 @@ async def test_kernel_repairs_multiple_terminal_steps_before_graph_validation(
         ],
     )
 
-    prepared = await execution_context.kernel.prepare_execution(
-        thread_id=execution_context.thread_id,
-        user_id=execution_context.user.id,
-        initial_prompt="Repair terminal drift",
-    )
-
-    assert prepared.terminal_step_name == "Final"
-    async with execution_context.registry.session(DatabaseTarget.MASTER) as session:
-        steps = await PipelineRepository.list_steps(session)
-
-    assert [(step.step_name, step.is_terminal) for step in steps] == [("Root", False), ("Final", True)]
+    with pytest.raises(TerminalStepConfigurationError):
+        await execution_context.kernel.prepare_execution(
+            thread_id=execution_context.thread_id,
+            user_id=execution_context.user.id,
+            initial_prompt="Reject terminal drift",
+        )
 
 
 @pytest.mark.asyncio
-async def test_kernel_repairs_missing_terminal_step_before_graph_validation(
+async def test_kernel_rejects_missing_terminal_stage_without_repairing_configuration(
     execution_context: ExecutionContext,
 ) -> None:
     await _seed_steps(
@@ -48,14 +42,9 @@ async def test_kernel_repairs_missing_terminal_step_before_graph_validation(
         ],
     )
 
-    prepared = await execution_context.kernel.prepare_execution(
-        thread_id=execution_context.thread_id,
-        user_id=execution_context.user.id,
-        initial_prompt="Repair missing terminal",
-    )
-
-    assert prepared.terminal_step_name == "Final"
-    async with execution_context.registry.session(DatabaseTarget.MASTER) as session:
-        steps = await PipelineRepository.list_steps(session)
-
-    assert [(step.step_name, step.is_terminal) for step in steps] == [("Root", False), ("Final", True)]
+    with pytest.raises(TerminalStepConfigurationError):
+        await execution_context.kernel.prepare_execution(
+            thread_id=execution_context.thread_id,
+            user_id=execution_context.user.id,
+            initial_prompt="Reject missing terminal",
+        )

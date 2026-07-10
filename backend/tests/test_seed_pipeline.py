@@ -18,7 +18,7 @@ from fugu.boot.seed_pipeline import (
 )
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Base
-from fugu.database.repositories import PipelineRepository
+from fugu.database.repositories import PipelineVersionRepository
 from fugu.execution.graph import PipelineDependencyGraphResolver
 from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 from tests.database_helpers import create_sqlite_engine_map
@@ -40,11 +40,12 @@ def test_default_steps_form_an_executable_dag_with_one_terminal_sink() -> None:
     resolver = PipelineDependencyGraphResolver(steps)
 
     assert resolver.resolve_safe_execution_sequence() == [
-        "input_analysis",
-        "reasoning_branch",
-        "terminal_synthesis",
+        "reader",
+        "reasoner",
+        "verifier",
+        "consolidator",
     ]
-    assert [step.is_terminal for step in steps] == [False, False, True]
+    assert [step.is_terminal for step in steps] == [False, False, False, True]
 
 
 def test_provider_validation_rejects_unregistered_adapters() -> None:
@@ -73,12 +74,13 @@ async def test_seeding_refuses_to_overwrite_without_replace(
         )
 
     async with bootstrap_registry.session(DatabaseTarget.MASTER) as session:
-        steps = await PipelineRepository.list_steps(session)
-        assert all(step.model_string == "first-model" for step in steps)
+        version = await PipelineVersionRepository.require_current_published(session)
+        assert version.version_number == 1
+        assert all(stage.model_string == "first-model" for stage in version.stages)
 
 
 @pytest.mark.asyncio
-async def test_seeding_with_replace_swaps_the_definition_atomically(
+async def test_seeding_with_replace_publishes_a_new_immutable_version(
     bootstrap_registry: DatabaseSessionRegistry,
 ) -> None:
     await seed_pipeline_steps(
@@ -94,10 +96,11 @@ async def test_seeding_with_replace_swaps_the_definition_atomically(
     )
 
     async with bootstrap_registry.session(DatabaseTarget.MASTER) as session:
-        steps = await PipelineRepository.list_steps(session)
-        assert len(steps) == 3
-        assert all(step.model_string == "second-model" for step in steps)
-        assert [step.sequence_order_position for step in steps] == [1, 2, 3]
+        version = await PipelineVersionRepository.require_current_published(session)
+        assert version.version_number == 2
+        assert len(version.stages) == 4
+        assert all(stage.model_string == "second-model" for stage in version.stages)
+        assert [stage.position for stage in version.stages] == [1, 2, 3, 4]
 
 
 @pytest.mark.asyncio
