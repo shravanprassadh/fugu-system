@@ -4,12 +4,9 @@ on:
   push:
     branches:
       - main
-      - feature/modular-kernel-core
-      - sync/full-improved-build
   pull_request:
     branches:
       - main
-      - feature/modular-kernel-core
   workflow_dispatch:
 
 permissions:
