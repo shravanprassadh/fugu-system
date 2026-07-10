@@ -8,7 +8,6 @@ from typing import Any
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-
 from fugu.database.connection import DatabaseTarget
 from fugu.database.models import Base
 from fugu.main import create_app
