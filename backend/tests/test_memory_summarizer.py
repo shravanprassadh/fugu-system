@@ -7,7 +7,11 @@ import json
 import pytest
 
 from fugu.database.connection import DatabaseTarget
-from fugu.database.repositories import MessageRepository, ThreadMemoryRepository, ThreadRepository
+from fugu.database.repositories import (
+    MessageRepository,
+    ThreadMemoryRepository,
+    ThreadRepository,
+)
 from fugu.memory.summarizer import ThreadMemorySummarizer
 from tests.test_execution import ExecutionContext, ScriptedProvider
 
@@ -30,7 +34,9 @@ def _memory_json(
             "technical_references": ["backend/src/fugu/memory/summarizer.py"],
             "completed_work": ["Replaced free-form summary generation"],
             "open_tasks": open_tasks or ["Verify the pull request CI gate"],
-            "risks_and_failures": ["Malformed model output must not replace valid memory"],
+            "risks_and_failures": [
+                "Malformed model output must not replace valid memory"
+            ],
             "recent_changes": ["Memory is rebuilt from chronological evidence"],
         }
     )
@@ -80,7 +86,9 @@ async def test_manual_refresh_rebuilds_from_the_complete_thread_and_redacts_secr
             summarizer_provider="old-provider",
             summarizer_model="old-model",
         )
-        memory.summary_md = "# Stale memory\n- This must not be used during a full rebuild."
+        memory.summary_md = (
+            "# Stale memory\n- This must not be used during a full rebuild."
+        )
         memory.last_summarized_message_id = latest_message.id
         await session.flush()
 
@@ -157,7 +165,9 @@ async def test_incremental_refresh_processes_every_unsummarized_message_across_b
             summarizer_provider="mock",
             summarizer_model="memory",
         )
-        memory.summary_md = "# Thread Memory\n\n## Objective\n- Preserve every pending message."
+        memory.summary_md = (
+            "# Thread Memory\n\n## Objective\n- Preserve every pending message."
+        )
         memory.last_summarized_message_id = checkpoint_message.id
 
         pending_messages = []
@@ -248,7 +258,9 @@ async def test_malformed_model_output_preserves_existing_memory_and_records_fail
     assert stored_memory is not None
     assert stored_memory.status == "failed"
     assert stored_memory.summary_md == "# Last known good memory"
-    assert stored_memory.error_message == "The memory summarizer returned malformed JSON."
+    assert (
+        stored_memory.error_message == "The memory summarizer returned malformed JSON."
+    )
 
 
 @pytest.mark.asyncio
