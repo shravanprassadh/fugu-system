@@ -7,11 +7,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fugu.api.dependencies import AdminUser, MasterSession
 from fugu.database.models import ProviderCredential
 from fugu.database.repositories import ProviderCredentialRepository
 from fugu.providers.credential_validation import (
+    SUPPORTED_CREDENTIAL_PROVIDERS,
     CredentialValidationResult,
     normalize_credential_provider,
     validate_provider_credential,
@@ -90,7 +92,7 @@ def _normalized_supported_provider(provider_name: str) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-async def _credential_or_404(session: MasterSession, provider_name: str) -> ProviderCredential:
+async def _credential_or_404(session: AsyncSession, provider_name: str) -> ProviderCredential:
     credential = await ProviderCredentialRepository.get_by_provider(session, provider_name)
     if credential is None:
         raise HTTPException(
@@ -143,8 +145,12 @@ async def list_provider_credentials(
     _: AdminUser,
     session: MasterSession,
 ) -> list[ProviderCredentialResponse]:
-    """List active provider keys without returning plaintext secrets."""
-    statement = select(ProviderCredential).order_by(ProviderCredential.provider_name.asc())
+    """List active chat-provider keys without returning plaintext secrets."""
+    statement = (
+        select(ProviderCredential)
+        .where(ProviderCredential.provider_name.in_(sorted(SUPPORTED_CREDENTIAL_PROVIDERS)))
+        .order_by(ProviderCredential.provider_name.asc())
+    )
     result = await session.scalars(statement)
     return [ProviderCredentialResponse.from_credential(credential) for credential in result.all()]
 
