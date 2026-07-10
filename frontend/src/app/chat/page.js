@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ThreadMemoryModal } from "../settings/thread-memory-card";
+import { AttachmentComposer } from "../../components/attachment-composer";
 import { SettingsDialog } from "../../components/settings-dialog";
 import { StudioSidebar } from "../../components/sidebar";
 import { useStudioStore } from "../../components/store";
@@ -79,6 +80,7 @@ function isSessionExpired(error) {
 export default function ChatPage() {
   const router = useRouter();
   const controllerRef = useRef(null);
+  const attachmentWorkspaceRef = useRef(null);
   const scrollRef = useRef(null);
   const pinnedRef = useRef(true);
 
@@ -100,6 +102,7 @@ export default function ChatPage() {
   const [threadListError, setThreadListError] = useState("");
   const [isThreadListLoading, setIsThreadListLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isAttachmentBusy, setIsAttachmentBusy] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isThreadMemoryOpen, setIsThreadMemoryOpen] = useState(false);
@@ -174,10 +177,11 @@ export default function ChatPage() {
   }
 
   async function selectThread(threadId) {
-    if (isRunning || threadId === activeThreadId) {
+    if (isRunning || isAttachmentBusy || threadId === activeThreadId) {
       setIsSidebarOpen(false);
       return;
     }
+    attachmentWorkspaceRef.current?.resetSelection();
     setWorkspaceError("");
     setIsSidebarOpen(false);
     setIsHistoryLoading(true);
@@ -196,9 +200,10 @@ export default function ChatPage() {
   }
 
   function startNewChat() {
-    if (isRunning) {
+    if (isRunning || isAttachmentBusy) {
       return;
     }
+    attachmentWorkspaceRef.current?.resetSelection();
     setWorkspaceError("");
     setIsSidebarOpen(false);
     setActiveThread(null);
@@ -217,12 +222,13 @@ export default function ChatPage() {
   }
 
   async function handleDeleteThread(threadId, name) {
-    const confirmed = window.confirm(`Delete "${name}"? Its messages and run history are removed permanently.`);
+    const confirmed = window.confirm(`Delete "${name}"? Its messages, attachments, and run history are removed permanently.`);
     if (!confirmed) {
       return;
     }
     if (threadId === activeThreadId) {
       controllerRef.current?.abort();
+      attachmentWorkspaceRef.current?.resetSelection();
     }
     try {
       await deleteThreadEverywhere(threadId);
@@ -237,7 +243,7 @@ export default function ChatPage() {
 
   async function runPrompt(content) {
     const normalized = content.trim();
-    if (!normalized || isRunning) {
+    if (!normalized || isRunning || isAttachmentBusy) {
       return;
     }
     setWorkspaceError("");
@@ -258,6 +264,18 @@ export default function ChatPage() {
       }
     }
 
+    let attachmentIds = [];
+    try {
+      attachmentIds = await attachmentWorkspaceRef.current?.prepareForSend(threadId) || [];
+    } catch (error) {
+      if (isSessionExpired(error)) {
+        expireSession();
+        return;
+      }
+      setWorkspaceError(error?.message || "The selected attachments could not be prepared.");
+      return;
+    }
+
     const requestId = crypto.randomUUID();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -271,6 +289,7 @@ export default function ChatPage() {
       await executePipelineStream({
         threadId,
         prompt: normalized,
+        attachmentIds,
         modelPreference: loadModelPreference(),
         signal: controller.signal,
         requestId,
@@ -292,6 +311,7 @@ export default function ChatPage() {
 
   async function signOut() {
     controllerRef.current?.abort();
+    attachmentWorkspaceRef.current?.resetSelection();
     await logout();
     router.replace("/");
   }
@@ -300,13 +320,21 @@ export default function ChatPage() {
     return <main className="loading-shell">Restoring secure workspace…</main>;
   }
 
+  const composerDisabled = isRunning || isHistoryLoading || isAttachmentBusy;
   const composer = (
     <div className="prompt-console">
+      <AttachmentComposer
+        ref={attachmentWorkspaceRef}
+        activeThreadId={activeThreadId}
+        disabled={isRunning || isHistoryLoading}
+        onBusyChange={setIsAttachmentBusy}
+        onUnauthorized={expireSession}
+      />
       <PromptTextArea
         value={prompt}
         onChange={setPrompt}
         onSubmit={() => runPrompt(prompt)}
-        disabled={isRunning || isHistoryLoading}
+        disabled={composerDisabled}
       />
       <div className="prompt-actions">
         <span className="prompt-hint">Enter to send · Shift+Enter for a new line</span>
@@ -319,7 +347,7 @@ export default function ChatPage() {
             type="button"
             className="send-button"
             onClick={() => runPrompt(prompt)}
-            disabled={!prompt.trim() || isHistoryLoading}
+            disabled={!prompt.trim() || composerDisabled}
             aria-label="Send message"
           >
             <SendIcon />
@@ -380,7 +408,7 @@ export default function ChatPage() {
             <div className="hero-inner">
               <p className="hero-mark">FUGU</p>
               <h2 className="hero-greeting">{greeting}</h2>
-              <p className="hero-subtitle">Start a thread and Fugu will stream the terminal response while persisting the full execution trace.</p>
+              <p className="hero-subtitle">Start a thread and Fugu will interpret selected files once through the Reader, then stream the verified terminal response.</p>
               {composer}
             </div>
             {workspaceError || streamError ? (
