@@ -135,7 +135,7 @@ export function ModelPreferenceCard() {
         </div>
 
         <p className="muted">
-          Administrators manage each provider's single active key directly below the model catalogue.
+          Administrators manage each provider&apos;s single active key directly below the model catalogue.
         </p>
       </section>
       <ProviderCredentialControls />
