@@ -32,6 +32,7 @@
       { "method": "GET", "path": "/api/auth/me" },
       { "method": "GET", "path": "/api/health/live" },
       { "method": "GET", "path": "/api/health/ready" },
+      { "method": "GET", "path": "/api/providers/catalogue" },
       { "method": "GET", "path": "/api/threads" },
       { "method": "POST", "path": "/api/threads" },
       { "method": "DELETE", "path": "/api/threads/{thread_id}" },
