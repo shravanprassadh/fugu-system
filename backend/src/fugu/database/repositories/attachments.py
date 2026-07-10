@@ -73,6 +73,34 @@ class AttachmentRepository:
         return attachment
 
     @staticmethod
+    async def require_ready_for_thread(
+        session: AsyncSession,
+        *,
+        public_ids: list[str],
+        owner_user_id: int,
+        thread_id: int,
+    ) -> list[Attachment]:
+        if not public_ids:
+            return []
+        if len(set(public_ids)) != len(public_ids):
+            raise EntityNotFoundError("Attachment identifiers must be unique.")
+        statement = select(Attachment).where(
+            Attachment.public_id.in_(public_ids),
+            Attachment.owner_user_id == owner_user_id,
+            Attachment.thread_id == thread_id,
+            Attachment.upload_status == "uploaded",
+            Attachment.processing_status == "ready",
+            Attachment.retention_status == "active",
+        )
+        result = await session.scalars(statement)
+        attachments_by_id = {attachment.public_id: attachment for attachment in result.all()}
+        if len(attachments_by_id) != len(public_ids):
+            raise EntityNotFoundError(
+                "One or more attachments are unavailable, unprocessed, or outside the authenticated thread scope."
+            )
+        return [attachments_by_id[public_id] for public_id in public_ids]
+
+    @staticmethod
     async def list_for_thread(
         session: AsyncSession,
         *,
@@ -114,6 +142,50 @@ class AttachmentRepository:
     @staticmethod
     async def mark_upload_failed(session: AsyncSession, *, attachment: Attachment) -> Attachment:
         attachment.upload_status = "failed"
+        await session.flush()
+        return attachment
+
+    @staticmethod
+    async def mark_processing(session: AsyncSession, *, attachment: Attachment) -> Attachment:
+        attachment.processing_status = "processing"
+        attachment.processing_error_code = None
+        attachment.processing_error_message = None
+        await session.flush()
+        return attachment
+
+    @staticmethod
+    async def mark_ready(
+        session: AsyncSession,
+        *,
+        attachment: Attachment,
+        structured_content: dict[str, object],
+        warnings: tuple[str, ...],
+        processing_version: str,
+    ) -> Attachment:
+        attachment.processing_status = "ready"
+        attachment.structured_content = structured_content
+        attachment.processing_warnings = list(warnings)
+        attachment.processing_version = processing_version
+        attachment.processing_error_code = None
+        attachment.processing_error_message = None
+        attachment.processed_at = datetime.now(timezone.utc)
+        await session.flush()
+        return attachment
+
+    @staticmethod
+    async def mark_processing_failed(
+        session: AsyncSession,
+        *,
+        attachment: Attachment,
+        error_code: str,
+        error_message: str,
+    ) -> Attachment:
+        attachment.processing_status = "failed"
+        attachment.structured_content = {}
+        attachment.processing_warnings = []
+        attachment.processing_error_code = error_code[:100]
+        attachment.processing_error_message = error_message[:1_000]
+        attachment.processed_at = datetime.now(timezone.utc)
         await session.flush()
         return attachment
 

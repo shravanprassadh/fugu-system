@@ -1,0 +1,244 @@
+.workspace {
+  display: grid;
+  gap: 10px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.16));
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.dropzoneActive {
+  border-color: var(--accent, #7c9cff);
+  background: rgba(124, 156, 255, 0.08);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attachButton,
+.historyButton,
+.smallButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.16));
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.attachButton:hover,
+.historyButton:hover,
+.smallButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.attachButton:disabled,
+.historyButton:disabled,
+.smallButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.helper {
+  color: var(--text-muted, #9aa4b2);
+  font-size: 12px;
+  text-align: right;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.error,
+.warning {
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.error {
+  color: #ffb4b4;
+  background: rgba(190, 35, 35, 0.12);
+}
+
+.warning {
+  color: #f7d794;
+  background: rgba(199, 137, 20, 0.12);
+}
+
+.pendingGrid,
+.historyList {
+  display: grid;
+  gap: 8px;
+}
+
+.pendingGrid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fileCard,
+.historyItem {
+  min-width: 0;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.fileCard {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px;
+}
+
+.preview {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  background-position: center;
+  background-size: cover;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fileInfo {
+  min-width: 0;
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fileMeta,
+.fileStatus {
+  margin-top: 2px;
+  color: var(--text-muted, #9aa4b2);
+  font-size: 11px;
+}
+
+.removeButton {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.removeButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.progressTrack {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  transition: width 120ms linear;
+}
+
+.historyPanel {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.historyHeader h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.historyItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+}
+
+.historyItemSelected {
+  border-color: var(--accent, #7c9cff);
+  background: rgba(124, 156, 255, 0.07);
+}
+
+.historyActions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-muted, #9aa4b2);
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .helper {
+    text-align: left;
+  }
+
+  .historyItem {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .historyActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

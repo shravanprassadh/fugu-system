@@ -29,6 +29,7 @@ from fugu.api.routes import (
 from fugu.api.routes.health import inspect_database_readiness
 from fugu.boot.config import InfrastructureConfig, get_settings
 from fugu.database.connection import DatabaseSessionRegistry, get_session_registry
+from fugu.execution.document_kernel import get_document_execution_kernel
 from fugu.execution.kernel import get_execution_kernel
 
 
@@ -108,6 +109,7 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         application.state.ready = False
+        get_document_execution_kernel.cache_clear()
         get_execution_kernel.cache_clear()
         await registry.dispose_pools()
         if get_session_registry.cache_info().currsize:
@@ -131,6 +133,7 @@ def create_app(
     application.state.settings = settings
     application.state.session_registry = session_registry
     application.state.ready = settings is not None and session_registry is not None
+    application.dependency_overrides[get_execution_kernel] = get_document_execution_kernel
 
     def runtime_settings() -> InfrastructureConfig:
         configured: Any = getattr(application.state, "settings", None)

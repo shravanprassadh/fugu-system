@@ -1,4 +1,4 @@
-"""Authenticated attachment upload, retrieval, deletion, and cleanup routes."""
+"""Authenticated attachment upload, processing, retrieval, deletion, and cleanup routes."""
 
 from __future__ import annotations
 
@@ -60,6 +60,8 @@ class AttachmentResponse(BaseModel):
     upload_status: str
     processing_status: str
     retention_status: str
+    processing_version: str | None
+    processing_warnings: list[str]
     processing_error_code: str | None
     processing_error_message: str | None
     created_at: datetime
@@ -79,6 +81,8 @@ class AttachmentResponse(BaseModel):
             upload_status=attachment.upload_status,
             processing_status=attachment.processing_status,
             retention_status=attachment.retention_status,
+            processing_version=attachment.processing_version,
+            processing_warnings=list(attachment.processing_warnings),
             processing_error_code=attachment.processing_error_code,
             processing_error_message=attachment.processing_error_message,
             created_at=attachment.created_at,
@@ -136,7 +140,7 @@ async def upload_attachment(
     config: StorageConfig,
     file: Annotated[UploadFile, File(...)],
 ) -> AttachmentResponse:
-    """Validate and store one file in a private object store for an owned thread."""
+    """Validate, store, and structurally process one file for an owned thread."""
     try:
         content = await file.read(config.max_file_size_bytes + 1)
         attachment = await _service(storage, config).upload(
@@ -190,6 +194,26 @@ async def get_attachment(
         )
         return AttachmentResponse.from_attachment(attachment)
     except EntityNotFoundError as exc:
+        raise _http_error(exc) from exc
+
+
+@attachments_router.post("/api/attachments/{public_id}/process", response_model=AttachmentResponse)
+async def reprocess_attachment(
+    public_id: str,
+    current_user: CurrentUser,
+    session: MasterSession,
+    storage: Storage,
+    config: StorageConfig,
+) -> AttachmentResponse:
+    """Rebuild the structured representation from the integrity-verified private object."""
+    try:
+        attachment = await _service(storage, config).process(
+            session,
+            owner_user_id=current_user.id,
+            public_id=public_id,
+        )
+        return AttachmentResponse.from_attachment(attachment)
+    except (EntityNotFoundError, AttachmentStorageError) as exc:
         raise _http_error(exc) from exc
 
 

@@ -44,6 +44,7 @@
       { "method": "DELETE", "path": "/api/attachments/{public_id}" },
       { "method": "GET", "path": "/api/attachments/{public_id}" },
       { "method": "GET", "path": "/api/attachments/{public_id}/content" },
+      { "method": "POST", "path": "/api/attachments/{public_id}/process" },
       { "method": "POST", "path": "/api/auth/login" },
       { "method": "POST", "path": "/api/auth/logout" },
       { "method": "GET", "path": "/api/auth/me" },
@@ -63,7 +64,7 @@
     ]
   },
   "database": {
-    "alembic_head": "0008_attachment_foundation",
+    "alembic_head": "0009_attachment_processing",
     "alembic_chain": [
       "0001_initial_schema",
       "0002_user_token_version",
@@ -72,7 +73,8 @@
       "0005_provider_credential_validation",
       "0006_versioned_pipeline_control",
       "0007_execution_operability",
-      "0008_attachment_foundation"
+      "0008_attachment_foundation",
+      "0009_attachment_processing"
     ],
     "tables": [
       "attachments",

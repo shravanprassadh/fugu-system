@@ -14,8 +14,19 @@ function isAbortError(error) {
   return error?.name === "AbortError";
 }
 
-async function openStream({ threadId, prompt, modelPreference, signal, fetchImpl, credential }) {
+async function openStream({
+  threadId,
+  prompt,
+  attachmentIds,
+  modelPreference,
+  signal,
+  fetchImpl,
+  credential,
+}) {
   const body = { prompt };
+  if (attachmentIds?.length) {
+    body.attachment_ids = attachmentIds;
+  }
   if (modelPreference?.providerType && modelPreference?.modelIdentifier) {
     body.provider_type = modelPreference.providerType;
     body.model_identifier = modelPreference.modelIdentifier;
@@ -135,6 +146,7 @@ function applyEvent(store, requestId, event) {
 export async function executePipelineStream({
   threadId,
   prompt,
+  attachmentIds = [],
   modelPreference,
   signal,
   requestId,
@@ -154,6 +166,7 @@ export async function executePipelineStream({
       response = await openStream({
         threadId,
         prompt,
+        attachmentIds,
         modelPreference,
         signal,
         fetchImpl,

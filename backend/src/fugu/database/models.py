@@ -329,6 +329,12 @@ class PipelineRun(Base):
     retry_stage_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     initial_prompt_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_options: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    attachment_snapshot: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
     failed_stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)

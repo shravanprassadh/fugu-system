@@ -1,4 +1,4 @@
-"""Controlled attachment upload, retrieval, deletion, and cleanup."""
+"""Controlled attachment upload, processing, retrieval, deletion, and cleanup."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fugu.attachments.processing import process_attachment_bytes
 from fugu.attachments.validation import ValidatedAttachment, validate_attachment
 from fugu.database.attachments import Attachment
 from fugu.database.repositories import AttachmentRepository
@@ -19,7 +20,7 @@ _UPLOAD_EXPIRY_MINUTES = 15
 
 
 class AttachmentService:
-    """Coordinate relational metadata and private object storage through one ownership boundary."""
+    """Coordinate metadata, private objects, and deterministic document processing."""
 
     def __init__(self, *, storage: ObjectStorage, config: AttachmentStorageConfig) -> None:
         self._storage = storage
@@ -80,7 +81,48 @@ class AttachmentService:
         if stored.checksum_sha256 and stored.checksum_sha256 != attachment.sha256_hex:
             await self._storage.delete(bucket=attachment.storage_bucket, key=attachment.storage_key)
             raise AttachmentStorageError("The stored attachment checksum does not match the validated upload.")
-        return await AttachmentRepository.mark_uploaded(session, attachment=attachment)
+        await AttachmentRepository.mark_uploaded(session, attachment=attachment)
+        return await self._process_content(session, attachment=attachment, content=content)
+
+    async def process(
+        self,
+        session: AsyncSession,
+        *,
+        owner_user_id: int,
+        public_id: str,
+    ) -> Attachment:
+        """Reprocess an owned stored object without changing its identity or attachment hash."""
+        attachment, content = await self.download(
+            session,
+            owner_user_id=owner_user_id,
+            public_id=public_id,
+        )
+        return await self._process_content(session, attachment=attachment, content=content)
+
+    async def _process_content(
+        self,
+        session: AsyncSession,
+        *,
+        attachment: Attachment,
+        content: bytes,
+    ) -> Attachment:
+        await AttachmentRepository.mark_processing(session, attachment=attachment)
+        try:
+            processed = process_attachment_bytes(extension=attachment.file_extension, content=content)
+        except Exception as exc:
+            return await AttachmentRepository.mark_processing_failed(
+                session,
+                attachment=attachment,
+                error_code=type(exc).__name__,
+                error_message="The attachment could not be converted into a safe structured representation.",
+            )
+        return await AttachmentRepository.mark_ready(
+            session,
+            attachment=attachment,
+            structured_content=processed.structured_content,
+            warnings=processed.warnings,
+            processing_version=processed.processing_version,
+        )
 
     async def list_for_thread(
         self,
