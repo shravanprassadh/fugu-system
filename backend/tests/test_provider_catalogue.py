@@ -13,7 +13,9 @@ def test_catalogue_defines_unique_provider_and_model_contracts() -> None:
     providers = catalogue.providers
 
     assert [provider.identifier for provider in providers] == ["openrouter", "nvidia"]
-    assert all(provider.authentication_type == "bearer_api_key" for provider in providers)
+    assert all(
+        provider.authentication_type == "bearer_api_key" for provider in providers
+    )
     assert all(provider.adapter_available for provider in providers)
     assert all(provider.api_base_url.startswith("https://") for provider in providers)
 
@@ -23,16 +25,26 @@ def test_catalogue_defines_unique_provider_and_model_contracts() -> None:
         for model in provider.models
     ]
     assert len(model_pairs) == len(set(model_pairs))
-    assert all(model.context_size > 0 for provider in providers for model in provider.models)
-    assert all(model.output_limit > 0 for provider in providers for model in provider.models)
-    assert all("temperature" in model.supported_parameters for provider in providers for model in provider.models)
+    assert all(
+        model.context_size > 0 for provider in providers for model in provider.models
+    )
+    assert all(
+        model.output_limit > 0 for provider in providers for model in provider.models
+    )
+    assert all(
+        "temperature" in model.supported_parameters
+        for provider in providers
+        for model in provider.models
+    )
 
 
 def test_catalogue_exposes_conservative_capability_metadata() -> None:
     catalogue = get_provider_catalogue()
 
     vision = catalogue.model("nvidia", "meta/llama-3.2-11b-vision-instruct")
-    reasoning = catalogue.model("nvidia", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
+    reasoning = catalogue.model(
+        "nvidia", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    )
     text_only = catalogue.model("openrouter", "openrouter/free")
 
     assert vision.capabilities.image_understanding is True
