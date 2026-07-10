@@ -128,7 +128,7 @@ test("completes the core chat and memory journey", async ({ page }) => {
   await messageBox.fill("Explain phase one");
   await messageBox.press("Enter");
 
-  await expect(page.getByText("Explain phase one", { exact: true })).toBeVisible();
+  await expect(page.locator(".message-user").getByText("Explain phase one", { exact: true })).toBeVisible();
   await expect(page.getByText("Verified baseline response.", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open thread memory summary" }).click();
