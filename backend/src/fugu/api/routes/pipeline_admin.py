@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Response, status
 from fastapi.responses import JSONResponse
@@ -173,9 +173,9 @@ class PipelineVersionSummaryResponse(BaseModel):
         return cls(
             id=version.id,
             version_number=version.version_number,
-            state=version.state,
+            state=cast(PipelineVersionState, version.state),
             change_description=version.change_description,
-            validation_status=version.validation_status,
+            validation_status=cast(PipelineValidationState, version.validation_status),
             validation_issues=list(version.validation_issues),
             stage_count=len(version.stages),
             created_by_user_id=version.created_by_user_id,
@@ -353,7 +353,7 @@ async def validate_pipeline_draft(
     return PipelineValidationResponse.from_result(version, result)
 
 
-@pipeline_admin_router.post("/{version_id}/publish")
+@pipeline_admin_router.post("/{version_id}/publish", response_model=None)
 async def publish_pipeline_draft(
     version_id: int,
     _: AdminUser,
@@ -379,7 +379,7 @@ async def publish_pipeline_draft(
     return PipelinePublicationResponse.model_validate(payload)
 
 
-@pipeline_admin_router.post("/{version_id}/rollback")
+@pipeline_admin_router.post("/{version_id}/rollback", response_model=None)
 async def rollback_pipeline_version(
     version_id: int,
     payload: RollbackPipelinePayload,
