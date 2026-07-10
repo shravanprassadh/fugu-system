@@ -45,14 +45,10 @@ class PipelineExecutionPayload(BaseModel):
         )
         if self.provider_type is None and self.model_identifier is None:
             if has_parameters:
-                raise ValueError(
-                    "provider_type and model_identifier are required when model parameters are supplied."
-                )
+                raise ValueError("provider_type and model_identifier are required when model parameters are supplied.")
             return self
         if not self.provider_type or not self.model_identifier:
-            raise ValueError(
-                "provider_type and model_identifier must be supplied together."
-            )
+            raise ValueError("provider_type and model_identifier must be supplied together.")
 
         provider_type = self.provider_type.strip().lower()
         model_identifier = self.model_identifier.strip()
