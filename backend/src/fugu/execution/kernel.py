@@ -69,6 +69,9 @@ class PipelineExecutionKernel:
         initial_prompt: str,
         selected_provider_type: str | None = None,
         selected_model_identifier: str | None = None,
+        selected_temperature: float | None = None,
+        selected_max_output_tokens: int | None = None,
+        selected_thinking_budget: int | None = None,
     ) -> PreparedPipeline:
         """Validate ownership and DAG structure, then persist the run before network I/O."""
         normalized_prompt = initial_prompt.strip()
@@ -91,6 +94,9 @@ class PipelineExecutionKernel:
                 terminal_step_name=resolver.terminal_step_name,
                 selected_provider_type=selected_provider_type,
                 selected_model_identifier=selected_model_identifier,
+                selected_temperature=selected_temperature,
+                selected_max_output_tokens=selected_max_output_tokens,
+                selected_thinking_budget=selected_thinking_budget,
             )
             messages = await MessageRepository.list_for_thread(
                 session,
@@ -172,6 +178,9 @@ class PipelineExecutionKernel:
                     system_directives=step.system_directives,
                     credential_token=credential,
                     model_identifier=step.model_identifier,
+                    temperature=step.temperature,
+                    max_output_tokens=step.max_output_tokens,
+                    thinking_budget=step.thinking_budget,
                 )
 
                 try:
@@ -241,8 +250,11 @@ class PipelineExecutionKernel:
         terminal_step_name: str,
         selected_provider_type: str | None,
         selected_model_identifier: str | None,
+        selected_temperature: float | None,
+        selected_max_output_tokens: int | None,
+        selected_thinking_budget: int | None,
     ) -> tuple[PipelineStepDefinition, ...]:
-        """Apply a user-selected response model to the terminal output step only."""
+        """Apply a validated user-selected response model and parameters to the terminal step only."""
         if not selected_provider_type or not selected_model_identifier:
             return ordered_steps
         return tuple(
@@ -250,6 +262,9 @@ class PipelineExecutionKernel:
                 step,
                 provider_type=selected_provider_type,
                 model_identifier=selected_model_identifier,
+                temperature=selected_temperature,
+                max_output_tokens=selected_max_output_tokens,
+                thinking_budget=selected_thinking_budget,
             )
             if step.name == terminal_step_name
             else step

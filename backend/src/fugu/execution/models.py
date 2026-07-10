@@ -20,6 +20,9 @@ class PipelineStepDefinition:
     system_directives: str
     prerequisites: tuple[str, ...]
     is_terminal: bool
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    thinking_budget: int | None = None
 
     @classmethod
     def from_record(cls, step: PipelineStep) -> PipelineStepDefinition:

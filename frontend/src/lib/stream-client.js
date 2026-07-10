@@ -19,6 +19,15 @@ async function openStream({ threadId, prompt, modelPreference, signal, fetchImpl
   if (modelPreference?.providerType && modelPreference?.modelIdentifier) {
     body.provider_type = modelPreference.providerType;
     body.model_identifier = modelPreference.modelIdentifier;
+    if (modelPreference.temperature !== null && modelPreference.temperature !== undefined) {
+      body.temperature = modelPreference.temperature;
+    }
+    if (modelPreference.maxOutputTokens !== null && modelPreference.maxOutputTokens !== undefined) {
+      body.max_output_tokens = modelPreference.maxOutputTokens;
+    }
+    if (modelPreference.thinkingBudget !== null && modelPreference.thinkingBudget !== undefined) {
+      body.thinking_budget = modelPreference.thinkingBudget;
+    }
   }
   return fetchImpl(apiUrl(`/api/threads/${threadId}/execute`), {
     method: "POST",

@@ -66,11 +66,15 @@ class NvidiaStreamProvider(ExecutionProvider):
         if request.system_directives.strip():
             messages.append({"role": "system", "content": request.system_directives})
         messages.append({"role": "user", "content": request.prompt_content})
-        payload = {
+        payload: dict[str, object] = {
             "model": request.model_identifier,
             "stream": True,
             "messages": messages,
         }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
 
         client = self._get_client()
         parser = ServerSentEventParser()
