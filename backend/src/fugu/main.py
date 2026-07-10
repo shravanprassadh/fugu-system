@@ -18,6 +18,7 @@ from fugu.api.routes import (
     execution_router,
     health_router,
     provider_admin_router,
+    provider_catalogue_router,
     render_admin_router,
     thread_memory_admin_router,
     threads_router,
@@ -59,7 +60,7 @@ class DeferredCORSMiddleware:
                 self._app,
                 allow_origins=list(origins),
                 allow_credentials=False,
-                allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+                allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                 allow_headers=[("author" + "ization").title(), "Content-Type"],
                 max_age=settings.cors_preflight_max_age_seconds,
             )
@@ -139,6 +140,7 @@ def create_app(
     application.include_router(auth_router)
     application.include_router(admin_router)
     application.include_router(provider_admin_router)
+    application.include_router(provider_catalogue_router)
     application.include_router(render_admin_router)
     application.include_router(database_admin_router)
     application.include_router(thread_memory_admin_router)
