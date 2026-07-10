@@ -124,8 +124,9 @@ test("completes the core chat and memory journey", async ({ page }) => {
   await expect(page).toHaveURL(/\/chat$/);
   await expect(page.getByRole("heading", { name: "New conversation" })).toBeVisible();
 
-  await page.getByLabel("Message").fill("Explain phase one");
-  await page.getByLabel("Message").press("Enter");
+  const messageBox = page.getByRole("textbox", { name: "Message" });
+  await messageBox.fill("Explain phase one");
+  await messageBox.press("Enter");
 
   await expect(page.getByText("Explain phase one", { exact: true })).toBeVisible();
   await expect(page.getByText("Verified baseline response.", { exact: true })).toBeVisible();
