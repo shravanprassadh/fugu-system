@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useStudioStore } from "./store";
 import { ThemeCycleButton } from "./theme-toggle";
 
 function PlusIcon() {
@@ -119,6 +120,7 @@ export function StudioSidebar({
   onRetryThreads,
   onOpenSettings = null,
 }) {
+  const userRole = useStudioStore((state) => state.userRole);
   const initial = (username || "?").slice(0, 1).toUpperCase();
   const showEmptyState = !threadsLoading && !threadsError && threads.length === 0;
 
@@ -193,6 +195,11 @@ export function StudioSidebar({
         </nav>
 
         <div className="sidebar-footer">
+          {userRole === "admin" ? (
+            <Link href="/runs" className="button-ghost" onClick={onClose} style={{ width: "100%", justifyContent: "center", marginBottom: "0.65rem" }}>
+              Execution inspector
+            </Link>
+          ) : null}
           <div className="sidebar-user">
             {accountAvatar}
             {accountName}
