@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -184,7 +185,7 @@ class ProviderCredential(Base):
 
 
 class PipelineStep(Base):
-    """Declarative pipeline step definition."""
+    """Legacy mutable pipeline step retained only for migration compatibility."""
 
     __tablename__ = "pipeline_steps"
 
@@ -204,6 +205,108 @@ class PipelineStep(Base):
     )
 
 
+class PipelineVersion(Base):
+    """Immutable published pipeline or mutable administrative draft."""
+
+    __tablename__ = "pipeline_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    state: Mapped[str] = mapped_column(String(50), nullable=False, default="draft", server_default="draft")
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    change_description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    validation_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="pending", server_default="pending"
+    )
+    validation_issues: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    stages: Mapped[list[PipelineVersionStage]] = relationship(
+        back_populates="pipeline_version",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="PipelineVersionStage.position",
+    )
+    runs: Mapped[list[PipelineRun]] = relationship(back_populates="pipeline_version")
+
+    __table_args__ = (
+        CheckConstraint("version_number > 0", name="pipeline_version_positive_number"),
+        CheckConstraint(
+            "state IN ('draft', 'published', 'superseded')",
+            name="pipeline_version_state",
+        ),
+        CheckConstraint(
+            "validation_status IN ('pending', 'valid', 'invalid')",
+            name="pipeline_version_validation_status",
+        ),
+        Index("ix_pipeline_versions_state_number", "state", "version_number"),
+    )
+
+
+class PipelineVersionStage(Base):
+    """One ordered stage owned by a specific pipeline version."""
+
+    __tablename__ = "pipeline_version_stages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pipeline_version_id: Mapped[int] = mapped_column(
+        ForeignKey("pipeline_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stable_identifier: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_string: Mapped[str] = mapped_column(String(255), nullable=False)
+    system_prompt_directives: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    prerequisite_dependencies: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_terminal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    thinking_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    token_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=45, server_default="45")
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    fallback_provider_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fallback_model_string: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    input_policy: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    output_policy: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    required_capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    pipeline_version: Mapped[PipelineVersion] = relationship(back_populates="stages")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "pipeline_version_id",
+            "stable_identifier",
+            name="pipeline_version_stage_identifier",
+        ),
+        UniqueConstraint(
+            "pipeline_version_id",
+            "position",
+            name="pipeline_version_stage_position",
+        ),
+        CheckConstraint("position > 0", name="pipeline_version_stage_positive_position"),
+        CheckConstraint("timeout_seconds > 0", name="pipeline_version_stage_positive_timeout"),
+        CheckConstraint("retry_count >= 0", name="pipeline_version_stage_nonnegative_retries"),
+        CheckConstraint("token_limit IS NULL OR token_limit > 0", name="pipeline_version_stage_positive_token_limit"),
+        CheckConstraint(
+            "thinking_budget IS NULL OR thinking_budget >= 0",
+            name="pipeline_version_stage_nonnegative_thinking_budget",
+        ),
+        Index("ix_pipeline_version_stages_version_position", "pipeline_version_id", "position"),
+    )
+
+
 class PipelineRun(Base):
     """Execution-level lifecycle record for one pipeline request."""
 
@@ -211,6 +314,11 @@ class PipelineRun(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    pipeline_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pipeline_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -218,6 +326,7 @@ class PipelineRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     thread: Mapped[Thread] = relationship(back_populates="pipeline_runs")
+    pipeline_version: Mapped[PipelineVersion | None] = relationship(back_populates="runs")
     step_runs: Mapped[list[PipelineStepRun]] = relationship(
         back_populates="pipeline_run", cascade="all, delete-orphan", passive_deletes=True
     )
