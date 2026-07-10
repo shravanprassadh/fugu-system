@@ -8,10 +8,12 @@ from fugu.database.repositories.core import (
     ThreadRepository,
     UserRepository,
 )
+from fugu.database.repositories.pipeline_versions import PipelineVersionRepository
 
 __all__ = [
     "MessageRepository",
     "PipelineRepository",
+    "PipelineVersionRepository",
     "ProviderCredentialRepository",
     "ThreadMemoryRepository",
     "ThreadRepository",
