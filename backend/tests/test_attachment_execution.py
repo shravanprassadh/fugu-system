@@ -244,7 +244,9 @@ async def test_structured_attachment_is_injected_only_into_reader_and_snapshotte
         )
     assert run is not None
     assert run.attachment_snapshot[0]["sha256"] == attachment.sha256_hex
-    assert run.attachment_snapshot[0]["structured_content"]["kind"] == "text"
+    structured_content = run.attachment_snapshot[0]["structured_content"]
+    assert isinstance(structured_content, dict)
+    assert structured_content["kind"] == "text"
     assert persisted.message_id is not None
 
 
@@ -314,7 +316,7 @@ async def test_image_execution_rejects_non_vision_reader_before_provider_call(
 
 
 @pytest.mark.asyncio
-async def test_attachment_selection_rejects_cross_user_scope(
+async def test_attachment_selection_rejects_cross_thread_scope(
     attachment_execution_context: AttachmentExecutionContext,
 ) -> None:
     await _publish_pipeline(attachment_execution_context)
@@ -326,11 +328,18 @@ async def test_attachment_selection_rejects_cross_user_scope(
         extension="txt",
         content=b"private evidence",
     )
+    async with attachment_execution_context.registry.session(DatabaseTarget.MASTER) as session:
+        other_thread = await ThreadRepository.add(
+            session,
+            user_id=attachment_execution_context.user.id,
+            name="Different owned thread",
+        )
+        other_thread_id = other_thread.id
 
     with pytest.raises(PipelineValidationError, match="outside the authenticated thread scope"):
         await _kernel(attachment_execution_context).prepare_execution(
-            thread_id=attachment_execution_context.thread_id,
-            user_id=attachment_execution_context.other_user.id,
-            initial_prompt="Steal the attachment.",
+            thread_id=other_thread_id,
+            user_id=attachment_execution_context.user.id,
+            initial_prompt="Use an attachment from a different thread.",
             attachment_public_ids=(attachment.public_id,),
         )
