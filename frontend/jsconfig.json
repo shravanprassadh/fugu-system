@@ -2,7 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/components/store": ["src/components/store.js"]
+      "@/components/store": ["src/components/store.js"],
+      "@/lib/*": ["src/lib/*"]
     }
   }
 }
