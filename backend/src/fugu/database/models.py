@@ -163,7 +163,7 @@ class ThreadMemory(Base):
 
 
 class ProviderCredential(Base):
-    """Encrypted provider credential metadata."""
+    """Encrypted provider credential and sanitized validation metadata."""
 
     __tablename__ = "provider_credentials"
 
@@ -171,6 +171,10 @@ class ProviderCredential(Base):
     provider_name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
     key_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_successful_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_failure_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
