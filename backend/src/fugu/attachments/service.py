@@ -158,7 +158,4 @@ class AttachmentService:
         public_id: str,
         validated: ValidatedAttachment,
     ) -> str:
-        return (
-            f"users/{owner_user_id}/threads/{thread_id}/attachments/{public_id}/"
-            f"source.{validated.extension}"
-        )
+        return f"users/{owner_user_id}/threads/{thread_id}/attachments/{public_id}/source.{validated.extension}"
