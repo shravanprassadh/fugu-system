@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
-from fugu.database.models import Base, PipelineStep, ProviderCredential
+from fugu.database.models import Base, PipelineRun, PipelineStep, ProviderCredential
 from fugu.database.repositories import PipelineVersionRepository, ThreadRepository, UserRepository
 from fugu.execution.kernel import PipelineExecutionKernel
 from fugu.pipelines import PipelineVersionValidator
@@ -185,7 +185,7 @@ async def test_prepare_execution_imports_legacy_definition_and_binds_run_to_vers
 
     async with version_registry.session(DatabaseTarget.MASTER) as session:
         version = await PipelineVersionRepository.require(session, prepared.pipeline_version_id)
-        run = await session.get(__import__("fugu.database.models", fromlist=["PipelineRun"]).PipelineRun, prepared.run_id)
+        run = await session.get(PipelineRun, prepared.run_id)
 
         assert version.state == "published"
         assert prepared.pipeline_version_number == version.version_number
