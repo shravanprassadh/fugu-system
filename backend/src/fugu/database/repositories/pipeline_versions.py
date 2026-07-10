@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from fugu.database.exceptions import EntityNotFoundError
-from fugu.database.models import PipelineVersion, PipelineVersionStage
+from fugu.database.models import PipelineStep, PipelineVersion, PipelineVersionStage
 
 
 class PipelineVersionRepository:
@@ -136,6 +136,49 @@ class PipelineVersionRepository:
         version = await PipelineVersionRepository.get_current_published(session)
         if version is None:
             raise EntityNotFoundError("No valid published pipeline version is available for execution.")
+        return version
+
+    @staticmethod
+    async def import_legacy_steps(
+        session: AsyncSession,
+        *,
+        steps: list[PipelineStep],
+    ) -> PipelineVersion:
+        """Convert an unversioned baseline once for metadata-created or pre-migration databases."""
+        current = await PipelineVersionRepository.get_current_published(session)
+        if current is not None:
+            return current
+        if not steps:
+            raise EntityNotFoundError("No valid published pipeline version is available for execution.")
+
+        version = await PipelineVersionRepository.create(
+            session,
+            created_by_user_id=None,
+            change_description="Imported legacy pipeline configuration",
+            state="published",
+        )
+        now = datetime.now(timezone.utc)
+        version.validation_status = "valid"
+        version.validation_issues = []
+        version.validated_at = now
+        version.published_at = now
+        for step in steps:
+            await PipelineVersionRepository.add_stage(
+                session,
+                pipeline_version_id=version.id,
+                stable_identifier=step.step_name,
+                name=step.step_name,
+                description="Imported from the legacy pipeline definition.",
+                enabled=True,
+                position=step.sequence_order_position,
+                provider_type=step.provider_type,
+                model_string=step.model_string,
+                system_prompt_directives=step.system_prompt_directives or "",
+                prerequisite_dependencies=list(step.prerequisite_dependencies),
+                is_terminal=step.is_terminal,
+                required_capabilities=["text_generation"],
+            )
+        await session.refresh(version, attribute_names=["stages"])
         return version
 
     @staticmethod
