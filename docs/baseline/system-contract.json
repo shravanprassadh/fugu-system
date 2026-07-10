@@ -1,0 +1,63 @@
+{
+  "api": {
+    "title": "Fugu Modular Kernel API",
+    "version": "1.0.0",
+    "operations": [
+      { "method": "GET", "path": "/api/admin/database/connections" },
+      { "method": "POST", "path": "/api/admin/database/connections/{target}/candidate/test" },
+      { "method": "POST", "path": "/api/admin/database/connections/{target}/test" },
+      { "method": "GET", "path": "/api/admin/pipeline-steps" },
+      { "method": "PATCH", "path": "/api/admin/pipeline-steps/{step_id}" },
+      { "method": "GET", "path": "/api/admin/provider-credentials" },
+      { "method": "POST", "path": "/api/admin/provider-credentials" },
+      { "method": "DELETE", "path": "/api/admin/provider-credentials/{provider_name}" },
+      { "method": "GET", "path": "/api/admin/render/config" },
+      { "method": "POST", "path": "/api/admin/render/config" },
+      { "method": "POST", "path": "/api/admin/render/config/test" },
+      { "method": "POST", "path": "/api/admin/render/database-env" },
+      { "method": "POST", "path": "/api/admin/render/database-env/{target}" },
+      { "method": "DELETE", "path": "/api/admin/thread-memory/config" },
+      { "method": "GET", "path": "/api/admin/thread-memory/config" },
+      { "method": "POST", "path": "/api/admin/thread-memory/config" },
+      { "method": "GET", "path": "/api/admin/users" },
+      { "method": "POST", "path": "/api/admin/users" },
+      { "method": "DELETE", "path": "/api/admin/users/{user_id}" },
+      { "method": "PATCH", "path": "/api/admin/users/{user_id}" },
+      { "method": "POST", "path": "/api/admin/users/{user_id}/password" },
+      { "method": "POST", "path": "/api/auth/login" },
+      { "method": "POST", "path": "/api/auth/logout" },
+      { "method": "GET", "path": "/api/auth/me" },
+      { "method": "GET", "path": "/api/health/live" },
+      { "method": "GET", "path": "/api/health/ready" },
+      { "method": "GET", "path": "/api/threads" },
+      { "method": "POST", "path": "/api/threads" },
+      { "method": "DELETE", "path": "/api/threads/{thread_id}" },
+      { "method": "PATCH", "path": "/api/threads/{thread_id}" },
+      { "method": "POST", "path": "/api/threads/{thread_id}/execute" },
+      { "method": "GET", "path": "/api/threads/{thread_id}/memory" },
+      { "method": "POST", "path": "/api/threads/{thread_id}/memory/regenerate" },
+      { "method": "GET", "path": "/api/threads/{thread_id}/messages" }
+    ]
+  },
+  "database": {
+    "alembic_head": "0004_thread_memories",
+    "alembic_chain": [
+      "0001_initial_schema",
+      "0002_user_token_version",
+      "0003_pipeline_step_run_identity",
+      "0004_thread_memories"
+    ],
+    "tables": [
+      "messages",
+      "pipeline_runs",
+      "pipeline_step_runs",
+      "pipeline_steps",
+      "provider_credentials",
+      "thread_memories",
+      "threads",
+      "users"
+    ],
+    "runtime_targets": ["master", "metadata", "logs"],
+    "current_table_target": "master"
+  }
+}
