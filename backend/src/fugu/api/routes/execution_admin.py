@@ -25,9 +25,7 @@ from fugu.execution.diagnostics import (
     sanitise_diagnostic_text,
 )
 
-execution_admin_router = APIRouter(
-    prefix="/api/admin/execution-runs", tags=["execution administration"]
-)
+execution_admin_router = APIRouter(prefix="/api/admin/execution-runs", tags=["execution administration"])
 
 RunStatus = Literal["pending", "running", "completed", "failed"]
 StageStatus = Literal["pending", "running", "completed", "failed"]
@@ -103,14 +101,10 @@ def _latency_ms(started_at: datetime, completed_at: datetime | None) -> int | No
 
 
 def _failed_stage(run: PipelineRun) -> str | None:
-    return next(
-        (step.step_name for step in run.step_runs if step.status == "failed"), None
-    )
+    return next((step.step_name for step in run.step_runs if step.status == "failed"), None)
 
 
-def _safe_run_error(
-    run: PipelineRun, *, failed_stage: str | None
-) -> SafeExecutionError | None:
+def _safe_run_error(run: PipelineRun, *, failed_stage: str | None) -> SafeExecutionError | None:
     return classify_stored_execution_error(
         run.error_code,
         run.error_message,
@@ -142,9 +136,7 @@ def _summary_response(run: PipelineRun) -> ExecutionRunSummaryResponse:
     )
 
 
-def _stage_order(
-    stage: PipelineStepRun, stage_map: dict[str, PipelineVersionStage]
-) -> tuple[int, datetime]:
+def _stage_order(stage: PipelineStepRun, stage_map: dict[str, PipelineVersionStage]) -> tuple[int, datetime]:
     configured = stage_map.get(stage.step_name)
     return (configured.position if configured is not None else 10_000, stage.created_at)
 
@@ -186,31 +178,20 @@ def _stage_response(
 
 def _detail_response(run: PipelineRun) -> ExecutionRunDetailResponse:
     version = run.pipeline_version
-    stage_map = {
-        stage.stable_identifier: stage
-        for stage in (version.stages if version is not None else [])
-    }
-    ordered_stage_runs = sorted(
-        run.step_runs, key=lambda item: _stage_order(item, stage_map)
-    )
+    stage_map = {stage.stable_identifier: stage for stage in (version.stages if version is not None else [])}
+    ordered_stage_runs = sorted(run.step_runs, key=lambda item: _stage_order(item, stage_map))
     terminal_identifier = next(
         (stage.stable_identifier for stage in stage_map.values() if stage.is_terminal),
         None,
     )
     terminal_run = next(
-        (
-            stage
-            for stage in ordered_stage_runs
-            if stage.step_name == terminal_identifier
-        ),
+        (stage for stage in ordered_stage_runs if stage.step_name == terminal_identifier),
         None,
     )
     summary = _summary_response(run)
     return ExecutionRunDetailResponse(
         **summary.model_dump(),
-        final_result=sanitise_diagnostic_text(terminal_run.output_trace)
-        if terminal_run is not None
-        else None,
+        final_result=sanitise_diagnostic_text(terminal_run.output_trace) if terminal_run is not None else None,
         stages=[_stage_response(run, stage, stage_map) for stage in ordered_stage_runs],
     )
 
@@ -220,9 +201,7 @@ async def _require_run(session: MasterSession, run_id: int) -> PipelineRun:
     result = await session.scalars(statement)
     run = result.one_or_none()
     if run is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Execution run not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Execution run not found.")
     return run
 
 
@@ -255,18 +234,14 @@ async def list_execution_runs(
         normalized_provider = provider.strip().lower()
         statement = statement.where(
             PipelineRun.pipeline_version.has(
-                PipelineVersion.stages.any(
-                    PipelineVersionStage.provider_type == normalized_provider
-                )
+                PipelineVersion.stages.any(PipelineVersionStage.provider_type == normalized_provider)
             )
         )
     if model is not None:
         normalized_model = model.strip()
         statement = statement.where(
             PipelineRun.pipeline_version.has(
-                PipelineVersion.stages.any(
-                    PipelineVersionStage.model_string == normalized_model
-                )
+                PipelineVersion.stages.any(PipelineVersionStage.model_string == normalized_model)
             )
         )
     statement = statement.order_by(PipelineRun.created_at.desc()).limit(limit)
@@ -284,9 +259,7 @@ async def get_execution_run(
     return _detail_response(await _require_run(session, run_id))
 
 
-@execution_admin_router.get(
-    "/{run_id}/diagnostics", response_model=ExecutionDiagnosticExportResponse
-)
+@execution_admin_router.get("/{run_id}/diagnostics", response_model=ExecutionDiagnosticExportResponse)
 async def export_execution_diagnostics(
     run_id: int,
     _: AdminUser,
