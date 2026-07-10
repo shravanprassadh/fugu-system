@@ -84,7 +84,7 @@ class ProviderCredentialVault:
                 session,
                 provider_name=normalized_provider,
                 encrypted_secret=encrypted_secret,
-                key_version=1,
+                key_version=self._cipher.key_version,
             )
         else:
             credential.encrypted_secret = encrypted_secret
