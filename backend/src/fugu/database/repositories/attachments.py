@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +19,7 @@ class AttachmentRepository:
     async def add_pending(
         session: AsyncSession,
         *,
+        public_id: str,
         owner_user_id: int,
         thread_id: int,
         original_filename: str,
@@ -34,7 +34,7 @@ class AttachmentRepository:
     ) -> Attachment:
         await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=owner_user_id)
         attachment = Attachment(
-            public_id=str(uuid4()),
+            public_id=public_id,
             owner_user_id=owner_user_id,
             thread_id=thread_id,
             original_filename=original_filename,
@@ -93,10 +93,27 @@ class AttachmentRepository:
         return list(result.all())
 
     @staticmethod
+    async def list_expired_pending(session: AsyncSession, *, before: datetime) -> list[Attachment]:
+        statement = select(Attachment).where(
+            Attachment.upload_status.in_(("pending", "uploading", "failed")),
+            Attachment.retention_status == "active",
+            Attachment.expires_at.is_not(None),
+            Attachment.expires_at <= before,
+        )
+        result = await session.scalars(statement)
+        return list(result.all())
+
+    @staticmethod
     async def mark_uploaded(session: AsyncSession, *, attachment: Attachment) -> Attachment:
         attachment.upload_status = "uploaded"
         attachment.uploaded_at = datetime.now(timezone.utc)
         attachment.expires_at = None
+        await session.flush()
+        return attachment
+
+    @staticmethod
+    async def mark_upload_failed(session: AsyncSession, *, attachment: Attachment) -> Attachment:
+        attachment.upload_status = "failed"
         await session.flush()
         return attachment
 
@@ -112,8 +129,9 @@ class AttachmentRepository:
         return attachment
 
     @staticmethod
-    async def mark_deleted(session: AsyncSession, *, attachment: Attachment) -> Attachment:
-        attachment.retention_status = "deleted"
+    async def mark_deleted(session: AsyncSession, *, attachment: Attachment, expired: bool = False) -> Attachment:
+        attachment.retention_status = "expired" if expired else "deleted"
+        attachment.upload_status = "expired" if expired else attachment.upload_status
         attachment.deleted_at = datetime.now(timezone.utc)
         await session.flush()
         return attachment
