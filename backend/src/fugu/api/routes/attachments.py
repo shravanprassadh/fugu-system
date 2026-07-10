@@ -25,7 +25,17 @@ from fugu.storage import (
 )
 
 attachments_router = APIRouter(tags=["attachments"])
-Storage = Annotated[ObjectStorage, Depends(get_object_storage)]
+
+
+def resolve_attachment_storage() -> ObjectStorage:
+    """Resolve storage while translating disabled configuration into an actionable HTTP status."""
+    try:
+        return get_object_storage()
+    except AttachmentStorageUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
+Storage = Annotated[ObjectStorage, Depends(resolve_attachment_storage)]
 StorageConfig = Annotated[AttachmentStorageConfig, Depends(get_attachment_storage_config)]
 
 
