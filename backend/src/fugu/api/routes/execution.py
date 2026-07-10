@@ -37,7 +37,11 @@ class PipelineExecutionPayload(BaseModel):
         """Validate optional model overrides and parameters against the backend catalogue."""
         has_parameters = any(
             value is not None
-            for value in (self.temperature, self.max_output_tokens, self.thinking_budget)
+            for value in (
+                self.temperature,
+                self.max_output_tokens,
+                self.thinking_budget,
+            )
         )
         if self.provider_type is None and self.model_identifier is None:
             if has_parameters:
@@ -46,7 +50,9 @@ class PipelineExecutionPayload(BaseModel):
                 )
             return self
         if not self.provider_type or not self.model_identifier:
-            raise ValueError("provider_type and model_identifier must be supplied together.")
+            raise ValueError(
+                "provider_type and model_identifier must be supplied together."
+            )
 
         provider_type = self.provider_type.strip().lower()
         model_identifier = self.model_identifier.strip()
