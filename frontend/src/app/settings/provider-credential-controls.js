@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { useStudioStore } from "../../components/store";
 import { listProviderCredentials, upsertProviderCredential } from "../../lib/api-client";
 import {
   replaceProviderCredential,
@@ -54,7 +56,10 @@ function credentialMap(credentials) {
   return new Map(credentials.map((credential) => [credential.provider_name, credential]));
 }
 
-export function ProviderCredentialControls({ onUnauthorized }) {
+export function ProviderCredentialControls() {
+  const router = useRouter();
+  const userRole = useStudioStore((state) => state.userRole);
+  const clearSession = useStudioStore((state) => state.clearSession);
   const [credentials, setCredentials] = useState([]);
   const [status, setStatus] = useState("idle");
   const [notice, setNotice] = useState("");
@@ -63,18 +68,26 @@ export function ProviderCredentialControls({ onUnauthorized }) {
   const [secret, setSecret] = useState("");
   const [candidateResult, setCandidateResult] = useState(null);
 
+  const expireSession = useCallback(() => {
+    clearSession();
+    router.replace("/");
+  }, [clearSession, router]);
+
   const handleError = useCallback(
     (operationError, fallback) => {
       if (operationError?.status === 401) {
-        onUnauthorized();
+        expireSession();
       }
       setError(operationError.message || fallback);
       setStatus("failed");
     },
-    [onUnauthorized],
+    [expireSession],
   );
 
   const refreshCredentials = useCallback(async () => {
+    if (userRole !== "admin") {
+      return;
+    }
     setStatus("loading");
     setError("");
     try {
@@ -83,7 +96,7 @@ export function ProviderCredentialControls({ onUnauthorized }) {
     } catch (operationError) {
       handleError(operationError, "Could not load provider credentials.");
     }
-  }, [handleError]);
+  }, [handleError, userRole]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -91,6 +104,12 @@ export function ProviderCredentialControls({ onUnauthorized }) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [refreshCredentials]);
+
+  const closeEditor = useCallback(() => {
+    setEditor(null);
+    setSecret("");
+    setCandidateResult(null);
+  }, []);
 
   useEffect(() => {
     if (!editor) {
@@ -103,7 +122,7 @@ export function ProviderCredentialControls({ onUnauthorized }) {
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editor]);
+  }, [closeEditor, editor]);
 
   function openEditor(providerName, mode) {
     setEditor({ providerName, mode });
@@ -111,12 +130,6 @@ export function ProviderCredentialControls({ onUnauthorized }) {
     setCandidateResult(null);
     setError("");
     setNotice("");
-  }
-
-  function closeEditor() {
-    setEditor(null);
-    setSecret("");
-    setCandidateResult(null);
   }
 
   function updateSecret(value) {
@@ -186,26 +199,30 @@ export function ProviderCredentialControls({ onUnauthorized }) {
         setStatus("failed");
         return;
       }
+      const providerName = editor.providerName;
       const action = editor.mode === "create" ? "activated" : "replaced";
       closeEditor();
       await refreshCredentials();
-      setNotice(`${editor.providerName} key was ${action} after successful validation.`);
+      setNotice(`${providerName} key was ${action} after successful validation.`);
       setStatus("ready");
     } catch (operationError) {
       handleError(operationError, `Could not activate the ${editor.providerName} candidate key.`);
     }
   }
 
+  if (userRole !== "admin") {
+    return null;
+  }
+
   const configured = credentialMap(credentials);
-  const candidateReady =
-    candidateResult?.valid === true && candidateResult.secret === secret.trim();
+  const candidateReady = candidateResult?.valid === true && candidateResult.secret === secret.trim();
 
   return (
     <section className="settings-card settings-card-wide">
       <div className={styles.cardHeaderRow}>
         <div>
-          <p className="eyebrow">Secrets</p>
-          <h3>Provider credentials</h3>
+          <p className="eyebrow">Provider access</p>
+          <h3>API credentials</h3>
         </div>
         <button
           type="button"
@@ -217,7 +234,7 @@ export function ProviderCredentialControls({ onUnauthorized }) {
         </button>
       </div>
       <p className="muted">
-        Each provider has exactly one active key. Test the active key at any time, or validate a candidate before replacing it. A rejected candidate never interrupts the current key.
+        Each provider has exactly one active key. Test it at any time, or validate a candidate before replacing it. A rejected candidate never interrupts the current key.
       </p>
       {error ? <p className={styles.diagnosticError}>{error}</p> : null}
       {notice ? <p className={styles.diagnosticSuccess}>{notice}</p> : null}
