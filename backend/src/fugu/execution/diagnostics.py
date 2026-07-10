@@ -61,31 +61,46 @@ def _classify_error(
     if error_name == "ProviderCredentialMissingError" or "credential" in normalized and "configured" in normalized:
         return SafeExecutionError(
             category="provider_credential_missing",
-            message=f"{stage_label} cannot run because its provider credential is not configured. An administrator must add or test the provider key.",
+            message=(
+                f"{stage_label} cannot run because its provider credential is not configured. "
+                "An administrator must add or test the provider key."
+            ),
             retryable=False,
         )
     if "thinking budget" in normalized or "thinking_budget" in normalized:
         return SafeExecutionError(
             category="invalid_model_parameter",
-            message=f"{stage_label} failed because its thinking budget is outside the selected model's supported range. Update the pipeline or response-model settings and retry.",
+            message=(
+                f"{stage_label} failed because its thinking budget is outside the selected model's supported range. "
+                "Update the pipeline or response-model settings and retry."
+            ),
             retryable=False,
         )
     if "max_output_tokens" in normalized or "output token" in normalized or "token limit" in normalized:
         return SafeExecutionError(
             category="invalid_model_parameter",
-            message=f"{stage_label} failed because its output-token limit is unsupported by the selected model. Update the configuration and retry.",
+            message=(
+                f"{stage_label} failed because its output-token limit is unsupported by the selected model. "
+                "Update the configuration and retry."
+            ),
             retryable=False,
         )
     if is_timeout or "timeout" in normalized or "timed out" in normalized:
         return SafeExecutionError(
             category="provider_timeout",
-            message=f"{stage_label} timed out while waiting for the configured provider. Retry the run; if it repeats, test the provider or increase the stage timeout.",
+            message=(
+                f"{stage_label} timed out while waiting for the configured provider. "
+                "Retry the run; if it repeats, test the provider or increase the stage timeout."
+            ),
             retryable=True,
         )
     if "rate limit" in normalized or "too many requests" in normalized or "429" in normalized:
         return SafeExecutionError(
             category="provider_rate_limited",
-            message=f"{stage_label} was temporarily rate-limited by the provider. Retry after a short delay or select another available model.",
+            message=(
+                f"{stage_label} was temporarily rate-limited by the provider. "
+                "Retry after a short delay or select another available model."
+            ),
             retryable=True,
         )
     if "cancel" in normalized or error_name in {
@@ -102,7 +117,10 @@ def _classify_error(
     ):
         return SafeExecutionError(
             category="model_unavailable",
-            message=f"{stage_label} cannot use the configured model because it is unavailable or unsupported. Select an available model and retry.",
+            message=(
+                f"{stage_label} cannot use the configured model because it is unavailable or unsupported. "
+                "Select an available model and retry."
+            ),
             retryable=False,
         )
     if "provider" in normalized and (
@@ -110,13 +128,19 @@ def _classify_error(
     ):
         return SafeExecutionError(
             category="provider_unavailable",
-            message=f"{stage_label} could not reach the configured provider. Test the provider connection or retry the run.",
+            message=(
+                f"{stage_label} could not reach the configured provider. "
+                "Test the provider connection or retry the run."
+            ),
             retryable=True,
         )
 
     return SafeExecutionError(
         category="stage_execution_failed",
-        message=f"{stage_label} failed. An administrator can inspect the sanitised run diagnostics for the recorded cause and decide whether retry is safe.",
+        message=(
+            f"{stage_label} failed. An administrator can inspect the sanitised run diagnostics "
+            "for the recorded cause and decide whether retry is safe."
+        ),
         retryable=False,
     )
 
