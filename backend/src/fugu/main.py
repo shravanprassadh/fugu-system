@@ -17,6 +17,7 @@ from fugu.api.routes import (
     database_admin_router,
     execution_router,
     health_router,
+    pipeline_admin_router,
     provider_admin_router,
     provider_catalogue_router,
     render_admin_router,
@@ -139,6 +140,7 @@ def create_app(
     )
     application.include_router(auth_router)
     application.include_router(admin_router)
+    application.include_router(pipeline_admin_router)
     application.include_router(provider_admin_router)
     application.include_router(provider_catalogue_router)
     application.include_router(render_admin_router)
