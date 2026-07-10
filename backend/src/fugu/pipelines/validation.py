@@ -308,9 +308,7 @@ class PipelineVersionValidator:
                 issues.append(
                     PipelineValidationIssue(
                         code="missing_model_capability",
-                        message=(
-                            f"Model {model.identifier!r} does not provide required capability {capability!r}."
-                        ),
+                        message=(f"Model {model.identifier!r} does not provide required capability {capability!r}."),
                         stage_identifier=stage.stable_identifier,
                     )
                 )
