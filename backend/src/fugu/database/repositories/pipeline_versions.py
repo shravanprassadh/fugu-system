@@ -121,7 +121,10 @@ class PipelineVersionRepository:
         statement = (
             select(PipelineVersion)
             .options(selectinload(PipelineVersion.stages))
-            .where(PipelineVersion.state == "published")
+            .where(
+                PipelineVersion.state == "published",
+                PipelineVersion.validation_status == "valid",
+            )
             .order_by(PipelineVersion.version_number.desc())
             .limit(1)
         )
@@ -132,7 +135,7 @@ class PipelineVersionRepository:
     async def require_current_published(session: AsyncSession) -> PipelineVersion:
         version = await PipelineVersionRepository.get_current_published(session)
         if version is None:
-            raise EntityNotFoundError("No published pipeline version is available for execution.")
+            raise EntityNotFoundError("No valid published pipeline version is available for execution.")
         return version
 
     @staticmethod
