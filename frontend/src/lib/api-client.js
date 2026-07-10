@@ -19,7 +19,7 @@ async function parseError(response) {
   try {
     const payload = await response.json();
     if (Array.isArray(payload.detail)) {
-      return payload.detail.map((item) => item.error || item.detail || JSON.stringify(item)).join("; ");
+      return payload.detail.map((item) => item.error || item.detail || item.msg || JSON.stringify(item)).join("; ");
     }
     return typeof payload.detail === "string"
       ? payload.detail
@@ -132,7 +132,10 @@ function renderControlPlaneUnauthorizedMessage(message) {
   );
 }
 
-async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch, store = studioStore } = {}) {
+async function authorizedRequest(
+  path,
+  { method = "GET", body, fetchImpl = fetch, store = studioStore, acceptedStatuses = [] } = {},
+) {
   const sessionCredential = requireSessionCredential(store);
   const headers = { Authorization: `Bearer ${sessionCredential}` };
   if (body !== undefined) {
@@ -152,7 +155,7 @@ async function authorizedRequest(path, { method = "GET", body, fetchImpl = fetch
     store.getState().clearSession();
     throw new ApiRequestError(message || "The session has expired or was rejected.", 401);
   }
-  if (!response.ok) {
+  if (!response.ok && !acceptedStatuses.includes(response.status)) {
     throw new ApiRequestError(await parseError(response), response.status);
   }
   store.getState().touchSession();
@@ -253,28 +256,63 @@ export function upsertProviderCredential({ providerName, secret }, options = {})
   });
 }
 
-export function listPipelineSteps(options) {
-  return authorizedRequest("/api/admin/pipeline-steps", options);
+export function listPipelineVersions(options) {
+  return authorizedRequest("/api/admin/pipeline-versions", options);
 }
 
-export function updatePipelineStep(stepId, update, options = {}) {
-  const body = {};
-  if (update.providerType !== undefined) {
-    body.provider_type = update.providerType;
+export function getPipelineVersion(versionId, options) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}`, options);
+}
+
+export function createPipelineDraft({ sourceVersionId, changeDescription }, options = {}) {
+  const body = { change_description: changeDescription };
+  if (sourceVersionId !== undefined && sourceVersionId !== null) {
+    body.source_version_id = sourceVersionId;
   }
-  if (update.modelString !== undefined) {
-    body.model_string = update.modelString;
-  }
-  if (update.systemPromptDirectives !== undefined) {
-    body.system_prompt_directives = update.systemPromptDirectives;
-  }
-  if (update.prerequisiteDependencies !== undefined) {
-    body.prerequisite_dependencies = update.prerequisiteDependencies;
-  }
-  if (update.isTerminal !== undefined) {
-    body.is_terminal = update.isTerminal;
-  }
-  return authorizedRequest(`/api/admin/pipeline-steps/${stepId}`, { ...options, method: "PATCH", body });
+  return authorizedRequest("/api/admin/pipeline-versions/drafts", {
+    ...options,
+    method: "POST",
+    body,
+  });
+}
+
+export function savePipelineDraft(versionId, { changeDescription, stages }, options = {}) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}`, {
+    ...options,
+    method: "PUT",
+    body: { change_description: changeDescription, stages },
+  });
+}
+
+export function validatePipelineDraft(versionId, options = {}) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}/validate`, {
+    ...options,
+    method: "POST",
+  });
+}
+
+export function publishPipelineDraft(versionId, options = {}) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}/publish`, {
+    ...options,
+    method: "POST",
+    acceptedStatuses: [422],
+  });
+}
+
+export function rollbackPipelineVersion(versionId, changeDescription, options = {}) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}/rollback`, {
+    ...options,
+    method: "POST",
+    body: { change_description: changeDescription },
+    acceptedStatuses: [422],
+  });
+}
+
+export function deletePipelineDraft(versionId, options = {}) {
+  return authorizedRequest(`/api/admin/pipeline-versions/${versionId}`, {
+    ...options,
+    method: "DELETE",
+  });
 }
 
 function databasePayloadFromForm(form) {
