@@ -144,7 +144,9 @@ class ProviderDefinition:
 def _display_name(model_identifier: str) -> str:
     _, _, raw_name = model_identifier.rpartition("/")
     value = raw_name or model_identifier
-    return " ".join(part.capitalize() for part in value.replace(".", "-").split("-") if part)
+    return " ".join(
+        part.capitalize() for part in value.replace(".", "-").split("-") if part
+    )
 
 
 def _context_size(model_identifier: str) -> int:
@@ -161,7 +163,9 @@ def _context_size(model_identifier: str) -> int:
 def _capabilities(model_identifier: str) -> ModelCapabilities:
     lowered = model_identifier.lower()
     vision = any(token in lowered for token in ("vision", "multimodal", "omni"))
-    reasoning = any(token in lowered for token in ("reasoning", "reason2", "deepseek-v4-pro"))
+    reasoning = any(
+        token in lowered for token in ("reasoning", "reason2", "deepseek-v4-pro")
+    )
     return ModelCapabilities(
         text_generation=True,
         image_understanding=vision,
@@ -190,7 +194,9 @@ def _model(model_identifier: str) -> ModelDefinition:
 def _aggregate_capabilities(models: tuple[ModelDefinition, ...]) -> ModelCapabilities:
     return ModelCapabilities(
         text_generation=any(model.capabilities.text_generation for model in models),
-        image_understanding=any(model.capabilities.image_understanding for model in models),
+        image_understanding=any(
+            model.capabilities.image_understanding for model in models
+        ),
         document_input=any(model.capabilities.document_input for model in models),
         tool_support=any(model.capabilities.tool_support for model in models),
         reasoning_support=any(model.capabilities.reasoning_support for model in models),
@@ -218,7 +224,9 @@ class ProviderCatalogue:
         provider = self._provider_index.get(normalized)
         if provider is None:
             supported = ", ".join(sorted(self._provider_index))
-            raise ValueError(f"Unsupported provider {provider_identifier!r}. Supported providers: {supported}.")
+            raise ValueError(
+                f"Unsupported provider {provider_identifier!r}. Supported providers: {supported}."
+            )
         return provider
 
     def model(self, provider_identifier: str, model_identifier: str) -> ModelDefinition:
@@ -231,10 +239,14 @@ class ProviderCatalogue:
             )
         return model
 
-    def validate_selection(self, provider_identifier: str, model_identifier: str) -> ModelDefinition:
+    def validate_selection(
+        self, provider_identifier: str, model_identifier: str
+    ) -> ModelDefinition:
         provider = self.provider(provider_identifier)
         if not provider.adapter_available or provider.health_status != "available":
-            raise ValueError(f"Provider {provider.identifier!r} is not currently available.")
+            raise ValueError(
+                f"Provider {provider.identifier!r} is not currently available."
+            )
         model = self.model(provider.identifier, model_identifier)
         if model.availability_status != "available":
             raise ValueError(
