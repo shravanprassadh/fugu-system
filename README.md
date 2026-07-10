@@ -2,120 +2,124 @@
 
 [![CI](https://github.com/shravanprassadh/fugu-system/actions/workflows/ci.yml/badge.svg)](https://github.com/shravanprassadh/fugu-system/actions/workflows/ci.yml)
 
-Fugu System is a modular full-stack prototype for authenticated AI pipeline execution. It combines a FastAPI backend, a PostgreSQL/Neon data layer, Alembic-managed migrations, and a Next.js Studio interface into one deployable system.
+Fugu System is a private full-stack AI workspace built around authenticated conversation threads, multi-stage model execution, durable thread memory, and administrative control. The current stack uses a FastAPI backend, Next.js Studio frontend, PostgreSQL/Neon persistence, Alembic migrations, and required GitHub Actions validation.
 
-Users authenticate, work inside owned conversation threads, submit prompts to an execution pipeline, and receive streamed Server-Sent Events while the system persists users, threads, messages, provider credentials, pipeline definitions, memory summaries, and run history.
+## Deployment
 
-The active deployment path is:
+| Layer | Service | Contract |
+| --- | --- | --- |
+| Frontend | Vercel | Builds `frontend/` and compiles `NEXT_PUBLIC_FUGU_API_BASE_URL` into the application |
+| Backend | Render | Runs `backend/entrypoint.sh`, applies migrations, then starts FastAPI/Uvicorn |
+| Database | Neon PostgreSQL | Supplies three required connection URLs; current application tables and repositories use the master target |
+| CI | GitHub Actions | Blocks merge unless security, backend, frontend, browser, container, and aggregate checks pass |
 
-- **Frontend:** Vercel
-- **Backend:** Render
-- **Database:** Neon PostgreSQL
-- **CI:** GitHub Actions
+Detailed deployment instructions are in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). The enforceable API, migration, schema, and routing baseline is documented in [`docs/BASELINE.md`](docs/BASELINE.md).
 
-## Core capabilities
+## Current capabilities
 
-- Authenticated Studio access with username/password login and bearer tokens.
-- Owned conversation threads with create, rename, delete, and persisted message history.
-- Streaming pipeline execution over Server-Sent Events.
-- Pluggable provider adapters and encrypted provider credentials.
-- Durable thread-memory summaries combined with a bounded recent transcript.
-- Safe markdown rendering that never interprets raw HTML.
-- Async SQLAlchemy 2 data access with explicit database routing.
-- Alembic migrations applied at backend startup behind a PostgreSQL advisory lock.
-- Production-oriented CI covering secret scanning, backend validation, frontend validation, dependency audits, and container checks.
-
-## System architecture
-
-```mermaid
-flowchart LR
-    User[User / Browser] --> Studio[Next.js Fugu Studio]
-    Studio -->|/api/auth/* and /api/threads/*| API[FastAPI Backend on Render]
-    API --> Auth[Authentication and Token Validation]
-    API --> Kernel[Pipeline Execution Kernel]
-    Kernel --> Memory[Thread Memory Summary + Recent Transcript]
-    Kernel --> Providers[LLM Provider Adapters]
-    Kernel --> SSE[Server-Sent Event Stream]
-    API --> DB[(Neon PostgreSQL)]
-    Migrations[Alembic Startup Runner] --> DB
-    CI[GitHub Actions CI] --> API
-    CI --> Studio
-```
+- Username/password authentication with revocable bearer sessions.
+- Strict user ownership for conversation threads and messages.
+- Thread creation, rename, deletion, and persisted history.
+- Server-Sent Event streaming from the pipeline execution kernel.
+- Provider adapters with encrypted credential storage.
+- Durable, validated thread-memory consolidation with bounded recent transcript context.
+- Administrative controls for users, provider credentials, pipeline steps, database connections, and Render integration.
+- Alembic startup migrations protected by a PostgreSQL advisory lock.
+- Required production-build browser coverage for the core chat and memory journey.
 
 ## Repository layout
 
 ```text
 .
-├── backend/                 # FastAPI backend, models, migrations, execution kernel, tests
-├── frontend/                # Next.js Studio UI
-├── docs/                    # Deployment and operating runbooks
-├── .github/workflows/       # CI workflows
+├── backend/                   # FastAPI application, models, migrations, scripts, tests
+├── frontend/                  # Next.js Studio and browser smoke tests
+├── docs/                      # Baseline, deployment, and operating contracts
+├── .github/workflows/         # Required CI workflow
 ├── .github/BRANCH_PROTECTION.md
-└── .env.example             # Environment variable template
+└── .env.example
 ```
 
-## Thread memory model
+## Architecture
 
-Fugu uses a two-layer handoff format when building provider prompts:
+```mermaid
+flowchart LR
+    Browser[Browser] --> Studio[Next.js Studio on Vercel]
+    Studio --> API[FastAPI on Render]
+    API --> Auth[Identity and ownership checks]
+    API --> Kernel[Pipeline execution kernel]
+    Kernel --> Providers[LLM provider adapters]
+    Kernel --> Memory[Thread memory consolidation]
+    Kernel --> SSE[Server-Sent Event response]
+    API --> Master[(Master PostgreSQL target)]
+    API -. readiness only .-> Metadata[(Metadata PostgreSQL target)]
+    API -. readiness only .-> Logs[(Logs PostgreSQL target)]
+    Alembic[Alembic startup runner] --> Master
+```
 
-1. **Thread memory summary**
-   - Durable, AI-oriented context generated from earlier conversation history.
-   - Designed to preserve decisions, constraints, unresolved work, and relevant state.
-   - Independently bounded to prevent prompt growth.
+### Database routing reality
 
-2. **Recent raw transcript**
-   - A bounded window of the most recent messages.
-   - Preserves exact wording and immediate conversational context.
-   - Older messages outside the configured window are excluded.
-
-The final provider prompt is ordered as:
+Fugu requires these runtime targets:
 
 ```text
-[Thread memory summary]
-...
-
-[Recent raw transcript]
-...
-
-[Current user request]
-...
+MASTER_ROUTER_DB_URL
+METADATA_SIDEBAR_DB_URL
+TRANSACTIONAL_LOGS_DB_URL
 ```
 
-Both memory sections use tail-preserving truncation so the most recent and operationally relevant content survives when limits are exceeded. Tests verify section presence, ordering, bounds, truncation behaviour, exclusion of old messages, and removal of the retired `[Recent thread memory]` format.
+The current implementation does **not** yet distribute tables across those targets. Users, provider credentials, pipeline definitions, threads, messages, thread memory, pipeline runs, and step traces all use the master session. Metadata and logs are independently pooled and readiness-tested but currently own no application repositories.
 
-## Backend API surface
+Moving data to those targets later is a routing and migration change. Updating environment variables alone is not database migration.
 
-The backend intentionally does **not** expose a root `/` route. A `404 Not Found` at the Render root URL does not mean the service is unavailable.
+## API
+
+The FastAPI application is:
+
+```text
+Title: Fugu Modular Kernel API
+Version: 1.0.0
+OpenAPI: /api/openapi.json
+Swagger UI: /api/docs
+```
+
+The backend root `/` is intentionally undefined and may return `404 Not Found`.
+
+Core routes include:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/health/live` | Process liveness check |
-| `GET` | `/api/health/ready` | Database-backed readiness check |
-| `GET` | `/api/docs` | Swagger/OpenAPI documentation |
-| `POST` | `/api/auth/login` | Username/password login |
-| `GET` | `/api/auth/me` | Current authenticated profile |
-| `POST` | `/api/auth/logout` | Revoke active tokens for the user |
-| `GET` | `/api/threads` | List owned threads |
-| `POST` | `/api/threads` | Create a thread |
-| `GET` | `/api/threads/{thread_id}/messages` | Load message history |
-| `PATCH` | `/api/threads/{thread_id}` | Rename a thread |
-| `DELETE` | `/api/threads/{thread_id}` | Delete a thread and its history |
+| `GET` | `/api/health/live` | Process liveness |
+| `GET` | `/api/health/ready` | Readiness across master, metadata, and logs pools |
+| `POST` | `/api/auth/login` | Authenticate and issue a bearer token |
+| `GET` | `/api/auth/me` | Restore the authenticated profile |
+| `POST` | `/api/auth/logout` | Revoke the user’s active tokens |
+| `GET/POST` | `/api/threads` | List or create owned threads |
+| `GET` | `/api/threads/{thread_id}/messages` | Load owned thread history |
 | `POST` | `/api/threads/{thread_id}/execute` | Execute the pipeline and stream SSE events |
+| `GET` | `/api/threads/{thread_id}/memory` | Read durable thread memory |
+| `POST` | `/api/threads/{thread_id}/memory/regenerate` | Rebuild memory from the complete thread |
 
-## Deployment model
+The complete method/path list is committed in [`docs/baseline/system-contract.json`](docs/baseline/system-contract.json) and checked against the generated OpenAPI schema in the backend test suite.
 
-| Layer | Service | Notes |
-| --- | --- | --- |
-| Frontend | Vercel | Builds `frontend/`; public API origin is compiled into the build |
-| Backend | Render | Runs `bash ./entrypoint.sh`; applies migrations before Uvicorn starts |
-| Database | Neon PostgreSQL | Used by runtime pools and Alembic |
-| CI/CD | GitHub Actions | Required gate for security, backend, frontend, and container validation |
+## Migration baseline
 
-Detailed deployment instructions are in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+The current linear Alembic chain is:
 
-## Critical environment variables
+```text
+0001_initial_schema
+  -> 0002_user_token_version
+  -> 0003_pipeline_step_run_identity
+  -> 0004_thread_memories
+```
 
-### Render backend
+Current head:
+
+```text
+0004_thread_memories
+```
+
+## Required environment variables
+
+### Render
 
 ```text
 RUNTIME_ENVIRONMENT=production
@@ -129,41 +133,13 @@ RUN_MIGRATIONS=true
 VERIFY_DATABASES_ON_STARTUP=true
 ```
 
-### Vercel frontend
+### Vercel
 
 ```text
 NEXT_PUBLIC_FUGU_API_BASE_URL=https://your-render-backend.onrender.com
 ```
 
-Do not append `/api`. The frontend already calls `/api/...` paths internally.
-
-After changing `NEXT_PUBLIC_FUGU_API_BASE_URL`, redeploy the frontend because public Next.js environment variables are compiled into the build.
-
-## First admin user
-
-A fresh database has no default user.
-
-When a backend shell is available:
-
-```bash
-fugu-create-user --username admin --role admin
-```
-
-Render Free does not provide a service shell. Use the Neon SQL bootstrap procedure in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#first-admin-user) instead. Never commit bootstrap passwords or password hashes.
-
-## Pipeline and provider bootstrap
-
-A fresh database has no pipeline definition and no provider credentials.
-
-```bash
-# Seed the default pipeline
-fugu-seed-pipeline --provider openrouter --model anthropic/claude-sonnet-4-5
-
-# Encrypt and store a provider API key
-FUGU_PROVIDER_SECRET="sk-or-..." fugu-set-provider-credential --provider openrouter
-```
-
-`fugu-seed-pipeline` validates the provider, resolves the DAG before writing, and refuses to overwrite an existing definition unless `--replace` is supplied. Provider credentials are encrypted through the runtime vault and rotated in place.
+Do not append `/api`. Redeploy Vercel after changing a public environment variable because Next.js compiles it into the build.
 
 ## Local development
 
@@ -177,13 +153,22 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-Validation commands:
+Validation:
 
 ```bash
 python -m ruff format --check src tests
 python -m ruff check src tests
 python -m mypy src
+python scripts/verify_baseline.py
 python -m pip_audit --requirement requirements.txt --strict
+```
+
+Public deployment verification:
+
+```bash
+python scripts/verify_production.py \
+  --frontend-url https://myfugu.vercel.app \
+  --backend-url https://fugu-system.onrender.com
 ```
 
 ### Frontend
@@ -194,39 +179,34 @@ npm ci
 npm run dev
 ```
 
-Validation commands:
+Validation:
 
 ```bash
 npm run lint
-npm exec vitest -- run
-npm audit --audit-level=high
+npm test
 npm run build
+npm run test:e2e
+npm audit --audit-level=high
 ```
 
-## CI and contribution workflow
+## Required CI gate
 
-The required GitHub Actions gate validates:
+Every pull request targeting `main` must pass:
 
-- repository secret hygiene,
-- backend formatting, linting, strict typing, tests, and dependency audit,
-- frontend linting, tests, dependency audit, and production build,
-- production backend container and runtime behaviour.
+- Security & Secret Auditing
+- Backend Lint, Type Check, Tests & Audit
+- Frontend Lint, Tests, Build & Audit
+- Browser End-to-End Smoke Tests
+- Production Container & Runtime Validation
+- Required CI Gate
 
-All changes should follow this workflow:
+The browser journey runs against a production Next.js build and verifies login, protected navigation, thread creation, message submission, SSE completion, persisted memory rebuild, logout, and rejection of the protected route after logout.
 
-1. Create a feature or maintenance branch from `main`.
-2. Commit changes to that branch.
-3. Open a pull request into `main`.
-4. Wait for **Required CI Gate** to pass.
-5. Merge through the pull request.
+The expected GitHub ruleset is documented in [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md). Direct pushes to `main` must remain blocked.
 
-Do not push directly to `main`. Push-triggered CI can report failures, but it cannot prevent a direct push unless branch protection or a repository ruleset is enabled.
+## Operational checks
 
-The expected protection policy is documented in [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
-
-## Common operational checks
-
-### Backend root shows `Not Found`
+### Backend root returns `404`
 
 Expected. Use:
 
@@ -238,29 +218,25 @@ Expected. Use:
 
 ### Login returns `404`
 
-The frontend is probably calling the wrong backend origin. Confirm:
-
-```text
-NEXT_PUBLIC_FUGU_API_BASE_URL=https://your-render-backend.onrender.com
-```
-
-Then redeploy Vercel.
+The frontend is probably using the wrong backend origin. Verify `NEXT_PUBLIC_FUGU_API_BASE_URL` and redeploy Vercel.
 
 ### Login returns `401`
 
-The backend route is reachable, but the credentials are invalid or the user is inactive.
+The backend is reachable, but the credentials are invalid, the user is inactive, or the token has been revoked.
 
 ### Alembic reports duplicate tables
 
-The database contains application tables without matching Alembic version state, or Render is connected to a different Neon branch/database. Confirm all database URLs and inspect the exact database used by Render.
+The target contains tables without matching Alembic state, or Render is connected to a different Neon branch/database. Verify the exact master target before changing schema state.
 
 ### Alembic reports multiple heads
 
-The migration graph has diverged. Keep the migration chain linear unless an intentional Alembic merge migration is required.
+The migration graph has diverged. The repository baseline requires one linear head unless an intentional merge migration is reviewed and recorded.
 
-## Current project state
+## Change discipline
 
-- The backend, frontend, and deployment previews are green on the current `main` baseline.
-- PR #26 strengthened the thread-memory handoff contract and added bounded-memory regression coverage.
-- The backend suite currently covers the memory summary/transcript structure and truncation behaviour.
-- The repository should now be maintained through pull requests with the required CI gate passing before merge.
+1. Branch from `main`.
+2. Make the implementation and tests agree.
+3. Update the baseline contract when an API or schema change is deliberate.
+4. Open a pull request targeting `main`.
+5. Merge only after the required aggregate gate succeeds.
+6. Run the production verifier after deployment-affecting changes.
