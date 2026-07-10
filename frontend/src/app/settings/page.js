@@ -584,7 +584,7 @@ export default function SettingsPage() {
                   <div className="settings-row settings-row-top">
                     <div>
                       <h3>Current members</h3>
-                      <p className="muted">Each row contains only that account's state and controls.</p>
+                      <p className="muted">Each row contains only that account&apos;s state and controls.</p>
                     </div>
                   </div>
                   <div className="settings-list">

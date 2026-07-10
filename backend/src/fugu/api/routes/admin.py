@@ -143,11 +143,7 @@ async def _user_count(session: AsyncSession) -> int:
 
 
 async def _active_admin_count(session: AsyncSession) -> int:
-    statement = (
-        select(func.count())
-        .select_from(User)
-        .where(User.role == "admin", User.is_active.is_(True))
-    )
+    statement = select(func.count()).select_from(User).where(User.role == "admin", User.is_active.is_(True))
     result = await session.scalar(statement)
     return int(result or 0)
 
@@ -191,8 +187,7 @@ async def list_users(
     )
     result = await session.execute(statement)
     return [
-        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0))
-        for user, thread_count in result.all()
+        AdminUserResponse.from_user(user, thread_count=int(thread_count or 0)) for user, thread_count in result.all()
     ]
 
 
@@ -326,10 +321,7 @@ async def upsert_provider_credential(
         supported = ", ".join(sorted(_CHAT_PROVIDER_NAMES))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Unsupported chat provider {payload.provider_name!r}. "
-                f"Supported providers: {supported}."
-            ),
+            detail=(f"Unsupported chat provider {payload.provider_name!r}. " f"Supported providers: {supported}."),
         )
     vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
     credential = await vault.store(
