@@ -28,6 +28,7 @@ class PipelineStepDefinition:
     fallback_provider_type: str | None = None
     fallback_model_identifier: str | None = None
     display_name: str = ""
+    side_effect_free: bool = True
 
     @classmethod
     def from_record(cls, step: PipelineStep | PipelineVersionStage) -> PipelineStepDefinition:
@@ -35,6 +36,7 @@ class PipelineStepDefinition:
         if not isinstance(prerequisites, list) or not all(isinstance(item, str) for item in prerequisites):
             raise TypeError("Pipeline stage has malformed prerequisite data.")
         if isinstance(step, PipelineVersionStage):
+            side_effect_free = step.input_policy.get("side_effect_free", True) is not False
             return cls(
                 name=step.stable_identifier,
                 display_name=step.name,
@@ -51,6 +53,7 @@ class PipelineStepDefinition:
                 retry_count=step.retry_count,
                 fallback_provider_type=step.fallback_provider_type,
                 fallback_model_identifier=step.fallback_model_string,
+                side_effect_free=side_effect_free,
             )
         return cls(
             name=step.step_name,
@@ -78,6 +81,10 @@ class PreparedPipeline:
     ordered_steps: tuple[PipelineStepDefinition, ...]
     step_run_ids: dict[str, int]
     terminal_step_name: str
+    seed_outputs: dict[str, str] | None = None
+    source_run_id: int | None = None
+    retry_kind: str | None = None
+    retry_stage_name: str | None = None
 
 
 class PipelineEventType(StrEnum):
@@ -88,6 +95,7 @@ class PipelineEventType(StrEnum):
     TOKEN = "token"
     STEP_COMPLETED = "step_completed"
     RUN_COMPLETED = "run_completed"
+    RUN_CANCELLED = "run_cancelled"
 
 
 @dataclass(frozen=True, slots=True)
