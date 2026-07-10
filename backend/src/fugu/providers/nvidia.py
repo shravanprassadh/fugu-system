@@ -62,10 +62,10 @@ class NvidiaStreamProvider(ExecutionProvider):
             "Authorization": f"Bearer {request.credential_token}",
             "Content-Type": "application/json",
         }
-        messages: list[dict[str, str]] = []
+        messages: list[dict[str, object]] = []
         if request.system_directives.strip():
             messages.append({"role": "system", "content": request.system_directives})
-        messages.append({"role": "user", "content": request.prompt_content})
+        messages.append({"role": "user", "content": request.user_message_content()})
         payload: dict[str, object] = {
             "model": request.model_identifier,
             "stream": True,

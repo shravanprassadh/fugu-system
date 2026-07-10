@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Any
 
 from fugu.database.models import PipelineStep, PipelineVersionStage
+from fugu.providers.base import ProviderImageInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,9 @@ class PreparedPipeline:
     ordered_steps: tuple[PipelineStepDefinition, ...]
     step_run_ids: dict[str, int]
     terminal_step_name: str
+    attachment_snapshot: tuple[dict[str, object], ...] = ()
+    attachment_reader_step_name: str | None = None
+    image_inputs: tuple[ProviderImageInput, ...] = ()
     seed_outputs: dict[str, str] | None = None
     source_run_id: int | None = None
     retry_kind: str | None = None

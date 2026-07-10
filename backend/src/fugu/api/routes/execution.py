@@ -11,22 +11,24 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from fugu.api.dependencies import CurrentUser
+from fugu.execution.attachment_kernel import AttachmentAwarePipelineExecutionKernel
 from fugu.execution.diagnostics import classify_execution_error
 from fugu.execution.exceptions import (
     PipelineRunFailureError,
     PipelineValidationError,
     ThreadAccessDeniedError,
 )
-from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
+from fugu.execution.kernel import get_execution_kernel
 from fugu.providers.parameters import validate_model_parameters
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
 
 
 class PipelineExecutionPayload(BaseModel):
-    """Validated user prompt and optional terminal-model override."""
+    """Validated user prompt, processed attachments, and optional terminal-model override."""
 
     prompt: str = Field(min_length=1, max_length=100_000)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=10)
     provider_type: str | None = Field(default=None, min_length=1, max_length=50)
     model_identifier: str | None = Field(default=None, min_length=1, max_length=255)
     temperature: float | None = None
@@ -35,7 +37,14 @@ class PipelineExecutionPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_model_override(self) -> PipelineExecutionPayload:
-        """Validate optional model overrides and parameters against the backend catalogue."""
+        """Validate attachments, optional model overrides, and parameters against backend contracts."""
+        normalized_attachment_ids = [attachment_id.strip() for attachment_id in self.attachment_ids]
+        if any(not attachment_id for attachment_id in normalized_attachment_ids):
+            raise ValueError("Attachment identifiers cannot be empty.")
+        if len(set(normalized_attachment_ids)) != len(normalized_attachment_ids):
+            raise ValueError("Attachment identifiers must be unique.")
+        self.attachment_ids = normalized_attachment_ids
+
         has_parameters = any(
             value is not None
             for value in (
@@ -70,7 +79,7 @@ class PipelineExecutionPayload(BaseModel):
 
 
 ExecutionKernel = Annotated[
-    PipelineExecutionKernel,
+    AttachmentAwarePipelineExecutionKernel,
     Depends(get_execution_kernel),
 ]
 
@@ -109,6 +118,7 @@ async def execute_pipeline(
             selected_temperature=payload.temperature,
             selected_max_output_tokens=payload.max_output_tokens,
             selected_thinking_budget=payload.thinking_budget,
+            attachment_public_ids=tuple(payload.attachment_ids),
         )
     except ThreadAccessDeniedError as exc:
         raise HTTPException(
