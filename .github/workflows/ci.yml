@@ -285,6 +285,11 @@ jobs:
       - name: Install application dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Build production frontend for browser tests
+        env:
+          NEXT_PUBLIC_FUGU_API_BASE_URL: ""
+        run: npm run build
+
       - name: Install pinned Playwright runner
         env:
           PLAYWRIGHT_VERSION: "1.55.0"
