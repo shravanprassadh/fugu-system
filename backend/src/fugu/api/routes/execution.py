@@ -17,22 +17,33 @@ from fugu.execution.exceptions import (
     ThreadAccessDeniedError,
 )
 from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
-from fugu.providers.catalogue import get_provider_catalogue
+from fugu.providers.parameters import validate_model_parameters
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
 
 
 class PipelineExecutionPayload(BaseModel):
-    """Validated user prompt submitted to the pipeline engine."""
+    """Validated user prompt and optional terminal-model override."""
 
     prompt: str = Field(min_length=1, max_length=100_000)
     provider_type: str | None = Field(default=None, min_length=1, max_length=50)
     model_identifier: str | None = Field(default=None, min_length=1, max_length=255)
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    thinking_budget: int | None = None
 
     @model_validator(mode="after")
     def validate_model_override(self) -> PipelineExecutionPayload:
-        """Ensure optional user model overrides exist in the backend catalogue."""
+        """Validate optional model overrides and parameters against the backend catalogue."""
+        has_parameters = any(
+            value is not None
+            for value in (self.temperature, self.max_output_tokens, self.thinking_budget)
+        )
         if self.provider_type is None and self.model_identifier is None:
+            if has_parameters:
+                raise ValueError(
+                    "provider_type and model_identifier are required when model parameters are supplied."
+                )
             return self
         if not self.provider_type or not self.model_identifier:
             raise ValueError("provider_type and model_identifier must be supplied together.")
@@ -40,7 +51,13 @@ class PipelineExecutionPayload(BaseModel):
         provider_type = self.provider_type.strip().lower()
         model_identifier = self.model_identifier.strip()
         try:
-            get_provider_catalogue().validate_selection(provider_type, model_identifier)
+            validate_model_parameters(
+                provider_type,
+                model_identifier,
+                temperature=self.temperature,
+                max_output_tokens=self.max_output_tokens,
+                thinking_budget=self.thinking_budget,
+            )
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
@@ -88,6 +105,9 @@ async def execute_pipeline(
             initial_prompt=payload.prompt,
             selected_provider_type=payload.provider_type,
             selected_model_identifier=payload.model_identifier,
+            selected_temperature=payload.temperature,
+            selected_max_output_tokens=payload.max_output_tokens,
+            selected_thinking_budget=payload.thinking_budget,
         )
     except ThreadAccessDeniedError as exc:
         raise HTTPException(
