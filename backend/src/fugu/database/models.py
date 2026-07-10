@@ -308,7 +308,7 @@ class PipelineVersionStage(Base):
 
 
 class PipelineRun(Base):
-    """Execution-level lifecycle record for one pipeline request."""
+    """Execution-level lifecycle record for one original request or retry."""
 
     __tablename__ = "pipeline_runs"
 
@@ -319,9 +319,25 @@ class PipelineRun(Base):
         nullable=True,
         index=True,
     )
+    requested_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pipeline_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    retry_kind: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    retry_stage_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    initial_prompt_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_options: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
+    failed_stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retryable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    final_result_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -333,24 +349,40 @@ class PipelineRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'running', 'completed', 'failed')",
+            "status IN ('pending', 'running', 'cancelling', 'cancelled', 'completed', 'failed')",
             name="pipeline_run_status",
         ),
+        CheckConstraint(
+            "retry_kind IS NULL OR retry_kind IN ('whole_run', 'stage')",
+            name="pipeline_run_retry_kind",
+        ),
         Index("ix_pipeline_runs_thread_created", "thread_id", "created_at"),
+        Index("ix_pipeline_runs_status_created", "status", "created_at"),
     )
 
 
 class PipelineStepRun(Base):
-    """Trace and lifecycle record for one pipeline stage."""
+    """Sanitised lifecycle and diagnostic snapshot for one pipeline stage."""
 
     __tablename__ = "pipeline_step_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("pipeline_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     step_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    model_string: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", server_default="pending")
+    input_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    input_token_usage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_token_usage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    side_effect_free: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retryable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -358,9 +390,11 @@ class PipelineStepRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'running', 'completed', 'failed')",
+            "status IN ('pending', 'running', 'cancelled', 'completed', 'failed')",
             name="pipeline_step_run_status",
         ),
+        CheckConstraint("retry_attempt_count >= 0", name="pipeline_step_run_nonnegative_retry_attempts"),
+        CheckConstraint("latency_ms IS NULL OR latency_ms >= 0", name="pipeline_step_run_nonnegative_latency"),
         UniqueConstraint("run_id", "step_name", name="pipeline_step_run_identity"),
         Index("ix_pipeline_step_runs_run_created", "run_id", "created_at"),
     )
