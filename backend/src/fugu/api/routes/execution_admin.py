@@ -7,7 +7,7 @@ from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
@@ -255,7 +255,12 @@ async def list_execution_runs(
     if run_status is not None:
         statement = statement.where(PipelineRun.status == run_status)
     if user_id is not None:
-        statement = statement.where(PipelineRun.requested_by_user_id == user_id)
+        statement = statement.where(
+            or_(
+                PipelineRun.requested_by_user_id == user_id,
+                PipelineRun.requested_by_user_id.is_(None) & PipelineRun.thread.has(Thread.user_id == user_id),
+            )
+        )
     if thread_id is not None:
         statement = statement.where(PipelineRun.thread_id == thread_id)
     if date_from is not None:
@@ -265,11 +270,23 @@ async def list_execution_runs(
     if provider is not None:
         normalized_provider = provider.strip().lower()
         statement = statement.where(
-            PipelineRun.step_runs.any(PipelineStepRun.provider_type == normalized_provider)
+            or_(
+                PipelineRun.step_runs.any(PipelineStepRun.provider_type == normalized_provider),
+                PipelineRun.pipeline_version.has(
+                    PipelineVersion.stages.any(PipelineVersionStage.provider_type == normalized_provider)
+                ),
+            )
         )
     if model is not None:
         normalized_model = model.strip()
-        statement = statement.where(PipelineRun.step_runs.any(PipelineStepRun.model_string == normalized_model))
+        statement = statement.where(
+            or_(
+                PipelineRun.step_runs.any(PipelineStepRun.model_string == normalized_model),
+                PipelineRun.pipeline_version.has(
+                    PipelineVersion.stages.any(PipelineVersionStage.model_string == normalized_model)
+                ),
+            )
+        )
     statement = statement.order_by(PipelineRun.created_at.desc()).limit(limit)
     result = await session.scalars(statement)
     return [_summary_response(run) for run in result.unique().all()]
