@@ -32,7 +32,13 @@ def _transport(*, ready: bool = True) -> httpx.MockTransport:
                 "metadata": "connected",
                 "logs": "connected" if ready else "unavailable",
             }
-            return httpx.Response(200 if ready else 503, json={"status": "ready" if ready else "unavailable", "connections": connections})
+            return httpx.Response(
+                200 if ready else 503,
+                json={
+                    "status": "ready" if ready else "unavailable",
+                    "connections": connections,
+                },
+            )
         if request.url.path == "/api/openapi.json":
             return httpx.Response(200, json=_openapi_document())
         return httpx.Response(404)
