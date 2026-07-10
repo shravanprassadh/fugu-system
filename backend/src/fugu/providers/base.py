@@ -15,6 +15,9 @@ class ProviderRequest:
     system_directives: str
     credential_token: str
     model_identifier: str
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    thinking_budget: int | None = None
 
     def __post_init__(self) -> None:
         if not self.prompt_content.strip():
@@ -23,6 +26,10 @@ class ProviderRequest:
             raise ValueError("Provider credentials cannot be empty.")
         if not self.model_identifier.strip():
             raise ValueError("Provider model identifiers cannot be empty.")
+        if self.max_output_tokens is not None and self.max_output_tokens < 1:
+            raise ValueError("Provider output limits must be positive.")
+        if self.thinking_budget is not None and self.thinking_budget < 1:
+            raise ValueError("Provider thinking budgets must be positive.")
 
 
 class ExecutionProvider(ABC):
