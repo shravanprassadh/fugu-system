@@ -3,43 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Protocol
 
 
 @dataclass(frozen=True, slots=True)
-class PresignedOperation:
-    """A time-limited object-store operation returned to an authenticated client."""
-
-    url: str
-    method: str
-    expires_at: datetime
-    required_headers: dict[str, str]
-
-
-@dataclass(frozen=True, slots=True)
 class StoredObjectMetadata:
-    """Sanitised object metadata used to verify upload completion."""
+    """Sanitised object metadata used to verify persistence."""
 
     size_bytes: int
     content_type: str | None
     etag: str | None
+    checksum_sha256: str | None = None
 
 
 class ObjectStorage(Protocol):
-    """Minimal capabilities required by Fugu's attachment lifecycle."""
+    """Capabilities required by Fugu's controlled attachment lifecycle."""
 
-    async def create_upload(
+    backend_name: str
+
+    async def put(
         self,
         *,
         bucket: str,
         key: str,
+        content: bytes,
         content_type: str,
-        size_bytes: int,
         checksum_sha256: str,
-    ) -> PresignedOperation: ...
+    ) -> StoredObjectMetadata: ...
 
-    async def create_download(self, *, bucket: str, key: str, filename: str) -> PresignedOperation: ...
+    async def get(self, *, bucket: str, key: str) -> bytes: ...
 
     async def inspect(self, *, bucket: str, key: str) -> StoredObjectMetadata | None: ...
 

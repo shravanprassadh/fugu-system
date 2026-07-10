@@ -1,6 +1,7 @@
 """API route modules."""
 
 from fugu.api.routes.admin import admin_router
+from fugu.api.routes.attachments import attachments_router
 from fugu.api.routes.auth import auth_router
 from fugu.api.routes.database_admin import database_admin_router
 from fugu.api.routes.execution import execution_router
@@ -15,6 +16,7 @@ from fugu.api.routes.threads import threads_router
 
 __all__ = [
     "admin_router",
+    "attachments_router",
     "auth_router",
     "database_admin_router",
     "execution_admin_router",
