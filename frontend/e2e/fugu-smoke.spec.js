@@ -25,9 +25,26 @@ function executionStream() {
   ].join("");
 }
 
+function memoryPayload(hasMemory) {
+  return {
+    thread_id: thread.id,
+    status: "completed",
+    has_memory: hasMemory,
+    summary_md: hasMemory
+      ? "# Thread Memory\n\n## Objective\n- Stabilise the Fugu baseline before adding new systems."
+      : "",
+    last_summarized_message_id: hasMemory ? 22 : null,
+    summarizer_provider: "google-ai-studio",
+    summarizer_model: "gemini-2.5-flash-lite",
+    updated_at: hasMemory ? "2026-07-10T07:32:00Z" : null,
+    error_message: null,
+  };
+}
+
 async function installDeterministicApi(page) {
   const requests = [];
   let threadExists = false;
+  let memoryBuilt = false;
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -75,30 +92,11 @@ async function installDeterministicApi(page) {
       });
     }
     if (path === `/api/threads/${thread.id}/memory` && method === "GET") {
-      return jsonResponse(route, {
-        thread_id: thread.id,
-        status: "completed",
-        has_memory: false,
-        summary_md: "",
-        last_summarized_message_id: null,
-        summarizer_provider: "google-ai-studio",
-        summarizer_model: "gemini-2.5-flash-lite",
-        updated_at: null,
-        error_message: null,
-      });
+      return jsonResponse(route, memoryPayload(memoryBuilt));
     }
     if (path === `/api/threads/${thread.id}/memory/regenerate` && method === "POST") {
-      return jsonResponse(route, {
-        thread_id: thread.id,
-        status: "completed",
-        has_memory: true,
-        summary_md: "# Thread Memory\n\n## Objective\n- Stabilise the Fugu baseline before adding new systems.",
-        last_summarized_message_id: 22,
-        summarizer_provider: "google-ai-studio",
-        summarizer_model: "gemini-2.5-flash-lite",
-        updated_at: "2026-07-10T07:32:00Z",
-        error_message: null,
-      });
+      memoryBuilt = true;
+      return jsonResponse(route, memoryPayload(true));
     }
     if (path === "/api/health/ready" && method === "GET") {
       return jsonResponse(route, {
