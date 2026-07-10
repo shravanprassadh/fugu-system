@@ -30,7 +30,12 @@ class AttachmentStorageConfig(BaseSettings):
         validation_alias="ATTACHMENT_MAX_FILE_SIZE_BYTES",
     )
 
-    model_config = SettingsConfigDict(env_file=None, extra="ignore", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=None,
+        extra="ignore",
+        case_sensitive=False,
+        populate_by_name=True,
+    )
 
     @model_validator(mode="after")
     def validate_backend(self) -> Self:
