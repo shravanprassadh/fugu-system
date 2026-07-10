@@ -98,7 +98,6 @@ export function getApiConfigurationProblem() {
     return null;
   }
   if (typeof window === "undefined" || LOCAL_HOSTNAMES.has(window.location.hostname)) {
-    // Same-origin calls are a legitimate local-development setup.
     return null;
   }
   return (
@@ -236,6 +235,10 @@ export function saveThreadMemoryConfig(apiKey, options = {}) {
 
 export function deleteThreadMemoryConfig(options = {}) {
   return authorizedRequest("/api/admin/thread-memory/config", { ...options, method: "DELETE" });
+}
+
+export function getProviderCatalogue(options) {
+  return authorizedRequest("/api/providers/catalogue", options);
 }
 
 export function listProviderCredentials(options) {
