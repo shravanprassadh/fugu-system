@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from fugu.api.dependencies import get_identity_security_manager
 from fugu.boot.config import get_settings
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget, get_session_registry
-from fugu.database.models import Base, PipelineVersion, ProviderCredential
+from fugu.database.models import Base, ProviderCredential
 from fugu.database.repositories import PipelineVersionRepository, UserRepository
 from fugu.main import create_app
 from fugu.security.auth import IdentitySecurityManager
