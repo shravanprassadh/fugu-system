@@ -5,7 +5,7 @@ from __future__ import annotations
 import heapq
 from collections.abc import Sequence
 
-from fugu.database.models import PipelineStep
+from fugu.database.models import PipelineStep, PipelineVersionStage
 from fugu.execution.exceptions import (
     DependencyLoopError,
     DuplicateSequencePositionError,
@@ -21,9 +21,9 @@ from fugu.execution.models import PipelineStepDefinition
 class PipelineDependencyGraphResolver:
     """Validate pipeline structure and resolve a deterministic execution order."""
 
-    def __init__(self, raw_steps: Sequence[PipelineStep]) -> None:
+    def __init__(self, raw_steps: Sequence[PipelineStep | PipelineVersionStage]) -> None:
         if not raw_steps:
-            raise EmptyPipelineError("At least one pipeline step must be configured.")
+            raise EmptyPipelineError("At least one pipeline stage must be configured.")
 
         definitions: list[PipelineStepDefinition] = []
         try:
@@ -33,11 +33,11 @@ class PipelineDependencyGraphResolver:
 
         names = [step.name for step in definitions]
         if len(names) != len(set(names)):
-            raise DuplicateStepNameError("Pipeline step names must be unique.")
+            raise DuplicateStepNameError("Pipeline stage identifiers must be unique.")
 
         positions = [step.sequence_order_position for step in definitions]
         if len(positions) != len(set(positions)):
-            raise DuplicateSequencePositionError("Pipeline sequence positions must be unique.")
+            raise DuplicateSequencePositionError("Pipeline stage positions must be unique.")
 
         self.steps: dict[str, PipelineStepDefinition] = {step.name: step for step in definitions}
         self.adjacency_list: dict[str, set[str]] = {step.name: set() for step in definitions}
@@ -51,10 +51,10 @@ class PipelineDependencyGraphResolver:
             seen_dependencies: set[str] = set()
             for prerequisite in step.prerequisites:
                 if prerequisite == step.name:
-                    raise DependencyLoopError(f"Pipeline step {step.name!r} cannot depend on itself.")
+                    raise DependencyLoopError(f"Pipeline stage {step.name!r} cannot depend on itself.")
                 if prerequisite not in self.steps:
                     raise PrerequisiteNotFoundError(
-                        f"Pipeline step {step.name!r} depends on unknown prerequisite {prerequisite!r}."
+                        f"Pipeline stage {step.name!r} depends on unknown prerequisite {prerequisite!r}."
                     )
                 if prerequisite in seen_dependencies:
                     continue
@@ -100,10 +100,12 @@ class PipelineDependencyGraphResolver:
     def _validate_terminal_step(self) -> str:
         terminal_steps = [step for step in self.steps.values() if step.is_terminal]
         if len(terminal_steps) != 1:
-            raise TerminalStepConfigurationError("Exactly one pipeline step must be marked as terminal.")
+            raise TerminalStepConfigurationError("Exactly one pipeline stage must be marked as terminal.")
         terminal_step = terminal_steps[0]
         if self.adjacency_list[terminal_step.name]:
-            raise TerminalStepConfigurationError(f"Terminal step {terminal_step.name!r} must not have dependent steps.")
+            raise TerminalStepConfigurationError(
+                f"Terminal stage {terminal_step.name!r} must not have dependent stages."
+            )
         return terminal_step.name
 
     def resolve_safe_execution_sequence(self) -> list[str]:
@@ -111,5 +113,5 @@ class PipelineDependencyGraphResolver:
         return list(self._resolved_sequence)
 
     def resolve_ordered_steps(self) -> tuple[PipelineStepDefinition, ...]:
-        """Return detached step definitions in deterministic execution order."""
+        """Return detached stage definitions in deterministic execution order."""
         return tuple(self.steps[name] for name in self._resolved_sequence)
