@@ -81,12 +81,18 @@ def verify_production_deployment(
 
     recorded = load_recorded_baseline()["api"]
     deployed_api = {
-        "title": openapi.get("info", {}).get("title") if isinstance(openapi.get("info"), dict) else None,
-        "version": openapi.get("info", {}).get("version") if isinstance(openapi.get("info"), dict) else None,
+        "title": (
+            openapi.get("info", {}).get("title") if isinstance(openapi.get("info"), dict) else None
+        ),
+        "version": (
+            openapi.get("info", {}).get("version") if isinstance(openapi.get("info"), dict) else None
+        ),
         "operations": _openapi_operations(openapi),
     }
     if deployed_api != recorded:
-        raise ProductionBaselineError("The deployed OpenAPI contract does not match docs/baseline/system-contract.json.")
+        raise ProductionBaselineError(
+            "The deployed OpenAPI contract does not match docs/baseline/system-contract.json."
+        )
 
     return {
         "frontend": {"url": normalized_frontend, "status": "reachable"},
