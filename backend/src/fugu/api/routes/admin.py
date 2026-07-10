@@ -7,13 +7,12 @@ from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
-from fugu.database.models import PipelineStep, Thread, User
-from fugu.database.repositories import PipelineRepository, UserRepository
-from fugu.providers.catalogue import get_provider_catalogue
+from fugu.database.models import Thread, User
+from fugu.database.repositories import UserRepository
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
 
@@ -65,42 +64,6 @@ class ResetPasswordPayload(BaseModel):
     """Password reset payload submitted by an administrator."""
 
     password: str = Field(min_length=8, max_length=1_024)
-
-
-class PipelineStepResponse(BaseModel):
-    """Editable pipeline step metadata."""
-
-    id: int
-    sequence_order_position: int
-    step_name: str
-    provider_type: str
-    model_string: str
-    system_prompt_directives: str | None
-    prerequisite_dependencies: list[str]
-    is_terminal: bool
-
-    @classmethod
-    def from_step(cls, step: PipelineStep) -> PipelineStepResponse:
-        return cls(
-            id=step.id,
-            sequence_order_position=step.sequence_order_position,
-            step_name=step.step_name,
-            provider_type=step.provider_type,
-            model_string=step.model_string,
-            system_prompt_directives=step.system_prompt_directives,
-            prerequisite_dependencies=list(step.prerequisite_dependencies),
-            is_terminal=step.is_terminal,
-        )
-
-
-class UpdatePipelineStepPayload(BaseModel):
-    """Admin-editable pipeline step fields."""
-
-    provider_type: str | None = Field(default=None, min_length=2, max_length=100)
-    model_string: str | None = Field(default=None, min_length=2, max_length=255)
-    system_prompt_directives: str | None = Field(default=None, max_length=12_000)
-    prerequisite_dependencies: list[str] | None = None
-    is_terminal: bool | None = None
 
 
 async def _get_user_or_404(session: AsyncSession, user_id: int) -> User:
@@ -265,52 +228,3 @@ async def delete_user(
     await session.delete(target_user)
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@admin_router.get("/pipeline-steps", response_model=list[PipelineStepResponse])
-async def list_pipeline_steps(
-    _: AdminUser,
-    session: MasterSession,
-) -> list[PipelineStepResponse]:
-    """Return pipeline steps in execution order."""
-    steps = await PipelineRepository.list_steps(session)
-    return [PipelineStepResponse.from_step(step) for step in steps]
-
-
-@admin_router.patch("/pipeline-steps/{step_id}", response_model=PipelineStepResponse)
-async def update_pipeline_step(
-    step_id: int,
-    payload: UpdatePipelineStepPayload,
-    _: AdminUser,
-    session: MasterSession,
-) -> PipelineStepResponse:
-    """Patch one pipeline step without editing deployment files."""
-    step = await session.get(PipelineStep, step_id)
-    if step is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pipeline step not found.",
-        )
-
-    provider_type = payload.provider_type.strip().lower() if payload.provider_type is not None else step.provider_type
-    model_string = payload.model_string.strip() if payload.model_string is not None else step.model_string
-    try:
-        get_provider_catalogue().validate_selection(provider_type, model_string)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-
-    step.provider_type = provider_type
-    step.model_string = model_string
-    if payload.system_prompt_directives is not None:
-        step.system_prompt_directives = payload.system_prompt_directives
-    if payload.prerequisite_dependencies is not None:
-        step.prerequisite_dependencies = payload.prerequisite_dependencies
-    if payload.is_terminal is not None:
-        if payload.is_terminal:
-            await session.execute(
-                text("UPDATE pipeline_steps SET is_terminal = false WHERE id != :step_id"),
-                {"step_id": step.id},
-            )
-        step.is_terminal = payload.is_terminal
-    await session.flush()
-    return PipelineStepResponse.from_step(step)
