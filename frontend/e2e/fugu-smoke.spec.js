@@ -171,6 +171,19 @@ async function installDeterministicApi(page) {
     if (path === "/api/auth/logout" && method === "POST") {
       return route.fulfill({ status: 204, body: "" });
     }
+    if (path === "/api/admin/users" && method === "GET") {
+      return jsonResponse(route, [
+        {
+          id: 7,
+          username: "developer",
+          role: "admin",
+          is_active: true,
+          token_version: 0,
+          created_at: "2026-07-10T07:00:00Z",
+          thread_count: 1,
+        },
+      ]);
+    }
     if (path === "/api/threads" && method === "GET") {
       return jsonResponse(route, threadExists ? [thread] : []);
     }
@@ -302,7 +315,7 @@ test("completes chat, memory, and pipeline publication journeys", async ({ page 
 
   const pipelineDialog = page.getByRole("dialog", { name: "Pipeline builder" });
   await expect(pipelineDialog).toBeVisible();
-  await expect(pipelineDialog.getByText("Version 1", { exact: true })).toBeVisible();
+  await expect(pipelineDialog.getByRole("heading", { name: "Version 1" })).toBeVisible();
   await pipelineDialog.getByLabel("Change description").fill("Add a verifier stage");
   await pipelineDialog.getByRole("button", { name: "Create draft from this version" }).click();
   await expect(pipelineDialog.getByText("Draft version 2 created.")).toBeVisible();
