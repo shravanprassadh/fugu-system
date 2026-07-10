@@ -114,6 +114,6 @@ async def test_attachment_lifecycle_preserves_metadata_without_binary_payload(
 
 def test_object_storage_contract_is_vendor_neutral() -> None:
     expected_methods = {"create_upload", "create_download", "inspect", "delete"}
-    assert expected_methods.issubset(ObjectStorage.__protocol_attrs__)
+    assert all(callable(getattr(ObjectStorage, method, None)) for method in expected_methods)
     assert PresignedOperation.__dataclass_fields__["required_headers"]
     assert StoredObjectMetadata.__dataclass_fields__["size_bytes"]
