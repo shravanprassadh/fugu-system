@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from fugu.api.dependencies import CurrentUser
+from fugu.execution.diagnostics import classify_execution_error
 from fugu.execution.exceptions import (
     PipelineRunFailureError,
     PipelineValidationError,
@@ -79,16 +80,14 @@ def _sse(event_name: str, payload: object) -> str:
 
 
 def _pipeline_error_payload(exc: PipelineRunFailureError) -> dict[str, object]:
-    origin = exc.origin
-    origin_message = str(origin) if origin is not None and str(origin) else str(exc)
-    origin_type = type(origin).__name__ if origin is not None else type(exc).__name__
+    safe_error = classify_execution_error(exc.origin, stage_name=exc.step_name)
     return {
         "event": "error",
         "run_id": exc.run_id,
         "step_name": exc.step_name,
-        "error": origin_message,
-        "error_type": origin_type,
-        "wrapper_error": str(exc),
+        "error": safe_error.message,
+        "error_type": safe_error.category,
+        "retryable": safe_error.retryable,
     }
 
 
