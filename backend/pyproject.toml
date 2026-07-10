@@ -28,6 +28,7 @@ select = ["E", "F", "W", "I", "N", "ASYNC"]
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
+"src/fugu/execution/kernel.py" = ["N818"]
 "tests/*.py" = ["I001"]
 
 [tool.mypy]

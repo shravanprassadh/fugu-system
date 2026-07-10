@@ -1,4 +1,4 @@
-"""Typed failures for DAG validation and pipeline execution."""
+"""Typed failures for DAG validation, pipeline execution, and recovery controls."""
 
 from __future__ import annotations
 
@@ -46,6 +46,14 @@ class TerminalStepConfigurationError(PipelineValidationError):
 
 class ProviderCredentialMissingError(PipelineEngineError):
     """Raised when an execution step has no configured encrypted credential."""
+
+
+class PipelineRunCancelledError(PipelineEngineError):
+    """Raised when cooperative cancellation stops an active run."""
+
+
+class ExecutionRecoveryError(PipelineEngineError):
+    """Raised when a requested retry is missing data or violates safety rules."""
 
 
 class PipelineRunFailureError(PipelineEngineError):

@@ -8,7 +8,10 @@
       { "method": "POST", "path": "/api/admin/database/connections/{target}/test" },
       { "method": "GET", "path": "/api/admin/execution-runs" },
       { "method": "GET", "path": "/api/admin/execution-runs/{run_id}" },
+      { "method": "POST", "path": "/api/admin/execution-runs/{run_id}/cancel" },
       { "method": "GET", "path": "/api/admin/execution-runs/{run_id}/diagnostics" },
+      { "method": "POST", "path": "/api/admin/execution-runs/{run_id}/retry" },
+      { "method": "POST", "path": "/api/admin/execution-runs/{run_id}/stages/{stage_name}/retry" },
       { "method": "GET", "path": "/api/admin/pipeline-versions" },
       { "method": "POST", "path": "/api/admin/pipeline-versions/drafts" },
       { "method": "DELETE", "path": "/api/admin/pipeline-versions/{version_id}" },
@@ -53,14 +56,15 @@
     ]
   },
   "database": {
-    "alembic_head": "0006_versioned_pipeline_control",
+    "alembic_head": "0007_execution_operability",
     "alembic_chain": [
       "0001_initial_schema",
       "0002_user_token_version",
       "0003_pipeline_step_run_identity",
       "0004_thread_memories",
       "0005_provider_credential_validation",
-      "0006_versioned_pipeline_control"
+      "0006_versioned_pipeline_control",
+      "0007_execution_operability"
     ],
     "tables": [
       "messages",
