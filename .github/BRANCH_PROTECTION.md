@@ -21,6 +21,7 @@ The aggregate gate fails unless all of these jobs complete successfully:
 - `Security & Secret Auditing`
 - `Backend Lint, Type Check, Tests & Audit`
 - `Frontend Lint, Tests, Build & Audit`
+- `Browser End-to-End Smoke Tests`
 - `Production Container & Runtime Validation`
 
 ## Required repository settings
@@ -46,3 +47,5 @@ Keep deployment checks separate from this CI contract until deployment validatio
 ## Action and runtime pinning
 
 Third-party and GitHub-maintained actions are referenced by immutable commit SHA. Runtime versions and audit-tool versions are explicit in the workflow. Updates must be reviewed as code changes rather than inherited automatically from floating action tags.
+
+The browser smoke runner is installed at an exact Playwright version inside CI. Application dependencies remain lockfile-backed through `npm ci`; the smoke runner is isolated from the production dependency graph.
