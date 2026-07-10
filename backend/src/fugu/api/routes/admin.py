@@ -11,15 +11,13 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
-from fugu.database.models import PipelineStep, ProviderCredential, Thread, User
+from fugu.database.models import PipelineStep, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository
-from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngine
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
 
 UserRole = Literal["user", "admin"]
 _MAX_USER_ACCOUNTS = 3
-_CHAT_PROVIDER_NAMES = {"openrouter", "nvidia"}
 
 
 class AdminUserResponse(BaseModel):
@@ -66,32 +64,6 @@ class ResetPasswordPayload(BaseModel):
     """Password reset payload submitted by an administrator."""
 
     password: str = Field(min_length=8, max_length=1_024)
-
-
-class ProviderCredentialResponse(BaseModel):
-    """Non-secret provider credential metadata."""
-
-    provider_name: str
-    key_version: int
-    created_at: datetime
-    updated_at: datetime
-    configured: bool = True
-
-    @classmethod
-    def from_credential(cls, credential: ProviderCredential) -> ProviderCredentialResponse:
-        return cls(
-            provider_name=credential.provider_name,
-            key_version=credential.key_version,
-            created_at=credential.created_at,
-            updated_at=credential.updated_at,
-        )
-
-
-class UpsertProviderCredentialPayload(BaseModel):
-    """Write-only provider secret rotation payload."""
-
-    provider_name: str = Field(min_length=2, max_length=100)
-    secret: str = Field(min_length=8, max_length=8_192)
 
 
 class PipelineStepResponse(BaseModel):
@@ -292,44 +264,6 @@ async def delete_user(
     await session.delete(target_user)
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@admin_router.get("/provider-credentials", response_model=list[ProviderCredentialResponse])
-async def list_provider_credentials(
-    _: AdminUser,
-    session: MasterSession,
-) -> list[ProviderCredentialResponse]:
-    """List configured chat-provider credentials without returning plaintext secrets."""
-    statement = (
-        select(ProviderCredential)
-        .where(ProviderCredential.provider_name.in_(sorted(_CHAT_PROVIDER_NAMES)))
-        .order_by(ProviderCredential.provider_name.asc())
-    )
-    result = await session.scalars(statement)
-    return [ProviderCredentialResponse.from_credential(credential) for credential in result.all()]
-
-
-@admin_router.post("/provider-credentials", response_model=ProviderCredentialResponse)
-async def upsert_provider_credential(
-    payload: UpsertProviderCredentialPayload,
-    _: AdminUser,
-    session: MasterSession,
-) -> ProviderCredentialResponse:
-    """Create or rotate a chat-provider API key from the admin console."""
-    provider_name = payload.provider_name.strip().lower()
-    if provider_name not in _CHAT_PROVIDER_NAMES:
-        supported = ", ".join(sorted(_CHAT_PROVIDER_NAMES))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(f"Unsupported chat provider {payload.provider_name!r}. " f"Supported providers: {supported}."),
-        )
-    vault = ProviderCredentialVault(SymmetricVaultEngine.from_settings())
-    credential = await vault.store(
-        session,
-        provider_name=provider_name,
-        plaintext_secret=payload.secret,
-    )
-    return ProviderCredentialResponse.from_credential(credential)
 
 
 @admin_router.get("/pipeline-steps", response_model=list[PipelineStepResponse])
