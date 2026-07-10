@@ -25,7 +25,9 @@ class ModelCapabilitiesResponse(BaseModel):
     reasoning_support: bool
 
     @classmethod
-    def from_capabilities(cls, capabilities: ModelCapabilities) -> ModelCapabilitiesResponse:
+    def from_capabilities(
+        cls, capabilities: ModelCapabilities
+    ) -> ModelCapabilitiesResponse:
         return cls(
             text_generation=capabilities.text_generation,
             image_understanding=capabilities.image_understanding,
@@ -62,7 +64,9 @@ class ModelDefinitionResponse(BaseModel):
         return cls(
             identifier=model.identifier,
             display_name=model.display_name,
-            capabilities=ModelCapabilitiesResponse.from_capabilities(model.capabilities),
+            capabilities=ModelCapabilitiesResponse.from_capabilities(
+                model.capabilities
+            ),
             context_size=model.context_size,
             output_limit=model.output_limit,
             temperature=(
@@ -96,8 +100,12 @@ class ProviderDefinitionResponse(BaseModel):
             adapter_available=provider.adapter_available,
             health_status=provider.health_status,
             api_base_url=provider.api_base_url,
-            capabilities=ModelCapabilitiesResponse.from_capabilities(provider.capabilities),
-            models=[ModelDefinitionResponse.from_model(model) for model in provider.models],
+            capabilities=ModelCapabilitiesResponse.from_capabilities(
+                provider.capabilities
+            ),
+            models=[
+                ModelDefinitionResponse.from_model(model) for model in provider.models
+            ],
         )
 
 
@@ -110,5 +118,8 @@ async def get_catalogue(_: CurrentUser) -> ProviderCatalogueResponse:
     """Return the backend-owned provider and model capability catalogue."""
     catalogue = get_provider_catalogue()
     return ProviderCatalogueResponse(
-        providers=[ProviderDefinitionResponse.from_provider(provider) for provider in catalogue.providers]
+        providers=[
+            ProviderDefinitionResponse.from_provider(provider)
+            for provider in catalogue.providers
+        ]
     )
