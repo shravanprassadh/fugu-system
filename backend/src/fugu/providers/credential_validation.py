@@ -36,7 +36,9 @@ def normalize_credential_provider(provider_name: str) -> str:
     normalized = provider_name.strip().lower()
     if normalized not in SUPPORTED_CREDENTIAL_PROVIDERS:
         supported = ", ".join(sorted(SUPPORTED_CREDENTIAL_PROVIDERS))
-        raise ValueError(f"Unsupported provider {provider_name!r}. Supported providers: {supported}.")
+        raise ValueError(
+            f"Unsupported provider {provider_name!r}. Supported providers: {supported}."
+        )
     return normalized
 
 
@@ -53,7 +55,9 @@ def _raise_for_status(provider_name: str, status_code: int) -> None:
     if status_code in {401, 403}:
         raise ProviderAuthenticationError(f"{label} rejected the provider credential.")
     if status_code == 429:
-        raise ProviderRateLimitError(f"{label} rate limits prevented credential validation.")
+        raise ProviderRateLimitError(
+            f"{label} rate limits prevented credential validation."
+        )
     if status_code in {408, 504}:
         raise ProviderTimeoutError(f"{label} reported a credential-validation timeout.")
     if status_code < 200 or status_code >= 300:
@@ -64,12 +68,18 @@ def _raise_for_status(provider_name: str, status_code: int) -> None:
 
 def _validate_response_shape(provider_name: str, payload: Any) -> None:
     if not isinstance(payload, dict):
-        raise ProviderResponseMalformedError("The provider credential probe returned a non-object response.")
+        raise ProviderResponseMalformedError(
+            "The provider credential probe returned a non-object response."
+        )
     data = payload.get("data")
     if provider_name == "openrouter" and not isinstance(data, dict):
-        raise ProviderResponseMalformedError("OpenRouter returned malformed credential metadata.")
+        raise ProviderResponseMalformedError(
+            "OpenRouter returned malformed credential metadata."
+        )
     if provider_name == "nvidia" and not isinstance(data, list):
-        raise ProviderResponseMalformedError("NVIDIA returned a malformed model catalogue response.")
+        raise ProviderResponseMalformedError(
+            "NVIDIA returned a malformed model catalogue response."
+        )
 
 
 async def validate_provider_credential(
@@ -86,7 +96,9 @@ async def validate_provider_credential(
         raise ProviderAuthenticationError("Provider credentials cannot be empty.")
 
     if timeout_seconds is None:
-        timeout_seconds = get_settings().network_request_timeout if client is None else 45.0
+        timeout_seconds = (
+            get_settings().network_request_timeout if client is None else 45.0
+        )
     if timeout_seconds <= 0:
         raise ValueError("Credential-validation timeouts must be positive.")
 
