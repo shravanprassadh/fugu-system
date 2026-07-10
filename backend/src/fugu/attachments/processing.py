@@ -6,7 +6,6 @@ import csv
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
-from typing import Any
 
 from docx import Document
 from openpyxl import load_workbook
