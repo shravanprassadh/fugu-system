@@ -78,9 +78,7 @@ def _normalise_filename(filename: str) -> tuple[str, str]:
         raise AttachmentValidationError("The attachment filename exceeds 255 characters.")
     suffix = Path(cleaned).suffix.lower().lstrip(".")
     if suffix not in _ALLOWED_MIME_BY_EXTENSION:
-        raise AttachmentValidationError(
-            f"Files with the .{suffix or 'unknown'} extension are not supported."
-        )
+        raise AttachmentValidationError(f"Files with the .{suffix or 'unknown'} extension are not supported.")
     return cleaned, suffix
 
 
