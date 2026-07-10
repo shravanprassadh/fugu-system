@@ -134,9 +134,10 @@ class PipelineVersionRepository:
     @staticmethod
     async def require_current_published(session: AsyncSession) -> PipelineVersion:
         version = await PipelineVersionRepository.get_current_published(session)
-        if version is None:
-            raise EntityNotFoundError("No valid published pipeline version is available for execution.")
-        return version
+        if version is not None:
+            return version
+        result = await session.scalars(select(PipelineStep).order_by(PipelineStep.sequence_order_position.asc()))
+        return await PipelineVersionRepository.import_legacy_steps(session, steps=list(result.all()))
 
     @staticmethod
     async def import_legacy_steps(
