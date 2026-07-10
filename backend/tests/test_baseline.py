@@ -12,7 +12,7 @@ def test_repository_matches_committed_baseline() -> None:
     baseline = verify_repository_baseline()
 
     assert baseline["api"]["title"] == "Fugu Modular Kernel API"
-    assert baseline["database"]["alembic_head"] == "0006_versioned_pipeline_control"
+    assert baseline["database"]["alembic_head"] == "0007_execution_operability"
     assert baseline["database"]["current_table_target"] == "master"
 
 
