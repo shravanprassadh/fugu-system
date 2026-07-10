@@ -82,10 +82,14 @@ def verify_production_deployment(
     recorded = load_recorded_baseline()["api"]
     deployed_api = {
         "title": (
-            openapi.get("info", {}).get("title") if isinstance(openapi.get("info"), dict) else None
+            openapi.get("info", {}).get("title")
+            if isinstance(openapi.get("info"), dict)
+            else None
         ),
         "version": (
-            openapi.get("info", {}).get("version") if isinstance(openapi.get("info"), dict) else None
+            openapi.get("info", {}).get("version")
+            if isinstance(openapi.get("info"), dict)
+            else None
         ),
         "operations": _openapi_operations(openapi),
     }
