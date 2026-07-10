@@ -9,6 +9,7 @@ import {
   saveModelPreference,
   supportedProviders,
 } from "../../lib/model-options";
+import { ProviderCredentialControls } from "./provider-credential-controls";
 import styles from "./settings.module.css";
 
 function providerInitial(provider) {
@@ -58,83 +59,86 @@ export function ModelPreferenceCard() {
   }
 
   return (
-    <section className="settings-pane model-preference-card">
-      <div className="settings-row settings-row-top">
-        <div>
-          <h3>Model</h3>
-          <p className="muted">Choose the model used for your chat responses. This preference is saved on this device.</p>
+    <>
+      <section className="settings-pane model-preference-card">
+        <div className="settings-row settings-row-top">
+          <div>
+            <h3>Model</h3>
+            <p className="muted">Choose the model used for your chat responses. This preference is saved on this device.</p>
+          </div>
+          <span className={styles.statusPill}>user preference</span>
         </div>
-        <span className={styles.statusPill}>user preference</span>
-      </div>
 
-      <div className="model-provider-grid" role="radiogroup" aria-label="Model provider">
-        {supportedProviders.map((provider) => {
-          const selected = provider.value === providerType;
-          return (
-            <button
-              key={provider.value}
-              type="button"
-              className={`model-provider-card ${selected ? "model-card-selected" : ""}`}
-              onClick={() => updateProvider(provider.value)}
-              role="radio"
-              aria-checked={selected}
-            >
-              <span className="model-provider-mark" aria-hidden="true">{providerInitial(provider)}</span>
-              <span>
-                <strong>{provider.label}</strong>
-                <small>{provider.value === "openrouter" ? "Free tier only" : "Free NVIDIA catalog"}</small>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="model-selected-summary">
-        <div>
-          <span className="model-selected-eyebrow">Selected model</span>
-          <strong>{modelTitle(selectedModel.value)}</strong>
-          <code>{selectedModel.value}</code>
+        <div className="model-provider-grid" role="radiogroup" aria-label="Model provider">
+          {supportedProviders.map((provider) => {
+            const selected = provider.value === providerType;
+            return (
+              <button
+                key={provider.value}
+                type="button"
+                className={`model-provider-card ${selected ? "model-card-selected" : ""}`}
+                onClick={() => updateProvider(provider.value)}
+                role="radio"
+                aria-checked={selected}
+              >
+                <span className="model-provider-mark" aria-hidden="true">{providerInitial(provider)}</span>
+                <span>
+                  <strong>{provider.label}</strong>
+                  <small>{provider.value === "openrouter" ? "Free tier only" : "Free NVIDIA catalog"}</small>
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <span className="model-family-pill">{modelFamily(selectedModel.value)}</span>
-      </div>
 
-      {models.length > 1 ? (
-        <label className="model-search-box">
-          Search models
-          <input
-            type="search"
-            placeholder="Search NVIDIA models…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-      ) : null}
+        <div className="model-selected-summary">
+          <div>
+            <span className="model-selected-eyebrow">Selected model</span>
+            <strong>{modelTitle(selectedModel.value)}</strong>
+            <code>{selectedModel.value}</code>
+          </div>
+          <span className="model-family-pill">{modelFamily(selectedModel.value)}</span>
+        </div>
 
-      <div className="model-option-list" role="radiogroup" aria-label="Available models">
-        {filteredModels.map((model) => {
-          const selected = model.value === selectedModel.value;
-          return (
-            <button
-              key={model.value}
-              type="button"
-              className={`model-option-card ${selected ? "model-card-selected" : ""}`}
-              onClick={() => updateModel(model.value)}
-              role="radio"
-              aria-checked={selected}
-            >
-              <span>
-                <strong>{modelTitle(model.value)}</strong>
-                <code>{model.value}</code>
-              </span>
-              <span className="model-family-pill">{modelFamily(model.value)}</span>
-            </button>
-          );
-        })}
-      </div>
+        {models.length > 1 ? (
+          <label className="model-search-box">
+            Search models
+            <input
+              type="search"
+              placeholder="Search NVIDIA models…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        ) : null}
 
-      <p className="muted">
-        Admins still manage provider API keys in AI operations. If a provider key is missing, runs using that provider will fail clearly.
-      </p>
-    </section>
+        <div className="model-option-list" role="radiogroup" aria-label="Available models">
+          {filteredModels.map((model) => {
+            const selected = model.value === selectedModel.value;
+            return (
+              <button
+                key={model.value}
+                type="button"
+                className={`model-option-card ${selected ? "model-card-selected" : ""}`}
+                onClick={() => updateModel(model.value)}
+                role="radio"
+                aria-checked={selected}
+              >
+                <span>
+                  <strong>{modelTitle(model.value)}</strong>
+                  <code>{model.value}</code>
+                </span>
+                <span className="model-family-pill">{modelFamily(model.value)}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="muted">
+          Administrators manage each provider&apos;s single active key directly below the model catalogue.
+        </p>
+      </section>
+      <ProviderCredentialControls />
+    </>
   );
 }

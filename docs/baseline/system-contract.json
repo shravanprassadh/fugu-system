@@ -11,6 +11,9 @@
       { "method": "GET", "path": "/api/admin/provider-credentials" },
       { "method": "POST", "path": "/api/admin/provider-credentials" },
       { "method": "DELETE", "path": "/api/admin/provider-credentials/{provider_name}" },
+      { "method": "PUT", "path": "/api/admin/provider-credentials/{provider_name}" },
+      { "method": "POST", "path": "/api/admin/provider-credentials/{provider_name}/candidate/test" },
+      { "method": "POST", "path": "/api/admin/provider-credentials/{provider_name}/test" },
       { "method": "GET", "path": "/api/admin/render/config" },
       { "method": "POST", "path": "/api/admin/render/config" },
       { "method": "POST", "path": "/api/admin/render/config/test" },
@@ -40,12 +43,13 @@
     ]
   },
   "database": {
-    "alembic_head": "0004_thread_memories",
+    "alembic_head": "0005_provider_credential_validation",
     "alembic_chain": [
       "0001_initial_schema",
       "0002_user_token_version",
       "0003_pipeline_step_run_identity",
-      "0004_thread_memories"
+      "0004_thread_memories",
+      "0005_provider_credential_validation"
     ],
     "tables": [
       "messages",

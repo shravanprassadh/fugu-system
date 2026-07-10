@@ -69,7 +69,7 @@ class ProviderCredentialVault:
         provider_name: str,
         plaintext_secret: str,
     ) -> ProviderCredential:
-        """Create or rotate an encrypted provider credential."""
+        """Create or rotate one encrypted credential and advance its public revision."""
         normalized_provider = provider_name.strip().lower()
         if not normalized_provider:
             raise EncryptionFailedError("Provider names cannot be empty.")
@@ -88,7 +88,7 @@ class ProviderCredentialVault:
             )
         else:
             credential.encrypted_secret = encrypted_secret
-            credential.key_version = self._cipher.key_version
+            credential.key_version += 1
             await session.flush()
         return credential
 
