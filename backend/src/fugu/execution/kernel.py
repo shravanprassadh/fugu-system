@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from time import monotonic
@@ -52,6 +52,15 @@ from fugu.security.encryption import ProviderCredentialVault, SymmetricVaultEngi
 _MAX_MEMORY_MESSAGES = 12
 _MAX_MEMORY_CHARACTERS = 8_000
 _MAX_THREAD_MEMORY_CHARACTERS = 5_000
+
+
+@dataclass(frozen=True, slots=True)
+class _StepAttemptFailure(Exception):
+    """Internal failure retaining the final provider attempt's safe execution context."""
+
+    origin: Exception
+    partial_output: str
+    retry_attempt_count: int
 
 
 class PipelineExecutionKernel:
@@ -200,7 +209,7 @@ class PipelineExecutionKernel:
         """Start a prepared administrative retry and retain the task until completion."""
         task = asyncio.create_task(self._consume_background(prepared))
         self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(self._discard_background_task)
         return prepared.run_id
 
     async def request_cancellation(self, run_id: int) -> str:
@@ -240,28 +249,29 @@ class PipelineExecutionKernel:
                 )
 
                 try:
-                    output, retry_attempt_count = await self._execute_step(
+                    output, retry_attempt_count, provider_tokens = await self._execute_step(
                         prepared=prepared,
                         step=step,
                         prompt=prompt,
                     )
                 except PipelineRunCancelledError:
                     raise
-                except Exception as exc:
+                except _StepAttemptFailure as exc:
                     await self._persist_failure(
                         prepared=prepared,
                         step=step,
-                        partial_output="",
+                        partial_output=exc.partial_output,
                         input_prompt=prompt,
+                        retry_attempt_count=exc.retry_attempt_count,
                         latency_ms=self._elapsed_ms(started),
-                        error=exc,
+                        error=exc.origin,
                     )
                     raise PipelineRunFailureError(
                         "Pipeline execution failed after the failure state was persisted.",
                         run_id=prepared.run_id,
                         step_name=step.name,
-                        origin=exc,
-                    ) from exc
+                        origin=exc.origin,
+                    ) from exc.origin
 
                 outputs[step.name] = output
                 await self._mark_step_completed(
@@ -273,7 +283,7 @@ class PipelineExecutionKernel:
                     latency_ms=self._elapsed_ms(started),
                 )
                 if step.is_terminal:
-                    for token in self._terminal_chunks(output):
+                    for token in provider_tokens:
                         yield PipelineEvent(
                             event_type=PipelineEventType.TOKEN,
                             run_id=prepared.run_id,
@@ -295,10 +305,7 @@ class PipelineExecutionKernel:
             )
         except PipelineRunCancelledError:
             await self._persist_cancellation(prepared)
-            yield PipelineEvent(
-                event_type=PipelineEventType.RUN_CANCELLED,
-                run_id=prepared.run_id,
-            )
+            yield PipelineEvent(event_type=PipelineEventType.RUN_CANCELLED, run_id=prepared.run_id)
         finally:
             self._cancellation_requests.discard(prepared.run_id)
 
@@ -308,7 +315,7 @@ class PipelineExecutionKernel:
         prepared: PreparedPipeline,
         step: PipelineStepDefinition,
         prompt: str,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, tuple[str, ...]]:
         attempts: list[tuple[str, str]] = [
             (step.provider_type, step.model_identifier) for _ in range(step.retry_count + 1)
         ]
@@ -316,6 +323,8 @@ class PipelineExecutionKernel:
             attempts.append((step.fallback_provider_type, step.fallback_model_identifier))
 
         last_error: Exception | None = None
+        last_partial_output = ""
+        last_attempt_index = 0
         for attempt_index, (provider_type, model_identifier) in enumerate(attempts):
             await self._raise_if_cancelled(prepared.run_id)
             provider = self._providers.resolve(provider_type)
@@ -334,16 +343,22 @@ class PipelineExecutionKernel:
                 async for token in provider.generate_token_stream(request):
                     await self._raise_if_cancelled(prepared.run_id)
                     output_fragments.append(token)
-                return "".join(output_fragments), attempt_index
+                return "".join(output_fragments), attempt_index, tuple(output_fragments)
             except PipelineRunCancelledError:
                 raise
             except Exception as exc:
                 last_error = exc
+                last_partial_output = "".join(output_fragments)
+                last_attempt_index = attempt_index
             finally:
                 await provider.aclose()
         if last_error is None:
             raise PipelineEngineException(f"No provider attempt was available for stage {step.name!r}.")
-        raise last_error
+        raise _StepAttemptFailure(
+            origin=last_error,
+            partial_output=last_partial_output,
+            retry_attempt_count=last_attempt_index,
+        )
 
     async def _consume_background(self, prepared: PreparedPipeline) -> None:
         try:
@@ -351,6 +366,9 @@ class PipelineExecutionKernel:
                 pass
         except PipelineRunFailureError:
             return
+
+    def _discard_background_task(self, task: asyncio.Task[None]) -> None:
+        self._background_tasks.discard(task)
 
     async def _persist_prepared_run(
         self,
@@ -445,7 +463,9 @@ class PipelineExecutionKernel:
             if any(dependency in selected_names for dependency in step.prerequisites):
                 selected_names.add(step.name)
         if terminal_step_name not in selected_names:
-            raise ExecutionRecoveryError("The failed stage does not lead to the terminal result and cannot be retried alone.")
+            raise ExecutionRecoveryError(
+                "The failed stage does not lead to the terminal result and cannot be retried alone."
+            )
 
         selected_steps = tuple(step for step in ordered_steps if step.name in selected_names)
         if any(not step.side_effect_free for step in selected_steps):
@@ -498,7 +518,11 @@ class PipelineExecutionKernel:
         user_id: int,
     ) -> str:
         messages = await MessageRepository.list_for_thread(session, thread_id=thread_id, user_id=user_id)
-        thread_memory = await ThreadMemoryRepository.get_for_thread(session, thread_id=thread_id, user_id=user_id)
+        thread_memory = await ThreadMemoryRepository.get_for_thread(
+            session,
+            thread_id=thread_id,
+            user_id=user_id,
+        )
         return self._format_conversation_context(messages, thread_memory=thread_memory)
 
     @staticmethod
@@ -621,7 +645,11 @@ class PipelineExecutionKernel:
 
     async def _load_provider_credential(self, prepared: PreparedPipeline, provider_type: str) -> str:
         async with self._sessions.session(DatabaseTarget.MASTER) as session:
-            await self._require_owned_thread(session, thread_id=prepared.thread_id, user_id=prepared.user_id)
+            await self._require_owned_thread(
+                session,
+                thread_id=prepared.thread_id,
+                user_id=prepared.user_id,
+            )
             credential = await self._vault.retrieve(session, provider_name=provider_type)
             if credential is None:
                 raise ProviderCredentialMissingError(
@@ -653,7 +681,11 @@ class PipelineExecutionKernel:
     async def _complete_run(self, prepared: PreparedPipeline, terminal_output: str) -> None:
         assistant_message_id: int | None = None
         async with self._sessions.session(DatabaseTarget.MASTER) as session:
-            await self._require_owned_thread(session, thread_id=prepared.thread_id, user_id=prepared.user_id)
+            await self._require_owned_thread(
+                session,
+                thread_id=prepared.thread_id,
+                user_id=prepared.user_id,
+            )
             assistant_message = await MessageRepository.add(
                 session,
                 thread_id=prepared.thread_id,
@@ -681,6 +713,7 @@ class PipelineExecutionKernel:
         step: PipelineStepDefinition,
         partial_output: str,
         input_prompt: str,
+        retry_attempt_count: int,
         latency_ms: int,
         error: Exception,
     ) -> None:
@@ -690,6 +723,7 @@ class PipelineExecutionKernel:
             step_run.status = "failed"
             step_run.input_trace = sanitise_diagnostic_text(input_prompt)
             step_run.output_trace = sanitise_diagnostic_text(partial_output)
+            step_run.retry_attempt_count = retry_attempt_count
             step_run.error_code = type(error).__name__[:100]
             step_run.error_category = safe_error.category
             step_run.error_message = safe_error.message
@@ -725,7 +759,9 @@ class PipelineExecutionKernel:
             raise PipelineRunCancelledError("Execution cancellation was requested.")
         async with self._sessions.session(DatabaseTarget.MASTER) as session:
             run = await session.get(PipelineRun, run_id)
-            if run is not None and (run.cancellation_requested_at is not None or run.status in {"cancelling", "cancelled"}):
+            if run is not None and (
+                run.cancellation_requested_at is not None or run.status in {"cancelling", "cancelled"}
+            ):
                 self._cancellation_requests.add(run_id)
                 raise PipelineRunCancelledError("Execution cancellation was requested.")
 
@@ -774,10 +810,6 @@ class PipelineExecutionKernel:
         return "\n\n".join(sections)
 
     @staticmethod
-    def _terminal_chunks(output: str, *, chunk_size: int = 80) -> tuple[str, ...]:
-        return tuple(output[index : index + chunk_size] for index in range(0, len(output), chunk_size))
-
-    @staticmethod
     def _estimate_tokens(value: str) -> int:
         return max((len(value) + 3) // 4, 1) if value else 0
 
@@ -791,11 +823,11 @@ class PipelineExecutionKernel:
 
     @staticmethod
     def _optional_float(value: object) -> float | None:
-        return float(value) if isinstance(value, int | float) else None
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
     @staticmethod
     def _optional_int(value: object) -> int | None:
-        return int(value) if isinstance(value, int) else None
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 @lru_cache(maxsize=1)
