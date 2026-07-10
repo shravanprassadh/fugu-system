@@ -25,6 +25,9 @@ jobs:
         run: |
           python -m pip install "ruff==0.4.10"
           python -m ruff format src/fugu/production_baseline.py
-          printf '%s\n' '---FORMATTED-FILE-START---'
-          cat src/fugu/production_baseline.py
-          printf '%s\n' '---FORMATTED-FILE-END---'
+      - name: Upload formatted file
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: formatted-production-baseline
+          path: backend/src/fugu/production_baseline.py
+          retention-days: 1
