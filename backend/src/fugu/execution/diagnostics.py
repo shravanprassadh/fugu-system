@@ -48,11 +48,14 @@ def sanitise_diagnostic_text(value: str | None, *, limit: int = _MAX_DIAGNOSTIC_
     return cleaned or None
 
 
-def classify_execution_error(error: BaseException | None, *, stage_name: str | None = None) -> SafeExecutionError:
-    """Map implementation exceptions to actionable, stable, sanitised explanations."""
-    error_name = type(error).__name__ if error is not None else "PipelineRunFailureError"
-    raw_message = sanitise_diagnostic_text(str(error) if error is not None else None, limit=1_000) or ""
-    normalized = raw_message.lower()
+def _classify_error(
+    *,
+    error_name: str,
+    raw_message: str | None,
+    stage_name: str | None,
+    is_timeout: bool = False,
+) -> SafeExecutionError:
+    normalized = (sanitise_diagnostic_text(raw_message, limit=1_000) or "").lower()
     stage_label = f"The {stage_name} stage" if stage_name else "The pipeline"
 
     if error_name == "ProviderCredentialMissingError" or "credential" in normalized and "configured" in normalized:
@@ -73,7 +76,7 @@ def classify_execution_error(error: BaseException | None, *, stage_name: str | N
             message=f"{stage_label} failed because its output-token limit is unsupported by the selected model. Update the configuration and retry.",
             retryable=False,
         )
-    if isinstance(error, TimeoutError) or "timeout" in normalized or "timed out" in normalized:
+    if is_timeout or "timeout" in normalized or "timed out" in normalized:
         return SafeExecutionError(
             category="provider_timeout",
             message=f"{stage_label} timed out while waiting for the configured provider. Retry the run; if it repeats, test the provider or increase the stage timeout.",
@@ -108,4 +111,31 @@ def classify_execution_error(error: BaseException | None, *, stage_name: str | N
         category="stage_execution_failed",
         message=f"{stage_label} failed. An administrator can inspect the sanitised run diagnostics for the recorded cause and decide whether retry is safe.",
         retryable=False,
+    )
+
+
+def classify_execution_error(error: BaseException | None, *, stage_name: str | None = None) -> SafeExecutionError:
+    """Map an active implementation exception to a safe public explanation."""
+    return _classify_error(
+        error_name=type(error).__name__ if error is not None else "PipelineRunFailureError",
+        raw_message=str(error) if error is not None else None,
+        stage_name=stage_name,
+        is_timeout=isinstance(error, TimeoutError),
+    )
+
+
+def classify_stored_execution_error(
+    error_code: str | None,
+    error_message: str | None,
+    *,
+    stage_name: str | None = None,
+) -> SafeExecutionError | None:
+    """Classify previously persisted failure fields without recreating unsafe exceptions."""
+    if not error_code and not error_message:
+        return None
+    return _classify_error(
+        error_name=error_code or "PipelineRunFailureError",
+        raw_message=error_message,
+        stage_name=stage_name,
+        is_timeout=error_code in {"TimeoutError", "ProviderTimeoutError"},
     )
