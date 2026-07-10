@@ -8,7 +8,7 @@ import logging
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import cast
+from typing import ClassVar, cast
 
 from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget
 from fugu.database.models import Message
@@ -58,7 +58,14 @@ _SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?i)\b(api[ _-]?key|password|secret|access[ _-]?token|refresh[ _-]?token)\b"
     r"(\s*[:=]\s*)([^\s,;]+)"
 )
-_SECRET_TOKEN_PATTERN = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,})\b")
+_SECRET_TOKEN_PATTERN = re.compile(
+    r"\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+"
+    r"\.[A-Za-z0-9_-]+)\b"
+)
+_BEARER_TOKEN_PATTERN = re.compile(r"(?i)\b(Bearer\s+)([A-Za-z0-9._~+/=-]{12,})")
+_DATABASE_CREDENTIAL_PATTERN = re.compile(
+    r"(?i)\b((?:postgres(?:ql)?|mysql|mariadb)://[^:\s/@]+:)([^@\s/]+)(@)"
+)
 
 MEMORY_SYSTEM_DIRECTIVES = (
     "You maintain durable conversation memory for future AI agents. "
@@ -81,7 +88,7 @@ MEMORY_SYSTEM_DIRECTIVES = (
 )
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class TranscriptBatch:
     """One chronological transcript batch sent to the summarizer."""
 
@@ -89,7 +96,7 @@ class TranscriptBatch:
     last_message_id: int
 
 
-@dataclass
+@dataclass(slots=True)
 class ThreadMemoryDocument:
     """Validated structured state rendered into canonical markdown by the server."""
 
@@ -109,7 +116,10 @@ class ThreadMemoryDocument:
         for heading, field_name in _SECTION_SPECS:
             lines.extend(["", f"## {heading}"])
             values = cast(list[str], getattr(self, field_name))
-            lines.extend(f"- {value}" for value in values) if values else lines.append("- None recorded.")
+            if values:
+                lines.extend(f"- {value}" for value in values)
+            else:
+                lines.append("- None recorded.")
         lines.extend(
             [
                 "",
@@ -140,12 +150,17 @@ class ThreadMemoryDocument:
             if lines:
                 lines.append("")
             lines.append(f"## {heading}")
-            lines.extend(f"- {value}" for value in values) if values else lines.append("- None recorded.")
+            if values:
+                lines.extend(f"- {value}" for value in values)
+            else:
+                lines.append("- None recorded.")
         return "\n".join(lines)
 
 
 class ThreadMemorySummarizer:
     """Maintain rolling AI handoff memory and concise thread titles."""
+
+    _refresh_locks: ClassVar[dict[tuple[int, int], asyncio.Lock]] = {}
 
     def __init__(
         self,
@@ -163,7 +178,6 @@ class ThreadMemorySummarizer:
         self._provider_label = provider_label
         self._model_identifier = model_identifier
         self._provider_factory = provider_factory
-        self._refresh_locks: dict[int, asyncio.Lock] = {}
 
     def schedule(
         self,
@@ -197,7 +211,9 @@ class ThreadMemorySummarizer:
         force_rebuild: bool = True,
     ) -> None:
         """Rebuild all memory by default; scheduled updates explicitly use incremental mode."""
-        lock = self._refresh_locks.setdefault(thread_id, asyncio.Lock())
+        loop = asyncio.get_running_loop()
+        lock_key = (id(loop), thread_id)
+        lock = self._refresh_locks.setdefault(lock_key, asyncio.Lock())
         async with lock:
             await self._refresh_locked(
                 thread_id=thread_id,
@@ -216,15 +232,23 @@ class ThreadMemorySummarizer:
     ) -> None:
         previous_summary = ""
         current_thread_title = ""
-        credential: str | None = None
+        credential = ""
         batches: list[TranscriptBatch] = []
         update_mode = "full rebuild" if force_rebuild else "incremental"
         try:
             async with self._sessions.session(DatabaseTarget.MASTER) as session:
-                credential = await self._vault.retrieve(session, provider_name=self._credential_provider_name)
-                if credential is None:
+                stored_credential = await self._vault.retrieve(
+                    session,
+                    provider_name=self._credential_provider_name,
+                )
+                if stored_credential is None:
                     return
-                thread = await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+                credential = stored_credential
+                thread = await ThreadRepository.require_owned(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                )
                 current_thread_title = thread.name
                 memory = await ThreadMemoryRepository.mark_running(
                     session,
@@ -235,7 +259,7 @@ class ThreadMemorySummarizer:
                 )
                 if not force_rebuild:
                     previous_summary = self._clip_for_prompt(
-                        memory.summary_md or "",
+                        self._redact_sensitive_text(memory.summary_md or ""),
                         MAX_PREVIOUS_MEMORY_CHARACTERS,
                     )
                 messages = await MessageRepository.list_for_thread(
@@ -254,6 +278,8 @@ class ThreadMemorySummarizer:
                     await session.flush()
                     return
                 batches = self._build_transcript_batches(pending_messages)
+                if not batches:
+                    raise RuntimeError("No non-empty messages were available for memory consolidation.")
 
             provider = self._provider_factory()
             document: ThreadMemoryDocument | None = None
@@ -279,8 +305,15 @@ class ThreadMemorySummarizer:
                     raw_document = "".join(fragments).strip()
                     if not raw_document:
                         raise RuntimeError("The memory summarizer returned an empty document.")
-                    document = self._parse_document(raw_document, fallback_title=current_thread_title)
-                    self._fit_document(document, checkpoint_message_id=batch.last_message_id, update_mode=update_mode)
+                    document = self._parse_document(
+                        raw_document,
+                        fallback_title=current_thread_title,
+                    )
+                    self._fit_document(
+                        document,
+                        checkpoint_message_id=batch.last_message_id,
+                        update_mode=update_mode,
+                    )
                     rolling_summary = document.to_markdown(
                         checkpoint_message_id=batch.last_message_id,
                         update_mode=update_mode,
@@ -308,7 +341,11 @@ class ThreadMemorySummarizer:
                 )
                 completed_memory.key_facts_md = document.key_facts_markdown()
                 completed_memory.open_tasks_md = document.open_tasks_markdown()
-                thread = await ThreadRepository.require_owned(session, thread_id=thread_id, user_id=user_id)
+                thread = await ThreadRepository.require_owned(
+                    session,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                )
                 thread.name = document.thread_title
                 await session.flush()
         except Exception as exc:  # pragma: no cover - defensive background task boundary
@@ -354,7 +391,7 @@ class ThreadMemorySummarizer:
         current_last_message_id: int | None = None
 
         for message in messages:
-            content = message.content.strip()
+            content = cls._redact_sensitive_text(message.content.strip())
             if not content:
                 continue
             chunks = [
@@ -367,7 +404,7 @@ class ThreadMemorySummarizer:
                     f"part={chunk_index}/{len(chunks)}\n{chunk}"
                 )
                 separator_characters = 2 if current_fragments else 0
-                would_overflow = (
+                would_overflow = bool(
                     current_fragments
                     and (
                         len(current_fragments) >= MAX_BATCH_FRAGMENTS
@@ -375,7 +412,8 @@ class ThreadMemorySummarizer:
                     )
                 )
                 if would_overflow:
-                    assert current_last_message_id is not None
+                    if current_last_message_id is None:
+                        raise RuntimeError("Transcript batching lost its message checkpoint.")
                     batches.append(
                         TranscriptBatch(
                             text="\n\n".join(current_fragments),
@@ -390,7 +428,8 @@ class ThreadMemorySummarizer:
                 current_last_message_id = message.id
 
         if current_fragments:
-            assert current_last_message_id is not None
+            if current_last_message_id is None:
+                raise RuntimeError("Transcript batching ended without a message checkpoint.")
             batches.append(
                 TranscriptBatch(
                     text="\n\n".join(current_fragments),
@@ -400,7 +439,12 @@ class ThreadMemorySummarizer:
         return batches
 
     @classmethod
-    def _parse_document(cls, raw_output: str, *, fallback_title: str) -> ThreadMemoryDocument:
+    def _parse_document(
+        cls,
+        raw_output: str,
+        *,
+        fallback_title: str,
+    ) -> ThreadMemoryDocument:
         candidate = raw_output.strip()
         if candidate.startswith("```"):
             candidate = re.sub(r"^```(?:json)?\s*", "", candidate, flags=re.IGNORECASE)
@@ -433,7 +477,11 @@ class ThreadMemorySummarizer:
         )
 
     @classmethod
-    def _coerce_list(cls, payload: dict[str, object], field_name: str) -> list[str]:
+    def _coerce_list(
+        cls,
+        payload: dict[str, object],
+        field_name: str,
+    ) -> list[str]:
         raw_values = payload.get(field_name, [])
         if not isinstance(raw_values, list):
             raise RuntimeError(f"Memory field {field_name!r} must be a JSON array.")
@@ -452,8 +500,7 @@ class ThreadMemorySummarizer:
     def _clean_bullet(cls, value: str) -> str:
         cleaned = re.sub(r"^[\s\-*>#]+", "", value)
         cleaned = re.sub(r"\s+", " ", cleaned).strip().strip("`*_\"")
-        cleaned = _SECRET_ASSIGNMENT_PATTERN.sub(r"\1\2[redacted]", cleaned)
-        cleaned = _SECRET_TOKEN_PATTERN.sub("[redacted]", cleaned)
+        cleaned = cls._redact_sensitive_text(cleaned)
         return cleaned[:MAX_BULLET_CHARACTERS].rstrip(" -—:,.#")
 
     @staticmethod
@@ -461,6 +508,13 @@ class ThreadMemorySummarizer:
         title = re.sub(r"^[\s\-*>#]+", "", value)
         title = re.sub(r"\s+", " ", title).strip().strip("`*_\"")
         return title[:MAX_THREAD_TITLE_CHARACTERS].rstrip(" -—:,.#")
+
+    @staticmethod
+    def _redact_sensitive_text(value: str) -> str:
+        redacted = _SECRET_ASSIGNMENT_PATTERN.sub(r"\1\2[redacted]", value)
+        redacted = _SECRET_TOKEN_PATTERN.sub("[redacted]", redacted)
+        redacted = _BEARER_TOKEN_PATTERN.sub(r"\1[redacted]", redacted)
+        return _DATABASE_CREDENTIAL_PATTERN.sub(r"\1[redacted]\3", redacted)
 
     @classmethod
     def _fit_document(
@@ -524,5 +578,6 @@ class ThreadMemorySummarizer:
             f"{transcript}\n\n"
             "Reconcile the existing memory with the transcript evidence and return the complete replacement JSON state. "
             "Retain still-valid facts, incorporate new confirmed information, remove superseded state, and keep unresolved "
-            "items open. recent_changes must contain only meaningful changes introduced by this batch."
+            "items open. recent_changes must describe meaningful changes across this refresh, retaining relevant changes "
+            "from earlier batches already present in the existing durable memory."
         )
