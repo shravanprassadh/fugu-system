@@ -135,7 +135,8 @@ test("completes the core chat and memory journey", async ({ page }) => {
   await memoryDialog.getByRole("button", { name: "Rebuild" }).click();
 
   await expect(memoryDialog.getByText("Stabilise the Fugu baseline before adding new systems.")).toBeVisible();
-  await expect(memoryDialog.getByText(/Memory rebuilt from the complete thread/)).toBeVisible();
+  await expect(memoryDialog.getByText("Through message 22", { exact: true })).toBeVisible();
+  await expect(memoryDialog.getByText("available", { exact: true })).toBeVisible();
   await memoryDialog.getByRole("button", { name: "Close" }).click();
 
   await page.getByRole("button", { name: "Open settings" }).click();
