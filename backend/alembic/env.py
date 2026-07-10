@@ -10,6 +10,7 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from fugu.boot.config import get_settings
+from fugu.database.attachments import Attachment  # noqa: F401
 from fugu.database.models import Base
 from fugu.database.urls import sqlalchemy_asyncpg_url
 
