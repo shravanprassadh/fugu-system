@@ -326,7 +326,7 @@ test("completes chat, memory, and pipeline publication journeys", async ({ page 
   await pipelineDialog.getByRole("button", { name: "Move Verifier up" }).click();
   await pipelineDialog.getByRole("button", { name: "Validate" }).click();
   await expect(pipelineDialog.getByText("Draft validation passed.")).toBeVisible();
-  await pipelineDialog.getByRole("button", { name: "Publish" }).click();
+  await pipelineDialog.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(pipelineDialog.getByText("Pipeline version 2 is now published.")).toBeVisible();
   await pipelineDialog.getByRole("button", { name: "Close" }).click();
 
