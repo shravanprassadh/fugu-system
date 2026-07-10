@@ -188,6 +188,7 @@ async def create_provider_credential(
     )
     _record_validation(credential, result=validation, tested_at=tested_at)
     await session.flush()
+    await session.refresh(credential)
     return ProviderCredentialMutationResponse(
         provider_name=provider_name,
         activated=True,
@@ -254,6 +255,7 @@ async def replace_provider_credential(
     if not validation.valid:
         _record_validation(current, result=validation, tested_at=tested_at)
         await session.flush()
+        await session.refresh(current)
         return ProviderCredentialMutationResponse(
             provider_name=normalized,
             activated=False,
@@ -269,6 +271,7 @@ async def replace_provider_credential(
     )
     _record_validation(credential, result=validation, tested_at=tested_at)
     await session.flush()
+    await session.refresh(credential)
     return ProviderCredentialMutationResponse(
         provider_name=normalized,
         activated=True,
