@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useStudioStore } from "../../components/store";
 import { getProviderCatalogue } from "../../lib/api-client";
 import {
   loadModelPreference,
   normalizePreferenceAgainstCatalogue,
   saveModelPreference,
 } from "../../lib/model-options";
+import { PipelineBuilderCard } from "./pipeline-builder-card";
 import { ProviderCredentialControls } from "./provider-credential-controls";
 import styles from "./settings.module.css";
 
@@ -37,6 +39,7 @@ function capabilityLabels(model) {
 }
 
 export function ModelPreferenceCard() {
+  const userRole = useStudioStore((state) => state.userRole);
   const [preference, setPreference] = useState(loadModelPreference);
   const [providers, setProviders] = useState([]);
   const [query, setQuery] = useState("");
@@ -280,6 +283,7 @@ export function ModelPreferenceCard() {
         ) : null}
       </section>
       <ProviderCredentialControls providers={providers} />
+      {userRole === "admin" ? <PipelineBuilderCard /> : null}
     </>
   );
 }
