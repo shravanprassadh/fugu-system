@@ -22,9 +22,10 @@ describe("provider credential lifecycle", () => {
     expect(infrastructure).not.toContain("provider-credentials");
   });
 
-  it("places provider keys beside the model catalogue for administrators", () => {
-    expect(modelSettings).toContain("<ProviderCredentialControls />");
+  it("places provider keys beside the backend-driven model catalogue for administrators", () => {
+    expect(modelSettings).toContain("<ProviderCredentialControls providers={providers} />");
     expect(controls).toContain('userRole !== "admin"');
+    expect(controls).toContain("providers.map");
     expect(controls).toContain("Change key");
     expect(controls).toContain("Add key");
   });

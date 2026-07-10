@@ -10,7 +10,6 @@ import {
   testActiveProviderCredential,
   testCandidateProviderCredential,
 } from "../../lib/provider-credential-api";
-import { supportedProviders } from "../../lib/model-options";
 import styles from "./settings.module.css";
 
 const overlayStyle = {
@@ -56,7 +55,7 @@ function credentialMap(credentials) {
   return new Map(credentials.map((credential) => [credential.provider_name, credential]));
 }
 
-export function ProviderCredentialControls() {
+export function ProviderCredentialControls({ providers }) {
   const router = useRouter();
   const userRole = useStudioStore((state) => state.userRole);
   const clearSession = useStudioStore((state) => state.clearSession);
@@ -210,7 +209,7 @@ export function ProviderCredentialControls() {
     }
   }
 
-  if (userRole !== "admin") {
+  if (userRole !== "admin" || providers.length === 0) {
     return null;
   }
 
@@ -252,14 +251,14 @@ export function ProviderCredentialControls() {
             </tr>
           </thead>
           <tbody>
-            {supportedProviders.map((provider) => {
-              const credential = configured.get(provider.value);
+            {providers.map((provider) => {
+              const credential = configured.get(provider.identifier);
               return (
-                <tr key={provider.value}>
+                <tr key={provider.identifier}>
                   <td>
-                    <strong>{provider.label}</strong>
+                    <strong>{provider.display_name}</strong>
                     <br />
-                    <code className={styles.inlineCode}>{provider.value}</code>
+                    <code className={styles.inlineCode}>{provider.identifier}</code>
                   </td>
                   <td>
                     <StatusPill tone={credential ? "success" : "neutral"}>
@@ -284,7 +283,7 @@ export function ProviderCredentialControls() {
                         type="button"
                         className="button-ghost"
                         disabled={!credential || status === "loading"}
-                        onClick={() => handleActiveTest(provider.value)}
+                        onClick={() => handleActiveTest(provider.identifier)}
                       >
                         Test
                       </button>
@@ -292,7 +291,7 @@ export function ProviderCredentialControls() {
                         type="button"
                         className="button-primary"
                         disabled={status === "loading"}
-                        onClick={() => openEditor(provider.value, credential ? "replace" : "create")}
+                        onClick={() => openEditor(provider.identifier, credential ? "replace" : "create")}
                       >
                         {credential ? "Change key" : "Add key"}
                       </button>

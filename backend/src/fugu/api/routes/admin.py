@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fugu.api.dependencies import AdminUser, IdentityManager, MasterSession
 from fugu.database.models import PipelineStep, Thread, User
 from fugu.database.repositories import PipelineRepository, UserRepository
+from fugu.providers.catalogue import get_provider_catalogue
 
 admin_router = APIRouter(prefix="/api/admin", tags=["administration"])
 
@@ -290,10 +291,16 @@ async def update_pipeline_step(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pipeline step not found.",
         )
-    if payload.provider_type is not None:
-        step.provider_type = payload.provider_type.strip().lower()
-    if payload.model_string is not None:
-        step.model_string = payload.model_string.strip()
+
+    provider_type = payload.provider_type.strip().lower() if payload.provider_type is not None else step.provider_type
+    model_string = payload.model_string.strip() if payload.model_string is not None else step.model_string
+    try:
+        get_provider_catalogue().validate_selection(provider_type, model_string)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    step.provider_type = provider_type
+    step.model_string = model_string
     if payload.system_prompt_directives is not None:
         step.system_prompt_directives = payload.system_prompt_directives
     if payload.prerequisite_dependencies is not None:

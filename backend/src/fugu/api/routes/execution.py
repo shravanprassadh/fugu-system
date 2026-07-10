@@ -17,9 +17,9 @@ from fugu.execution.exceptions import (
     ThreadAccessDeniedError,
 )
 from fugu.execution.kernel import PipelineExecutionKernel, get_execution_kernel
+from fugu.providers.catalogue import get_provider_catalogue
 
 execution_router = APIRouter(prefix="/api/threads", tags=["execution"])
-_SUPPORTED_PROVIDER_TYPES = {"openrouter", "nvidia"}
 
 
 class PipelineExecutionPayload(BaseModel):
@@ -31,7 +31,7 @@ class PipelineExecutionPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_model_override(self) -> PipelineExecutionPayload:
-        """Ensure optional user model overrides remain inside supported chat providers."""
+        """Ensure optional user model overrides exist in the backend catalogue."""
         if self.provider_type is None and self.model_identifier is None:
             return self
         if not self.provider_type or not self.model_identifier:
@@ -39,11 +39,10 @@ class PipelineExecutionPayload(BaseModel):
 
         provider_type = self.provider_type.strip().lower()
         model_identifier = self.model_identifier.strip()
-        if provider_type not in _SUPPORTED_PROVIDER_TYPES:
-            supported = ", ".join(sorted(_SUPPORTED_PROVIDER_TYPES))
-            raise ValueError(f"Unsupported provider_type {self.provider_type!r}. Supported providers: {supported}.")
-        if provider_type == "openrouter" and model_identifier != "openrouter/free":
-            raise ValueError("OpenRouter is restricted to model_identifier='openrouter/free'.")
+        try:
+            get_provider_catalogue().validate_selection(provider_type, model_identifier)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
         self.provider_type = provider_type
         self.model_identifier = model_identifier
