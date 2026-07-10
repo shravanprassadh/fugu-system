@@ -1,5 +1,5 @@
-import { studioStore } from "@/components/store";
-import { apiUrl, ApiRequestError } from "@/lib/api-client";
+import { studioStore } from "../components/store";
+import { apiUrl, ApiRequestError } from "./api-client";
 
 function requireCredential() {
   const state = studioStore.getState();
