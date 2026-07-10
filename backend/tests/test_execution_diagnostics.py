@@ -13,17 +13,30 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fugu.api.dependencies import get_identity_security_manager
 from fugu.boot.config import get_settings
-from fugu.database.connection import DatabaseSessionRegistry, DatabaseTarget, get_session_registry
+from fugu.database.connection import (
+    DatabaseSessionRegistry,
+    DatabaseTarget,
+    get_session_registry,
+)
 from fugu.database.models import Base, PipelineRun, PipelineStepRun
-from fugu.database.repositories import PipelineVersionRepository, ThreadRepository, UserRepository
-from fugu.execution.diagnostics import classify_execution_error, sanitise_diagnostic_text
+from fugu.database.repositories import (
+    PipelineVersionRepository,
+    ThreadRepository,
+    UserRepository,
+)
+from fugu.execution.diagnostics import (
+    classify_execution_error,
+    sanitise_diagnostic_text,
+)
 from fugu.main import create_app
 from fugu.security.auth import IdentitySecurityManager
 from tests.database_helpers import create_sqlite_engine_map
 
 ADMIN_PASSWORD = "ExecutionAdminPassword2026"
 USER_PASSWORD = "ExecutionUserPassword2026"
-SIGNING_SECRET = "execution-diagnostics-signing-secret-with-more-than-thirty-two-characters"
+SIGNING_SECRET = (
+    "execution-diagnostics-signing-secret-with-more-than-thirty-two-characters"
+)
 
 
 def test_sanitiser_redacts_credentials_stack_traces_and_limits_content() -> None:
@@ -47,7 +60,9 @@ def test_sanitiser_redacts_credentials_stack_traces_and_limits_content() -> None
 
 def test_actionable_error_identifies_stage_without_echoing_provider_payload() -> None:
     safe = classify_execution_error(
-        ValueError("The thinking budget 256 is invalid. api_key=sk-abcdefghijklmnopqrstuvwxyz123456"),
+        ValueError(
+            "The thinking budget 256 is invalid. api_key=sk-abcdefghijklmnopqrstuvwxyz123456"
+        ),
         stage_name="verifier",
     )
 
@@ -88,7 +103,9 @@ async def execution_admin_client(
     )
     application = create_app()
     application.dependency_overrides[get_session_registry] = lambda: registry
-    application.dependency_overrides[get_identity_security_manager] = lambda: identity_manager
+    application.dependency_overrides[get_identity_security_manager] = (
+        lambda: identity_manager
+    )
 
     async with registry.session(DatabaseTarget.MASTER) as session:
         admin = await UserRepository.add(
@@ -103,7 +120,9 @@ async def execution_admin_client(
             password_hash=identity_manager.compute_secure_hash(USER_PASSWORD),
             role="user",
         )
-        thread = await ThreadRepository.add(session, user_id=user.id, name="Failed verification run")
+        thread = await ThreadRepository.add(
+            session, user_id=user.id, name="Failed verification run"
+        )
         version = await PipelineVersionRepository.create(
             session,
             created_by_user_id=admin.id,
@@ -191,7 +210,9 @@ async def execution_admin_client(
 
 
 async def _headers(client: AsyncClient, username: str, password: str) -> dict[str, str]:
-    response = await client.post("/api/auth/login", json={"username": username, "password": password})
+    response = await client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    )
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
@@ -228,9 +249,11 @@ async def test_admin_can_filter_inspect_and_export_sanitised_run_diagnostics(
     assert verifier["error_category"] == "invalid_model_parameter"
     assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in verifier["sanitised_output"]
     assert "Traceback" not in verifier["sanitised_output"]
-    assert "File \"/srv/fugu/provider.py\"" not in verifier["sanitised_output"]
+    assert 'File "/srv/fugu/provider.py"' not in verifier["sanitised_output"]
 
-    exported = await client.get(f"/api/admin/execution-runs/{run_id}/diagnostics", headers=headers)
+    exported = await client.get(
+        f"/api/admin/execution-runs/{run_id}/diagnostics", headers=headers
+    )
     assert exported.status_code == 200
     assert exported.json()["run"]["id"] == run_id
     assert "hidden-token" not in str(exported.json())
