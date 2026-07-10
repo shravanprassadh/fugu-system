@@ -147,7 +147,8 @@ async def seed_pipeline_steps(
         current = await PipelineVersionRepository.get_current_published(session)
         if current is not None and not replace:
             raise PipelineBootstrapError(
-                f"Published pipeline version {current.version_number} already exists. Re-run with --replace to supersede it."
+                f"Published pipeline version {current.version_number} already exists. "
+                "Re-run with --replace to supersede it."
             )
         if current is not None:
             current.state = "superseded"
