@@ -232,6 +232,10 @@ The target contains tables without matching Alembic state, or Render is connecte
 
 The migration graph has diverged. The repository baseline requires one linear head unless an intentional merge migration is reviewed and recorded.
 
+## Licence
+
+Fugu System is licensed under the [Apache License 2.0](LICENSE).
+
 ## Change discipline
 
 1. Branch from `main`.
